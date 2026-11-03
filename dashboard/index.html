@@ -3,19 +3,20 @@
   /* Layout: an app shell. Sticky sidebar (brand, team switcher, nav with live badges) | screen | person panel.
      Screens: header, stat bar, view tabs, then panes. Collapses to one column on narrow widths. */
   #dash-root { --dash-gutter: 0; }
-  .app { --app-side: 15rem; --app-detail: 23rem; display: grid; grid-template-columns: var(--app-side) minmax(0, 1fr); align-items: start; font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-bg); }
+  .app { --app-side: 15rem; --app-detail: 23rem; display: grid; grid-template-columns: var(--app-side) minmax(0, 1fr); align-items: start; font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); color: var(--color-fg); background: linear-gradient(to right, var(--color-panel) calc(var(--app-side) - 1px), var(--color-border-line) calc(var(--app-side) - 1px) var(--app-side), var(--color-bg) var(--app-side)); }
+  .app [hidden] { display: none !important; }
   .app.has-detail { grid-template-columns: var(--app-side) minmax(0, 1fr) var(--app-detail); }
   .app svg.ic { width: 1rem; height: 1rem; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-  .app button { font: inherit; color: inherit; }
+  .app :where(button) { font: inherit; color: inherit; }
   .app :focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
 
   /* Sidebar */
-  .app-side { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; max-height: 100vh; overflow: auto; display: flex; flex-direction: column; gap: var(--cds-gap-md); padding: var(--cds-pad-lg) var(--cds-pad-md); background: var(--color-panel); border-right: 1px solid var(--color-border-line); box-sizing: border-box; min-height: 100%; }
+  .app-side { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; height: 100vh; max-height: 100vh; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--cds-gap-md); padding: var(--cds-pad-lg) var(--cds-pad-md); box-sizing: border-box; }
   .app-brand { display: flex; align-items: center; gap: var(--cds-gap-sm); padding: 0 var(--cds-pad-xs); }
   .app-mark { width: 2rem; height: 2rem; border-radius: var(--cds-radius); display: grid; place-items: center; background: var(--color-fg); color: var(--color-bg); flex: none; }
   .app-mark svg.ic { width: 1.1rem; height: 1.1rem; }
   .app-brand-name { display: grid; line-height: 1.25; min-width: 0; }
-  .app-brand-name b { font-weight: var(--cds-font-weight-medium); }
+  .app .app-brand-name b { font-weight: var(--cds-font-weight-medium); }
   .app-brand-name span { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .app-team { display: grid; gap: 4px; padding: 0 var(--cds-pad-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .app-team select { width: 100%; }
@@ -25,11 +26,12 @@
   .app-nav-item:hover { background: color-mix(in srgb, var(--color-fg) 6%, transparent); color: var(--color-fg); }
   .app-nav-item[aria-current="page"] { background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 15%, transparent); color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
   .app-nav-item span.lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .app-badge { min-width: 1.5rem; padding: 0 6px; border-radius: 999px; font-size: var(--cds-font-size-caption); line-height: 1.5rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: var(--cds-font-weight-medium); background: color-mix(in srgb, var(--color-bad) 15%, transparent); color: var(--color-bad); visibility: hidden; box-sizing: border-box; }
+  .app-badge { min-width: 1.5rem; padding: 0 6px; border-radius: 999px; font-size: var(--cds-font-size-caption); line-height: 1.5rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: var(--cds-font-weight-medium); background: color-mix(in srgb, var(--color-fg) 9%, transparent); color: var(--color-bad); visibility: hidden; box-sizing: border-box; }
   .app-badge.is-on { visibility: visible; }
   .app-badge.info { background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 18%, transparent); color: var(--color-fg); }
   .app-side-foot { margin-top: auto; display: flex; gap: var(--cds-gap-sm); align-items: flex-start; padding: var(--cds-pad-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
-  .live-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--color-ok); margin-top: .35em; flex: none; }
+  .live-dot { color: var(--color-ok); font-size: .7em; line-height: 1.9; flex: none; }
+  .live-dot::before { content: "●"; }
 
   /* Main */
   .app-main { grid-column: 2; grid-row: 1; min-width: 0; padding: var(--cds-pad-xl) clamp(16px, 3vw, 40px) calc(var(--cds-pad-xl) * 2); container-type: inline-size; container-name: main; }
@@ -47,10 +49,11 @@
   .stat-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; min-height: 1.35em; }
 
   /* View tabs */
-  .vtabs { display: flex; gap: var(--cds-gap-lg); border-bottom: 1px solid var(--color-border-line); overflow-x: auto; scrollbar-width: none; }
-  .vtab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: var(--cds-pad-sm) 0; color: var(--color-fg-muted); cursor: pointer; white-space: nowrap; }
+  .vtabs { display: flex; flex-wrap: wrap; gap: 0 var(--cds-gap-lg); box-shadow: inset 0 -1px 0 var(--color-border-line); }
+  .vtab { background: none; border: 0; padding: var(--cds-pad-sm) 0; color: var(--color-fg-muted); cursor: pointer; white-space: nowrap; }
   .vtab:hover { color: var(--color-fg); }
-  .vtab[aria-selected="true"] { color: var(--color-fg); border-bottom-color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+  .vtab[aria-selected="true"] { color: var(--color-fg); box-shadow: inset 0 -2px 0 var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+  .app .vtab:focus-visible { outline-offset: -2px; }
   .view { display: grid; gap: var(--cds-gap-md); min-width: 0; }
 
   /* Panes */
@@ -75,6 +78,8 @@
   .seg { display: inline-flex; border: 1px solid var(--color-border-line); border-radius: 999px; overflow: hidden; background: var(--color-bg); }
   .seg button { border: 0; background: transparent; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); padding: 4px var(--cds-pad-md); cursor: pointer; }
   .seg button[aria-pressed="true"] { background: var(--color-fg); color: var(--color-bg); }
+  .app .seg button:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+  .btn:disabled { opacity: .5; cursor: default; }
   .fchip { border: 1px solid var(--color-border-line); border-radius: 999px; background: transparent; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); padding: 3px 10px; cursor: pointer; }
   .fchip:hover { color: var(--color-fg); }
   .fchip[aria-pressed="true"] { background: var(--color-fg); color: var(--color-bg); border-color: var(--color-fg); }
@@ -90,7 +95,7 @@
   .more:hover { color: var(--color-fg); }
   .banner { display: flex; gap: var(--cds-gap-sm); align-items: flex-start; padding: var(--cds-pad-sm) var(--cds-pad-md); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: color-mix(in srgb, var(--color-fg) 3%, var(--color-panel)); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .banner svg.ic { margin-top: 1px; }
-  .toast { position: sticky; bottom: var(--cds-pad-lg); justify-self: center; margin-top: var(--cds-gap-md); padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: 999px; background: var(--color-fg); color: var(--color-bg); font-size: var(--cds-font-size-caption); box-shadow: var(--cds-shadow-popover); z-index: 3; }
+  .toast { position: sticky; bottom: var(--cds-pad-lg); width: fit-content; max-width: calc(100% - 2rem); margin: var(--cds-gap-md) auto 0; padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: 999px; background: var(--color-fg); color: var(--color-bg); font-size: var(--cds-font-size-caption); box-shadow: var(--cds-shadow-popover); z-index: 3; }
 
   /* Home */
   .home-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); gap: var(--cds-gap-md); }
@@ -100,8 +105,11 @@
   .home-card .card-value { font-size: var(--cds-font-size-title); font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; line-height: 1.2; min-height: 1.2em; }
 
   /* Tables */
-  .tbl { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
-  .tbl th { position: sticky; top: 0; z-index: 1; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-sm) var(--cds-pad-md); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+  .tbl th { position: sticky; top: 0; z-index: 1; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-sm) var(--cds-pad-md); box-shadow: inset 0 -1px 0 var(--color-border-line); white-space: nowrap; }
+  .th-sort { background: none; border: 0; padding: 0; cursor: pointer; font-weight: inherit; color: inherit; text-align: inherit; }
+  .tbl tfoot td { border-bottom: 0; }
+  .os-foot-skel { height: 3rem; }
   .tbl td { padding: var(--cds-pad-sm) var(--cds-pad-md); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
   .tbl tbody tr:last-child td { border-bottom: 0; }
   .tbl tbody tr:hover td { background: color-mix(in srgb, var(--color-fg) 4%, transparent); }
@@ -114,15 +122,17 @@
   .os-bar-cell { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .os-bar-cell i { display: block; height: 6px; border-radius: 3px; background: var(--os-accent, currentColor); opacity: .6; }
   .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--cds-font-size-caption); white-space: nowrap; background: color-mix(in srgb, var(--color-fg) 7%, transparent); color: var(--color-fg-muted); }
-  .chip.ok { color: var(--color-ok); background: color-mix(in srgb, var(--color-ok) 13%, transparent); }
-  .chip.warn { color: var(--color-warn); background: color-mix(in srgb, var(--color-warn) 14%, transparent); }
-  .chip.bad { color: var(--color-bad); background: color-mix(in srgb, var(--color-bad) 13%, transparent); }
+  .chip.ok { color: var(--color-ok); }
+  .chip.warn { color: var(--color-warn); }
+  .chip.bad { color: var(--color-bad); }
   .chip.info { color: var(--color-fg); background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 16%, transparent); }
+  .itm-meta .chip, .pd-pools .chip, .pd-chips .chip { white-space: normal; overflow-wrap: anywhere; }
   .os-bad { color: var(--color-bad); }
   .os-warn { color: var(--color-warn); }
   .os-fail { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: 4rem; }
   .os-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
   .os-empty { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); padding: var(--cds-pad-lg); text-align: center; }
+  .os-li-skel { height: 3rem; margin: var(--cds-pad-sm) var(--cds-pad-lg); }
 
   /* Item lists (action items, checks) */
   .ilist { list-style: none; margin: 0; padding: 0; display: grid; }
@@ -133,11 +143,12 @@
   .ilist .grp a { color: var(--color-fg-muted); display: inline-grid; place-items: center; }
   .ilist .grp a:hover { color: var(--color-fg); }
   .itm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px var(--cds-gap-md); align-items: start; padding: var(--cds-pad-sm) var(--cds-pad-lg); }
-  .itm-dot { width: .5rem; height: .5rem; border-radius: 50%; margin-top: .5em; background: var(--color-fg-muted); }
-  .itm-dot.mine { background: var(--app-accent, var(--color-fg)); }
-  .itm-dot.unassigned, .itm-dot.medium { background: var(--color-warn); }
-  .itm-dot.others, .itm-dot.low { background: var(--cds-chart-muted); }
-  .itm-dot.high { background: var(--color-bad); }
+  .itm-dot { font-size: .7em; line-height: 2.1; color: var(--color-fg-muted); }
+  .itm-dot::before { content: "●"; }
+  .itm-dot.mine { color: var(--app-accent, var(--color-fg)); }
+  .itm-dot.unassigned, .itm-dot.medium { color: var(--color-warn); }
+  .itm-dot.others, .itm-dot.low { color: var(--cds-chart-muted); }
+  .itm-dot.high { color: var(--color-bad); }
   .itm-main { min-width: 0; display: grid; gap: 2px; }
   .itm-title { font-weight: var(--cds-font-weight-medium); overflow-wrap: anywhere; }
   .itm-detail { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -164,6 +175,7 @@
   .pd-id p { margin: 2px 0 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .pd-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 1.3em; }
   .pd-note { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .pd-sec .pd-note { margin-top: 2px; }
   .pd-sec { display: grid; gap: var(--cds-gap-xs); border-top: 1px solid var(--color-border-line); padding-top: var(--cds-pad-md); }
   .pd-sec h3 { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-weight: var(--cds-font-weight-medium); letter-spacing: .05em; text-transform: uppercase; }
   .pd-dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--cds-gap-sm) var(--cds-gap-md); margin: 0; }
@@ -184,11 +196,13 @@
     .app.has-detail .app-main { grid-row: 2; }
   }
   @media (max-width: 760px) {
-    .app, .app.has-detail { grid-template-columns: minmax(0, 1fr); }
-    .app-side { grid-row: 1; position: static; max-height: none; min-height: 0; border-right: 0; border-bottom: 1px solid var(--color-border-line); padding: var(--cds-pad-md) 16px; gap: var(--cds-gap-sm); }
-    .app-nav { display: flex; overflow-x: auto; gap: 4px; scrollbar-width: none; }
+    .app, .app.has-detail { grid-template-columns: minmax(0, 1fr); background: var(--color-bg); }
+    .app-side { grid-row: 1; position: static; height: auto; max-height: none; min-height: 0; background: var(--color-panel); border-bottom: 1px solid var(--color-border-line); padding: var(--cds-pad-md) 16px; gap: var(--cds-gap-sm); }
+    .app-nav { display: flex; flex-wrap: wrap; gap: 4px; }
     .app-nav-label, .app-side-foot { display: none; }
-    .app-nav-item { width: auto; flex: none; }
+    .app-nav-item { width: auto; flex: 1 1 auto; min-height: 2rem; }
+    .app-badge:not(.is-on) { display: none; }
+    .app .app-nav-item:focus-visible { outline-offset: -2px; }
     .app-team { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--cds-gap-sm); }
     .app-main, .app.has-detail .app-main { grid-column: 1; grid-row: 2; padding: var(--cds-pad-lg) 16px var(--cds-pad-xl); }
     .app.has-detail .app-detail { grid-column: 1; grid-row: 2; }
@@ -309,7 +323,7 @@
                 <h2 class="pane-title">For you, from your meetings</h2>
                 <p class="pane-note">Next steps assigned to you, or unassigned in notes you took. Newest first.</p>
               </div>
-              <button class="more" type="button" data-nav="actions" data-nav-view="meetings">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+              <button class="more" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
             <ul class="ilist" data-draw="home-actions" data-source="gr_actions"></ul>
           </div>
@@ -321,7 +335,7 @@
               </div>
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
-            <ul class="ilist" data-draw="home-checks" data-source="checks"></ul>
+            <ul class="ilist" data-draw="home-checks" data-source="checks checks_hb"></ul>
           </div>
         </div>
         <div class="stack">
@@ -373,7 +387,7 @@
         <div class="stat" id="stat-gr-mine"><span class="stat-label">Assigned to you</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="mine" data-row="0">—</b></span><span class="stat-sub">named as the owner</span></div>
         <div class="stat" id="stat-gr-unassigned"><span class="stat-label">Unassigned</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="unassigned" data-row="0">—</b></span><span class="stat-sub">no owner in the note</span></div>
         <div class="stat" id="stat-gr-others"><span class="stat-label">With others</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="others" data-row="0">—</b></span><span class="stat-sub">someone else owns it</span></div>
-        <div class="stat" id="stat-checks"><span class="stat-label">Data checks</span><span class="stat-value"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="total" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent</span></div>
+        <div class="stat" id="stat-checks"><span class="stat-label">Data checks</span><span class="stat-value"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="total" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent, incl. HiBob</span></div>
       </div>
       <div class="vtabs" role="tablist" aria-label="Action item views">
         <button class="vtab" role="tab" type="button" data-view-tab="actions:meetings" aria-selected="true">From meetings</button>
@@ -385,6 +399,7 @@
           <div class="pane-head">
             <div class="tools" role="group" aria-label="Owner">
               <button class="fchip" type="button" data-gr-owner="all" aria-pressed="true">All</button>
+              <button class="fchip" type="button" data-gr-owner="foryou" aria-pressed="false">For you</button>
               <button class="fchip" type="button" data-gr-owner="mine" aria-pressed="false">Assigned to you</button>
               <button class="fchip" type="button" data-gr-owner="unassigned" aria-pressed="false">Unassigned</button>
               <button class="fchip" type="button" data-gr-owner="others" aria-pressed="false">With others</button>
@@ -411,7 +426,7 @@
             </div>
             <p class="pane-note">Click a name to open the person, or the arrow to go to the screen.</p>
           </div>
-          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks"></ul></div>
+          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb"></ul></div>
         </div>
       </div>
     </section>
@@ -477,6 +492,7 @@
                 <th class="num" data-field="renewThis">Renewals at stake</th>
               </tr></thead>
               <tbody data-draw="pipe-mgr-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="pipe-mgr-table"></tfoot>
             </table>
           </div>
         </div>
@@ -494,16 +510,17 @@
           <div class="pane-scroll">
             <table class="tbl" data-source="pipe_reps" data-row-key="owner" data-sortable="pipe-rep-table">
               <thead><tr>
-                <th data-field="owner" data-sort="owner">Rep</th>
-                <th data-field="region" data-sort="region">Team</th>
-                <th data-field="manager" data-sort="manager">Manager</th>
-                <th class="num" data-field="thisPipe" data-sort="thisPipe" aria-sort="descending">This Q</th>
-                <th class="num" data-field="thisOpps" data-sort="thisOpps">Opps</th>
-                <th class="num" data-field="nextPipe" data-sort="nextPipe">Next Q</th>
-                <th class="num" data-field="pastDue" data-sort="pastDue">Past due</th>
-                <th class="num" data-field="stale" data-sort="stale">Stale</th>
+                <th data-field="owner" data-sort="owner"><button type="button" class="th-sort">Rep</button></th>
+                <th data-field="region" data-sort="region"><button type="button" class="th-sort">Team</button></th>
+                <th data-field="manager" data-sort="manager"><button type="button" class="th-sort">Manager</button></th>
+                <th class="num" data-field="thisPipe" data-sort="thisPipe" aria-sort="descending"><button type="button" class="th-sort">This Q</button></th>
+                <th class="num" data-field="thisOpps" data-sort="thisOpps"><button type="button" class="th-sort">Opps</button></th>
+                <th class="num" data-field="nextPipe" data-sort="nextPipe"><button type="button" class="th-sort">Next Q</button></th>
+                <th class="num" data-field="pastDue" data-sort="pastDue"><button type="button" class="th-sort">Past due</button></th>
+                <th class="num" data-field="stale" data-sort="stale"><button type="button" class="th-sort">Stale</button></th>
               </tr></thead>
               <tbody data-draw="pipe-rep-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="pipe-rep-table"></tfoot>
             </table>
           </div>
         </div>
@@ -565,6 +582,7 @@
                 <th class="num" data-field="lastArr">Last Q ARR</th>
               </tr></thead>
               <tbody data-draw="cr-mix-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="cr-mix-table"></tfoot>
             </table>
           </div>
         </div>
@@ -579,15 +597,16 @@
           <div class="pane-scroll">
             <table class="tbl" data-source="cr_leader" data-row-key="owner" data-sortable="cr-rep-table">
               <thead><tr>
-                <th data-field="owner" data-sort="owner">Rep</th>
-                <th data-field="region" data-sort="region">Team</th>
-                <th data-field="manager" data-sort="manager">Manager</th>
-                <th class="num" data-field="nb" data-sort="nb">New Business</th>
-                <th class="num" data-field="up" data-sort="up">Upsell</th>
-                <th class="num" data-field="arr" data-sort="arr" aria-sort="descending">ARR</th>
-                <th class="num" data-field="bdrSourced" data-sort="bdrSourced">BDR-sourced</th>
+                <th data-field="owner" data-sort="owner"><button type="button" class="th-sort">Rep</button></th>
+                <th data-field="region" data-sort="region"><button type="button" class="th-sort">Team</button></th>
+                <th data-field="manager" data-sort="manager"><button type="button" class="th-sort">Manager</button></th>
+                <th class="num" data-field="nb" data-sort="nb"><button type="button" class="th-sort">New Business</button></th>
+                <th class="num" data-field="up" data-sort="up"><button type="button" class="th-sort">Upsell</button></th>
+                <th class="num" data-field="arr" data-sort="arr" aria-sort="descending"><button type="button" class="th-sort">ARR</button></th>
+                <th class="num" data-field="bdrSourced" data-sort="bdrSourced"><button type="button" class="th-sort">BDR-sourced</button></th>
               </tr></thead>
               <tbody data-draw="cr-rep-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="cr-rep-table"></tfoot>
             </table>
           </div>
         </div>
@@ -606,6 +625,7 @@
                 <th class="num" data-field="lastOpps">Last Q</th>
               </tr></thead>
               <tbody data-draw="cr-bdr-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="cr-bdr-table"></tfoot>
             </table>
           </div>
         </div>
@@ -623,7 +643,7 @@
       <div class="statbar">
         <div class="stat" id="stat-hc"><span class="stat-label">On headcount</span><span class="stat-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="headcount" data-where="region=All" data-fetchpriority="high">—</b></span><span class="stat-sub">in HiBob</span></div>
         <div class="stat" id="stat-j30"><span class="stat-label">Joined, last 30 days</span><span class="stat-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="joined30" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="joined90" data-where="region=All">—</b> in 90 days</span></div>
-        <div class="stat" id="stat-overdue"><span class="stat-label">Overdue for a pool</span><span class="stat-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="overdue" data-where="region=All">—</b></span><span class="stat-sub">past week 1, routed role</span></div>
+        <div class="stat" id="stat-overdue"><span class="stat-label">Overdue for a pool</span><span class="stat-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="overdue" data-where="region=All">—</b></span><span class="stat-sub">joined in 90 days, past week 1</span></div>
         <div class="stat" id="stat-nosf"><span class="stat-label">No Salesforce user</span><span class="stat-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="noSf" data-where="region=All">—</b></span><span class="stat-sub">joined in 90 days</span></div>
       </div>
       <div class="banner"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg><span>Signed hires who haven't started don't show, because HiBob hides people in the Hired state from your connection. Open roles aren't in HiBob's connector either. Both need an ATS connector or wider HiBob access.</span></div>
@@ -654,6 +674,7 @@
                 <th data-field="status">Routing</th>
               </tr></thead>
               <tbody data-draw="hire-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="hire-table"></tfoot>
             </table>
           </div>
         </div>
@@ -670,6 +691,7 @@
                 <th class="num" data-field="joined90">Joined, 90 days</th>
               </tr></thead>
               <tbody data-draw="hire-team-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="hire-team-table"></tfoot>
             </table>
           </div>
         </div>
@@ -696,7 +718,7 @@
       </header>
       <div class="statbar">
         <div class="stat" id="stat-missing"><span class="stat-label">Missing from routing</span><span class="stat-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="missing" data-where="region=All" data-fetchpriority="high">—</b></span><span class="stat-sub">active, past week 1, in no pool</span></div>
-        <div class="stat" id="stat-week2"><span class="stat-label">Add next week</span><span class="stat-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="weekOne" data-where="region=All">—</b></span><span class="stat-sub">Salesforce user under 7 days old</span></div>
+        <div class="stat" id="stat-week2"><span class="stat-label">Add next week</span><span class="stat-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="weekOne" data-where="region=All">—</b></span><span class="stat-sub">started under 7 days ago</span></div>
         <div class="stat" id="stat-inactive"><span class="stat-label">Inactive users in pools</span><span class="stat-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="inactiveMembers" data-where="region=All">—</b></span><span class="stat-sub">deactivated in Salesforce</span></div>
         <div class="stat" id="stat-pools"><span class="stat-label">Pools</span><span class="stat-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="pools" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="idlePools" data-where="region=All">—</b> idle for 90 days</span></div>
       </div>
@@ -726,9 +748,10 @@
                 <th data-field="status">Status</th>
               </tr></thead>
               <tbody data-draw="rr-people-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="rr-people-table"></tfoot>
             </table>
           </div>
-          <div class="pane-foot"><p class="pane-note">Missing: in no pool of their kind 7 or more days after their Salesforce user was created. Assignments are LeanData round-robin assignments in the last 90 days across all their pools.</p></div>
+          <div class="pane-foot"><p class="pane-note">Missing: in no pool of their kind 7 or more days after they started (Legora start date in Salesforce, or when their Salesforce user was created). Assignments are LeanData round-robin assignments in the last 90 days across all their pools.</p></div>
         </div>
       </div>
 
@@ -750,6 +773,7 @@
                 <th data-field="flag">Check</th>
               </tr></thead>
               <tbody data-draw="rr-pool-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="rr-pool-table"></tfoot>
             </table>
           </div>
         </div>
@@ -787,18 +811,19 @@
           <div class="pane-scroll">
             <table class="tbl" data-source="books_owner" data-row-key="owner" data-sortable="bk-owner-table">
               <thead><tr>
-                <th data-field="owner" data-sort="owner">Rep</th>
-                <th data-field="region" data-sort="region">Team</th>
-                <th data-field="manager" data-sort="manager">Manager</th>
-                <th class="num" data-field="accounts" data-sort="accounts">Accounts</th>
-                <th class="num" data-field="active" data-sort="active">Active</th>
-                <th class="num" data-field="customers" data-sort="customers">Customers</th>
-                <th class="num" data-field="arr" data-sort="arr" aria-sort="descending">Customer ARR</th>
-                <th class="num" data-field="emCustomers" data-sort="emCustomers">EM book</th>
-                <th class="num" data-field="openPipe" data-sort="openPipe">Open pipeline</th>
-                <th class="num" data-field="openRenewals" data-sort="openRenewals">Open renewals</th>
+                <th data-field="owner" data-sort="owner"><button type="button" class="th-sort">Rep</button></th>
+                <th data-field="region" data-sort="region"><button type="button" class="th-sort">Team</button></th>
+                <th data-field="manager" data-sort="manager"><button type="button" class="th-sort">Manager</button></th>
+                <th class="num" data-field="accounts" data-sort="accounts"><button type="button" class="th-sort">Accounts</button></th>
+                <th class="num" data-field="active" data-sort="active"><button type="button" class="th-sort">Active</button></th>
+                <th class="num" data-field="customers" data-sort="customers"><button type="button" class="th-sort">Customers</button></th>
+                <th class="num" data-field="arr" data-sort="arr" aria-sort="descending"><button type="button" class="th-sort">Customer ARR</button></th>
+                <th class="num" data-field="emCustomers" data-sort="emCustomers"><button type="button" class="th-sort">EM book</button></th>
+                <th class="num" data-field="openPipe" data-sort="openPipe"><button type="button" class="th-sort">Open pipeline</button></th>
+                <th class="num" data-field="openRenewals" data-sort="openRenewals"><button type="button" class="th-sort">Open renewals</button></th>
               </tr></thead>
               <tbody data-draw="bk-owner-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="bk-owner-table"></tfoot>
             </table>
           </div>
         </div>
@@ -821,6 +846,7 @@
                 <th class="num" data-field="customerArr">Customer ARR</th>
               </tr></thead>
               <tbody data-draw="bk-cov-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="bk-cov-table"></tfoot>
             </table>
           </div>
         </div>
@@ -855,6 +881,7 @@
                 <th class="num" data-field="arrUsd">ARR</th>
               </tr></thead>
               <tbody data-draw="bk-orphan-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="bk-orphan-table"></tfoot>
             </table>
           </div>
           <div class="pane-foot"><p class="pane-note">Active accounts in an EMEA region whose owner is inactive, has no role, is RevOps or sits outside EMEA. Strategic and partnership owners may be intended, so they're marked review.</p></div>
@@ -875,6 +902,7 @@
                 <th data-field="flag">Check</th>
               </tr></thead>
               <tbody data-draw="bk-book-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="bk-book-table"></tfoot>
             </table>
           </div>
         </div>
@@ -893,6 +921,7 @@
                 <th data-field="flag">Check</th>
               </tr></thead>
               <tbody data-draw="bk-pool-table"></tbody>
+              <tfoot data-draw="tbl-foot" data-for="bk-pool-table"></tfoot>
             </table>
           </div>
         </div>
@@ -908,25 +937,33 @@
     <div class="pd-head">
       <span class="pd-avatar" data-draw="pd-initials" aria-hidden="true">—</span>
       <div class="pd-id">
-        <h2><b data-draw="pd-text" data-source="person" data-f="name">—</b></h2>
+        <h2 data-draw="pd-title">—</h2>
         <p><span data-draw="pd-text" data-source="person" data-f="role">—</span> · <span data-draw="pd-text" data-source="person" data-f="region">—</span></p>
       </div>
       <button class="ibtn" type="button" data-close-person aria-label="Close person"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
-    <span data-draw="pd-found"></span>
     <p class="pd-note" data-pd-note="missing" hidden>This person isn't in the EMEA Salesforce roster or HiBob's EMEA departments, so there's nothing more to show.</p>
-    <div class="pd-chips" data-draw="pd-chips" data-source="person"></div>
+    <p class="pd-note" data-pd-note="nosf" hidden>No Salesforce user matched this HiBob person by name, so only their HiBob details show.</p>
+    <div class="pd-chips" data-draw="pd-chips" data-source="person person_hb"></div>
 
     <section class="pd-sec">
-      <h3>Role</h3>
+      <h3>Salesforce</h3>
       <dl class="pd-dl">
         <div><dt>Manager</dt><dd data-draw="pd-text" data-source="person" data-f="manager">—</dd></div>
         <div><dt>Title</dt><dd data-draw="pd-text" data-source="person" data-f="title">—</dd></div>
-        <div><dt>Site</dt><dd data-draw="pd-text" data-source="person" data-f="site">—</dd></div>
-        <div><dt>HiBob team</dt><dd data-draw="pd-text" data-source="person" data-f="team">—</dd></div>
-        <div><dt>Start date</dt><dd data-draw="pd-day" data-source="person" data-f="startDate">—</dd></div>
-        <div><dt>Salesforce user since</dt><dd data-draw="pd-day" data-source="person" data-f="createdDate">—</dd></div>
+        <div><dt>User since</dt><dd data-draw="pd-day" data-source="person" data-f="createdDate">—</dd></div>
+        <div><dt>Legora start date</dt><dd data-draw="pd-day" data-source="person" data-f="startDate">—</dd></div>
       </dl>
+    </section>
+    <section class="pd-sec">
+      <h3>HiBob</h3>
+      <dl class="pd-dl">
+        <div><dt>Title</dt><dd data-draw="pd-text" data-source="person_hb" data-f="title">—</dd></div>
+        <div><dt>Team</dt><dd data-draw="pd-text" data-source="person_hb" data-f="team">—</dd></div>
+        <div><dt>Site</dt><dd data-draw="pd-text" data-source="person_hb" data-f="site">—</dd></div>
+        <div><dt>Start date</dt><dd data-draw="pd-day" data-source="person_hb" data-f="startDate">—</dd></div>
+      </dl>
+      <p class="pd-note" data-pd-note="nohb" hidden>Not on headcount in HiBob's GTM, Engagement or Growth EMEA departments.</p>
     </section>
     <section class="pd-sec">
       <h3>Pipeline</h3>

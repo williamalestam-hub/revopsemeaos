@@ -10,14 +10,14 @@ const regionRow = (el, id) => {
 const firstRow = (id) => (dash.data(id).data || [])[0] || {};
 const statusCls = (v) => (/^In routing$/.test(v) ? 'ok'
   : /Overdue|Missing|^No Salesforce/.test(v) ? 'bad'
-  : /week 2|next week|Week 1|none assigned|New joiner/i.test(v) ? 'warn' : '');
+  : /week 2|next week|Week 1|none assigned|New joiner|Not started/i.test(v) ? 'warn' : '');
 const ago = (n) => (n == null ? '' : n === 0 ? 'today' : n + 'd ago');
+const monthLabel = (m, i) => d3.utcFormat(i === 0 || m.endsWith('-01') ? "%b '%y" : '%b')(new Date(m + '-01T00:00:00Z'));
 
 // ===================== NAV BADGES =====================
 dash.draw('nav-badge', (el) => {
   const id = el.dataset.source;
-  const s = OS.state(id);
-  if (s !== 'ok') { el.classList.remove('is-on'); el.textContent = '—'; return; }
+  if (OS.state(id) !== 'ok') { el.classList.remove('is-on'); el.textContent = '—'; return; }
   const row = el.hasAttribute('data-by-region') ? regionRow(el, id) : firstRow(id);
   const n = +row[el.dataset.f] || 0;
   el.dataset.field = el.dataset.f;
@@ -59,7 +59,7 @@ dash.draw('home-pipe-chart', (box) => OS.chart(box, ['pipe_team'], () => {
   OS.hbars(box, rows, stageKeys(), OS.usd);
 }, 'No open pipeline for this team this quarter.'));
 
-dash.draw('pipe-mgr-table', (tbody) => OS.table(tbody, ['pipe_team'], () => (dash.data('pipe_team').data || [])
+OS.defTable('pipe-mgr-table', ['pipe_team'], () => (dash.data('pipe_team').data || [])
   .filter((r) => r.level === 'team' && inTeam(r))
   .sort((a, b) => b.thisPipe - a.thisPipe), [
   { f: 'manager', person: (r) => r.manager },
@@ -68,15 +68,15 @@ dash.draw('pipe-mgr-table', (tbody) => OS.table(tbody, ['pipe_team'], () => (das
   { f: 'thisCommit', fmt: OS.usd, num: true }, { f: 'thisBest', fmt: OS.usd, num: true },
   { f: 'won', fmt: OS.usd, num: true }, { f: 'nextPipe', fmt: OS.usd, num: true },
   { f: 'renewThis', fmt: OS.usd, num: true },
-], { key: 'key' }));
+], { key: 'key' });
 
-dash.draw('pipe-rep-table', (tbody) => OS.table(tbody, ['pipe_reps'], () => (dash.data('pipe_reps').data || []).filter(inTeam), [
+OS.defTable('pipe-rep-table', ['pipe_reps'], () => (dash.data('pipe_reps').data || []).filter(inTeam), [
   { f: 'owner', person: (r) => r.owner }, { f: 'region' }, { f: 'manager' },
   { f: 'thisPipe', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.thisPipe) },
   { f: 'thisOpps', fmt: OS.num, num: true }, { f: 'nextPipe', fmt: OS.usd, num: true },
   { f: 'pastDue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'stale', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
-], { key: 'owner' }));
+], { key: 'owner' });
 
 // ===================== CREATED =====================
 dash.draw('kpi-cr-count', (el) => OS.value(el, ['cr_kpi'], () => OS.num(firstRow('cr_kpi')[el.dataset.field] || 0)));
@@ -88,7 +88,7 @@ const typeKeys = (arr) => [
   { k: arr ? 'upArr' : 'up', name: 'Upsell', color: dash.colors[1] },
   { k: arr ? 'rnArr' : 'rn', name: 'Renewal (manual)', color: dash.colors[3] },
 ];
-const weekRows = () => (dash.data('cr_weeks').data || []).map((w) => ({ ...w, label: d3.utcFormat('%b %-d')(new Date(w.week + 'T00:00:00Z')), tip: 'Week of ' + d3.utcFormat('%-d %b %Y')(new Date(w.week + 'T00:00:00Z')) }));
+const weekRows = () => (dash.data('cr_weeks').data || []).map((w) => ({ ...w, key: w.week, label: d3.utcFormat('%b %-d')(new Date(w.week + 'T00:00:00Z')), tip: 'Week of ' + d3.utcFormat('%-d %b %Y')(new Date(w.week + 'T00:00:00Z')) }));
 dash.draw('cr-week-chart', (box) => OS.chart(box, ['cr_weeks'], () => {
   const arr = dash.params().crm === 'arr';
   const rows = weekRows();
@@ -102,28 +102,28 @@ dash.draw('home-week-chart', (box) => OS.chart(box, ['cr_weeks'], () => {
 }));
 dash.draw('cr-month-chart', (box) => OS.chart(box, ['cr_months'], () => {
   const arr = dash.params().crm === 'arr';
-  const rows = (dash.data('cr_months').data || []).map((m) => ({ ...m, label: d3.utcFormat('%b')(new Date(m.month + '-01T00:00:00Z')), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) }));
+  const rows = (dash.data('cr_months').data || []).map((m, i) => ({ ...m, key: m.month, label: monthLabel(m.month, i), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) }));
   if (!rows.length) return false;
   OS.vbars(box, rows, typeKeys(arr), arr ? OS.usd : OS.num);
 }));
 
-dash.draw('cr-mix-table', (tbody) => OS.table(tbody, ['cr_mix'], () => (dash.data('cr_mix').data || []).map((r) => ({ ...r, _cls: r.source === 'Total' ? 'os-total' : '' })), [
+OS.defTable('cr-mix-table', ['cr_mix'], () => (dash.data('cr_mix').data || []).map((r) => ({ ...r, _cls: r.source === 'Total' ? 'os-total' : '' })), [
   { f: 'source' }, { f: 'thisOpps', fmt: OS.num, num: true }, { f: 'thisArr', fmt: OS.usd, num: true },
   { f: 'lastOpps', fmt: OS.num, num: true }, { f: 'lastArr', fmt: OS.usd, num: true },
-], { key: 'source' }));
+], { key: 'source' });
 
-dash.draw('cr-bdr-table', (tbody) => OS.table(tbody, ['cr_bdrs'], () => dash.data('cr_bdrs').data || [], [
+OS.defTable('cr-bdr-table', ['cr_bdrs'], () => dash.data('cr_bdrs').data || [], [
   { f: 'bdr', person: (r) => r.bdr }, { f: 'manager' },
   { f: 'thisOpps', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.thisOpps) },
   { f: 'thisArr', fmt: OS.usd, num: true }, { f: 'lastOpps', fmt: OS.num, num: true },
-], { key: 'bdr' }));
+], { key: 'bdr' });
 
-dash.draw('cr-rep-table', (tbody) => OS.table(tbody, ['cr_leader'], () => (dash.data('cr_leader').data || []).filter(inTeam), [
+OS.defTable('cr-rep-table', ['cr_leader'], () => (dash.data('cr_leader').data || []).filter(inTeam), [
   { f: 'owner', person: (r) => r.owner }, { f: 'region' }, { f: 'manager' },
   { f: 'nb', fmt: OS.num, num: true }, { f: 'up', fmt: OS.num, num: true },
   { f: 'arr', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.arr) },
   { f: 'bdrSourced', fmt: OS.num, num: true },
-], { key: 'owner' }));
+], { key: 'owner' });
 
 // ===================== ACTION ITEMS =====================
 dash.draw('kpi-gr', (el) => OS.value(el, ['gr_kpi'], () => OS.num(firstRow('gr_kpi')[el.dataset.field] || 0)));
@@ -173,10 +173,10 @@ const groupedActions = (rows) => {
 dash.draw('act-list', (ul) => OS.list(ul, ['gr_actions'], () => {
   const own = dash.params().grOwner || 'all';
   return OS.searchFilter('act-list', (dash.data('gr_actions').data || [])
-    .filter((r) => !r.done && (own === 'all' || r.bucket === own)), ['item', 'detail', 'owner', 'meeting']);
+    .filter((r) => !r.done && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
 }, groupedActions, { empty: 'No action items for this filter and window.', connect: GRANOLA_CONNECT }));
 dash.draw('home-actions', (ul) => OS.list(ul, ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou).slice(0, 6),
-  groupedActions, { empty: 'Nothing assigned to you in your recent notes.', connect: GRANOLA_CONNECT }));
+  groupedActions, { empty: 'Nothing for you in your recent notes.', connect: GRANOLA_CONNECT }));
 
 const checkItem = (c) => {
   const li = OS.el('li', 'itm');
@@ -200,27 +200,34 @@ const checkItem = (c) => {
   li.append(OS.el('span', 'itm-dot ' + c.severity), main, meta);
   return li;
 };
-const teamChecks = () => (dash.data('checks').data || []).filter((c) => OS.region() === 'All' || c.region === OS.region());
+// Salesforce and LeanData checks always; HiBob checks join them once HiBob has loaded
+const allChecks = () => {
+  const rank = { high: 0, medium: 1, low: 2 };
+  const hb = OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [];
+  return (dash.data('checks').data || []).concat(hb)
+    .filter((c) => OS.region() === 'All' || c.region === OS.region())
+    .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
+};
 dash.draw('check-list', (ul) => OS.list(ul, ['checks'], () => {
   const area = dash.params().checkArea || 'All';
-  return teamChecks().filter((c) => area === 'All' || c.area === area);
+  return allChecks().filter((c) => area === 'All' || c.area === area);
 }, (rows) => rows.map(checkItem), { empty: 'No problems found for this filter.' }));
-dash.draw('home-checks', (ul) => OS.list(ul, ['checks'], () => teamChecks().slice(0, 7), (rows) => rows.map(checkItem), { empty: 'No problems found.' }));
+dash.draw('home-checks', (ul) => OS.list(ul, ['checks'], () => allChecks().slice(0, 7), (rows) => rows.map(checkItem), { empty: 'No problems found.' }));
 
 // ===================== HIRING =====================
 dash.draw('kpi-hire', (el) => OS.value(el, ['hire_kpi'], () => OS.num(regionRow(el, 'hire_kpi')[el.dataset.field] || 0)));
 
-dash.draw('hire-table', (tbody) => OS.table(tbody, ['people'], () => (dash.data('people').data || [])
+OS.defTable('hire-table', ['people'], () => (dash.data('people').data || [])
   .filter((p) => p.daysIn != null && p.daysIn <= 90 && inTeam(p))
   .sort((a, b) => a.daysIn - b.daysIn), [
   { f: 'name', person: (r) => r.sfName || r.name }, { f: 'title' }, { f: 'team' }, { f: 'site' }, { f: 'manager' },
   { f: 'startDate', fmt: OS.day }, { f: 'daysIn', fmt: OS.num, num: true },
   { f: 'sfRole' }, { f: 'pools', fmt: OS.num, num: true },
   { f: 'status', chip: statusCls },
-], { key: 'id', empty: 'Nobody joined in the last 90 days for this team.' }));
+], { key: 'id', empty: 'Nobody joined in the last 90 days for this team.', connect: 'Connect HiBob in your claude.ai connectors to see new joiners.' });
 
 dash.draw('hire-month-chart', (box) => OS.chart(box, ['hire_months'], () => {
-  const rows = (dash.data('hire_months').data || []).map((m) => ({ ...m, label: d3.utcFormat('%b')(new Date(m.month + '-01T00:00:00Z')), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) }));
+  const rows = (dash.data('hire_months').data || []).map((m, i) => ({ ...m, key: m.month, label: monthLabel(m.month, i), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) }));
   if (!rows.length) return false;
   OS.vbars(box, rows, [
     { k: 'gtm', name: 'GTM EMEA', color: dash.colors[0] },
@@ -229,16 +236,16 @@ dash.draw('hire-month-chart', (box) => OS.chart(box, ['hire_months'], () => {
   ], OS.num);
 }));
 
-dash.draw('hire-team-table', (tbody) => OS.table(tbody, ['hire_teams'], () => dash.data('hire_teams').data || [], [
+OS.defTable('hire-team-table', ['hire_teams'], () => dash.data('hire_teams').data || [], [
   { f: 'team' }, { f: 'people', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.people) }, { f: 'joined90', fmt: OS.num, num: true },
-], { key: 'team' }));
+], { key: 'team', connect: 'Connect HiBob in your claude.ai connectors to see headcount.' });
 
 // ===================== ROUTING =====================
 dash.draw('kpi-rr', (el) => OS.value(el, ['rr_kpi'], () => OS.num(regionRow(el, 'rr_kpi')[el.dataset.field] || 0)));
 
-dash.draw('rr-people-table', (tbody) => OS.table(tbody, ['rr_people'], () => {
+OS.defTable('rr-people-table', ['rr_people'], () => {
   const only = !!dash.params().onlyMissing;
-  const order = { 'Missing': 0, 'New joiner: overdue': 1, 'New: add next week': 2, 'In routing, none assigned': 3, 'In routing': 4 };
+  const order = { 'Missing': 0, 'New joiner: overdue': 1, 'New: add next week': 2, 'Not started': 3, 'In routing, none assigned': 4, 'In routing': 5 };
   return (dash.data('rr_people').data || [])
     .filter((p) => inTeam(p) && (!only || !/^In routing/.test(p.status)))
     .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || String(a.name).localeCompare(String(b.name)));
@@ -246,9 +253,9 @@ dash.draw('rr-people-table', (tbody) => OS.table(tbody, ['rr_people'], () => {
   { f: 'name', person: (r) => r.name }, { f: 'region' }, { f: 'manager' }, { f: 'createdDate', fmt: OS.day },
   { f: 'pools', fmt: OS.num, num: true }, { f: 'poolNames', wrap: true },
   { f: 'assignments', fmt: OS.num, num: true }, { f: 'status', chip: statusCls },
-], { key: 'userId', empty: 'Everyone in this team is in routing.' }));
+], { key: 'userId', empty: 'Everyone in this team is in routing.' });
 
-dash.draw('rr-pool-table', (tbody) => OS.table(tbody, ['rr_pools'], () => {
+OS.defTable('rr-pool-table', ['rr_pools'], () => {
   const region = OS.region();
   return (dash.data('rr_pools').data || [])
     .filter((p) => region === 'All' || p.regions.split('|').includes(region))
@@ -257,7 +264,7 @@ dash.draw('rr-pool-table', (tbody) => OS.table(tbody, ['rr_pools'], () => {
   { f: 'pool' }, { f: 'family' }, { f: 'members', fmt: OS.num, num: true }, { f: 'memberNames', wrap: true },
   { f: 'assignments', fmt: OS.num, num: true }, { f: 'lastAssigned', fmt: OS.day },
   { f: 'flag', chip: (v) => (v === 'OK' ? 'ok' : v === 'Inactive member' ? 'bad' : 'warn') },
-], { key: 'pool' }));
+], { key: 'pool' });
 
 // ===================== BOOKS =====================
 dash.draw('kpi-bk', (el) => OS.value(el, ['books_kpi'], () => OS.num(regionRow(el, 'books_kpi')[el.dataset.field] || 0)));
@@ -265,24 +272,24 @@ dash.draw('kpi-bk-usd', (el) => OS.value(el, ['books_kpi'], () => OS.usd(regionR
 dash.draw('kpi-orph', (el) => OS.value(el, ['orphan_kpi'], () => OS.num(firstRow('orphan_kpi')[el.dataset.field] || 0)));
 dash.draw('kpi-orph-usd', (el) => OS.value(el, ['orphan_kpi'], () => OS.usd(firstRow('orphan_kpi')[el.dataset.field] || 0)));
 
-dash.draw('bk-owner-table', (tbody) => OS.table(tbody, ['books_owner'], () => (dash.data('books_owner').data || []).filter(inTeam), [
+OS.defTable('bk-owner-table', ['books_owner'], () => (dash.data('books_owner').data || []).filter(inTeam), [
   { f: 'owner', person: (r) => r.owner }, { f: 'region' }, { f: 'manager' },
   { f: 'accounts', fmt: OS.num, num: true }, { f: 'active', fmt: OS.num, num: true },
   { f: 'customers', fmt: OS.num, num: true },
   { f: 'arr', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.arr) },
   { f: 'emCustomers', fmt: OS.num, num: true }, { f: 'openPipe', fmt: OS.usd, num: true },
   { f: 'openRenewals', fmt: OS.num, num: true },
-], { key: 'owner' }));
+], { key: 'owner' });
 
-dash.draw('bk-cov-table', (tbody) => OS.table(tbody, ['coverage'], () => (dash.data('coverage').data || []).map((r) => ({ ...r, _cls: r.salesRegion === 'All EMEA regions' ? 'os-total' : '' })), [
+OS.defTable('bk-cov-table', ['coverage'], () => (dash.data('coverage').data || []).map((r) => ({ ...r, _cls: r.salesRegion === 'All EMEA regions' ? 'os-total' : '' })), [
   { f: 'salesRegion' }, { f: 'emea', fmt: OS.num, num: true }, { f: 'strategic', fmt: OS.num, num: true },
   { f: 'partners', fmt: OS.num, num: true }, { f: 'otherRegion', fmt: OS.num, num: true },
   { f: 'revops', fmt: OS.num, num: true }, { f: 'unassigned', fmt: OS.num, num: true },
   { f: 'coveredShare', fmt: OS.pct, num: true, cls: (v) => (v != null && v < 0.5 ? 'os-warn' : '') },
   { f: 'customerArr', fmt: OS.usd, num: true },
-], { key: 'salesRegion' }));
+], { key: 'salesRegion' });
 
-dash.draw('bk-orphan-table', (tbody) => OS.table(tbody, ['orphans'], () => {
+OS.defTable('bk-orphan-table', ['orphans'], () => {
   const reason = dash.params().orphanReason || '';
   return (dash.data('orphans').data || []).filter((r) => !reason || r.reason === reason)
     .sort((a, b) => (+b.arrUsd || 0) - (+a.arrUsd || 0));
@@ -290,39 +297,36 @@ dash.draw('bk-orphan-table', (tbody) => OS.table(tbody, ['orphans'], () => {
   { f: 'account' }, { f: 'salesRegion' }, { f: 'country' }, { f: 'status' }, { f: 'owner' }, { f: 'ownerRole' },
   { f: 'reason', chip: (v) => (/review/.test(v) ? '' : v === 'Inactive owner' || v === 'Owner outside EMEA' ? 'bad' : 'warn') },
   { f: 'arrUsd', fmt: OS.usd, num: true },
-], { key: 'accountId', limit: 300 }));
+], { key: 'accountId', limit: 300 });
 
-dash.draw('bk-book-table', (tbody) => OS.table(tbody, ['books'], () => (dash.data('books').data || [])
+OS.defTable('bk-book-table', ['books'], () => (dash.data('books').data || [])
   .filter(inTeam)
   .sort((a, b) => (a.flag === 'OK') - (b.flag === 'OK') || String(a.book).localeCompare(String(b.book))), [
   { f: 'book' }, { f: 'mainOwner', person: (r) => r.mainOwner }, { f: 'mainShare', fmt: OS.pct, num: true },
   { f: 'owners', fmt: OS.num, num: true }, { f: 'accounts', fmt: OS.num, num: true },
   { f: 'flag', chip: (v) => (v === 'OK' ? 'ok' : v === 'Split' ? 'warn' : 'bad') },
-], { key: 'book' }));
+], { key: 'book' });
 
-dash.draw('bk-pool-table', (tbody) => OS.table(tbody, ['book_pool'], () => (dash.data('book_pool').data || [])
+OS.defTable('bk-pool-table', ['book_pool'], () => (dash.data('book_pool').data || [])
   .filter((r) => r.flag !== 'OK' && inTeam(r))
   .sort((a, b) => String(a.flag).localeCompare(String(b.flag)) || String(a.name).localeCompare(String(b.name))), [
   { f: 'name', person: (r) => r.name }, { f: 'region' }, { f: 'bookList', wrap: true }, { f: 'pools', fmt: OS.num, num: true },
   { f: 'flag', chip: (v) => (v === 'Book, no pool' ? 'bad' : 'warn') },
-], { key: 'userId', empty: 'Every AE and SMB rep in this team has both a book and a pool.' }));
+], { key: 'userId', empty: 'Every AE and SMB rep in this team has both a book and a pool.' });
 
 // ===================== PERSON PANEL =====================
-const personRow = () => {
+// Salesforce values come from `person`, HiBob values from `person_hb`; each is marked against its own source.
+const rowFor = (id) => {
   const p = dash.params().person;
-  return p ? (dash.data('person').data || []).find((r) => r.name === p) || null : null;
-};
-const markPerson = (el) => {
-  const r = OS.state('person') === 'ok' ? personRow() : null;
-  if (r) { el.dataset.field = el.dataset.f; setWhere(el, 'name', r.name); }
-  else { delete el.dataset.field; delete el.dataset.where; }
-  return r;
+  return p && OS.state(id) === 'ok' ? (dash.data(id).data || []).find((r) => r.name === p) || null : null;
 };
 const personValue = (fmt) => (el) => {
-  const r = markPerson(el);
-  OS.value(el, ['person'], () => {
-    if (!r) return el.dataset.f === 'name' ? (dash.params().person || '—') : '—';
-    const v = r[el.dataset.f];
+  const id = el.dataset.source;
+  const r = rowFor(id);
+  if (r) { el.dataset.field = el.dataset.f; setWhere(el, 'name', r.name); }
+  else { delete el.dataset.field; delete el.dataset.where; }
+  OS.value(el, [id], () => {
+    const v = r ? r[el.dataset.f] : null;
     return v == null || v === '' ? '—' : fmt(v);
   });
 };
@@ -330,32 +334,23 @@ dash.draw('pd-text', personValue((v) => String(v)));
 dash.draw('pd-num', personValue(OS.num));
 dash.draw('pd-usd', personValue(OS.usd));
 dash.draw('pd-day', personValue(OS.day));
+dash.draw('pd-title', (el) => { el.textContent = String(dash.params().person || '—'); });
 dash.draw('pd-initials', (el) => {
   const name = String(dash.params().person || '');
   el.textContent = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '—';
 });
-dash.draw('pd-found', (el) => {
-  const s = OS.state('person');
-  const missing = s === 'ok' && !personRow();
-  el.parentElement.querySelectorAll('[data-pd-note]').forEach((n) => { n.hidden = !(n.dataset.pdNote === 'missing' && missing); });
-});
 dash.draw('pd-chips', (el) => {
-  const s = OS.state('person');
-  if (s !== 'ok') { el.replaceChildren(); return; }
-  const r = personRow();
-  if (!r) { el.replaceChildren(); return; }
+  const r = rowFor('person');
+  const h = rowFor('person_hb');
   const chips = [];
-  if (r.isActive === false) chips.push(['Inactive in Salesforce', 'bad']);
-  if (r.routing) chips.push([r.routing, statusCls(r.routing)]);
-  if (r.hiring && r.hiring !== r.routing && r.hiring !== 'In routing') chips.push([r.hiring, statusCls(r.hiring)]);
-  if (r.pastDue > 0) chips.push([OS.num(r.pastDue) + ' past due', 'bad']);
-  if (!r.inSf) chips.push(['No Salesforce user', 'bad']);
-  if (!r.inHb) chips.push(['Not in HiBob EMEA', '']);
+  if (r && r.isActive === false) chips.push(['Inactive in Salesforce', 'bad']);
+  if (r && r.routing) chips.push([r.routing, statusCls(r.routing)]);
+  if (h && h.hiring && (!r || h.hiring !== r.routing) && h.hiring !== 'In routing') chips.push([h.hiring, statusCls(h.hiring)]);
+  if (r && r.pastDue > 0) chips.push([OS.num(r.pastDue) + ' past due', 'bad']);
   el.replaceChildren(...chips.map(([t, c]) => OS.el('span', 'chip ' + c, t)));
 });
 dash.draw('pd-pools', (el) => {
-  const s = OS.state('person');
-  const r = s === 'ok' ? personRow() : null;
+  const r = rowFor('person');
   const names = r && r.poolNames ? r.poolNames.split(', ').filter(Boolean) : [];
   el.replaceChildren(...names.map((n) => { const li = OS.el('li'); li.append(OS.el('span', 'chip', n)); return li; }));
 });

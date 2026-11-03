@@ -38,8 +38,10 @@ ds("pipe_rep", "Open pipeline by rep",
    GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"""))
 ds("pipe_pastdue", "Past-due opps by rep",
    "Open EMEA New Business and Upsell opportunities whose close date has passed, per rep.",
-   SF(f"""SELECT Owner.Name owner, COUNT(Id) pastDueOpps, SUM(Finance_ARR_USD__c) pastDueArrUsd FROM Opportunity
-   WHERE IsClosed = false AND CloseDate < TODAY AND RecordType.Name != 'Renewal' AND {OWNER} GROUP BY Owner.Name LIMIT 2000"""))
+   SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, COUNT(Id) pastDueOpps,
+   SUM(Finance_ARR_USD__c) pastDueArrUsd FROM Opportunity
+   WHERE IsClosed = false AND CloseDate < TODAY AND RecordType.Name != 'Renewal' AND {OWNER}
+   GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name LIMIT 2000"""))
 ds("pipe_stale", "Stale opps by rep",
    "Open EMEA New Business and Upsell opportunities closing this or next quarter with no logged activity in 30 days, per rep.",
    SF(f"""SELECT Owner.Name owner, COUNT(Id) staleOpps, SUM(Finance_ARR_USD__c) staleArrUsd FROM Opportunity
@@ -156,15 +158,13 @@ ds("bk_books", "Account books by owner",
 # ---------- Granola (each viewer's own notes) ----------
 DATE = "^20[0-9]{2}-[01][0-9]-[0-3][0-9]$"
 D["gr_notes"] = {"title": "Granola meeting notes",
-  "description": "Your Granola meetings in the chosen window (notes you took or were invited to); the page then reads each note and keeps every bullet of its summary and private notes.",
+  "description": "Your Granola meetings in the chosen window (notes you took or were invited to); the page then reads each note and keeps every line of its summary and private notes, with the headings above it.",
   "source": {"kind": "query", "connector": "Granola", "tool": "list_meetings",
     "args": {"from_date": "{{gr_since}}", "to_date": "{{gr_until}}",
              "involvement": {"captured_by_me": True, "listed_as_participant": True},
              "max_participants": 0, "limit": 200},
     "rules": {"gr_since": {"type": "string", "pattern": DATE}, "gr_until": {"type": "string", "pattern": DATE}}}}
-D["gr_me"] = {"title": "Granola account",
-  "description": "The Granola account each viewer is signed in with, used to tell which action items are theirs.",
-  "source": {"kind": "query", "connector": "Granola", "tool": "get_account_info", "args": {}}}
+
 
 json.dump(D, open('datasets.json', 'w'), indent=1)
 print(len(D), 'datasets')
