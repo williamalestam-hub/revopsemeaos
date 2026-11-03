@@ -988,7 +988,10 @@ OS.defTable('mv-table', ['pipe_moves'], () => (dash.data('pipe_moves').data || [
 
 // ===================== COVERAGE =====================
 const covKey = () => (mgrPick() ? 'M|' + mgrPick() : OS.region() === 'All' ? 'All|All' : OS.region() + '|All');
-dash.draw('kpi-cov', (el) => OS.value(el, ['pipe_cover'], () => fmtBy(el, markRow(el, 'key', covKey(), (dash.data('pipe_cover').data || []).find((r) => r.key === covKey()))[keepField(el)])));
+dash.draw('kpi-cov', (el) => OS.value(el, ['pipe_cover'], () => {
+  const r = markRow(el, 'key', covKey(), (dash.data('pipe_cover').data || []).find((x) => x.key === covKey()));
+  return keepField(el) === 'coverageThis' && r.aheadOfUsual ? 'Past usual' : fmtBy(el, r[keepField(el)]);
+}));
 const covStatus = (r) => (r.avgBookings <= 0 ? 'No history' : r.aheadOfUsual ? 'Ahead of a usual quarter' : r.coverageThis >= 3 ? 'Covered' : r.coverageThis >= 1.5 ? 'Watch' : 'Thin');
 OS.defTable('cov-table', ['pipe_cover'], () => {
   const rows = dash.data('pipe_cover').data || [];

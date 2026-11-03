@@ -193,6 +193,16 @@
           <span class="card-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="accounts" data-row="0">—</b></span>
           <span class="stat-sub"><b data-draw="kpi-orph-usd" data-source="orphan_kpi" data-field="arr" data-row="0">—</b> ARR on them</span>
         </button>
+        <button class="home-card" type="button" data-nav="pipeline" data-nav-view="coverage" id="card-coverage">
+          <span class="card-top">Coverage this quarter<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 0 1 16 0"/><path d="m12 16 4.5-5"/><path d="M3 20h18"/></svg></span>
+          <span class="card-value"><b data-draw="kpi-cov" data-source="pipe_cover" data-field="coverageThis" data-fmt="x">—</b></span>
+          <span class="stat-sub">Expected <b data-draw="kpi-cov" data-source="pipe_cover" data-field="projectedThis" data-fmt="usd">—</b> against a usual <b data-draw="kpi-cov" data-source="pipe_cover" data-field="avgBookings" data-fmt="usd">—</b></span>
+        </button>
+        <button class="home-card" type="button" data-nav="pipeline" data-nav-view="moves" id="card-moves">
+          <span class="card-top">Pushed out, last 7 days<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h13M11 6l6 6-6 6"/><path d="M21 4v16"/></svg></span>
+          <span class="card-value"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="pushedArr" data-fmt="usd">—</b></span>
+          <span class="stat-sub"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="pushed">—</b> deals · Commit <b data-draw="kpi-mv" data-source="moves_kpi" data-field="netCommitArr" data-fmt="usd">—</b> net</span>
+        </button>
       </div>
 
       <div class="home-grid">

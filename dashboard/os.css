@@ -125,6 +125,7 @@
 
   /* Home */
   .home-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); gap: var(--cds-gap-md); }
+  @media (min-width: 900px) { .home-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .home-card { display: grid; gap: 4px; align-content: start; text-align: left; padding: var(--cds-pad-md) var(--cds-pad-lg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-panel); cursor: pointer; min-width: 0; }
   .home-card:hover { border-color: color-mix(in srgb, var(--color-fg) 35%, var(--color-border-line)); }
   .home-card .card-top { display: flex; justify-content: space-between; align-items: center; gap: var(--cds-gap-sm); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
