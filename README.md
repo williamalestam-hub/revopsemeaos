@@ -13,7 +13,9 @@ pipeline, open deals with risk flags, created opps, book, routing pools, HiBob d
 manager, their team (with a "Prep a 1:1" button).
 
 **Working with it**
-- **Scope pill**: pick a team or one manager; stats, tables and charts follow (Created trends stay all EMEA).
+- **Scope pill**: pick a team or one manager (their direct reports); stats, tables and pipeline charts follow. Tiles
+  that stay all EMEA (created opps, orphans, this week, hiring by team and month, the BDR leaderboard) say so. For
+  a leader's whole organisation, use 1:1s › Team scorecard.
 - **Act from the app**: the sparkle button on a next step, data check, talking point, deal or person hands a
   ready-made request to *your* Claude beside the dashboard (the platform asks you to confirm first); Claude then
   drafts the message, proposes the Salesforce or LeanData fix and waits for your OK before writing anything.
@@ -51,14 +53,18 @@ and never re-runs a query.
   `DIR-EM-EMEA`, `DIR-BDR-EMEA`. `AE-EMEA-NORDICS` is included: it is a real EMEA region that was missing
   from the original brief. Legal Engineering roles (`LE-EMEA`, …) are excluded.
 - **ARR**: `Finance_ARR_USD__c` (incremental ARR, USD) for pipeline, created and won;
-  `Incremental_Rep_Commit/Best_Case_ARR_USD__c` for forecast; `Order_Form_ARR_USD__c` for renewals at stake;
+  `Incremental_Rep_Commit/Best_Case_ARR_USD__c` for forecast (best case is never below commit on the same deals,
+  so the upside call is won + best case, not won + commit + best case); `Order_Form_ARR_USD__c` for renewals at stake;
   `Account.ARR_USD__c` for books. Never `Amount` (TCV).
 - **Renewals**: incremental ARR on renewals is roughly zero, so pipeline views are New Business + Upsell.
   Renewals show separately as contract ARR at stake (stage 1+; stage 0 renewals are Flow auto-created).
+- **Won**: by the date actually closed (`Actual_Close_Date__c`) everywhere: Pipeline, Forecast, Bookings, Home.
 - **Created**: owner-scoped; renewals auto-created by Flow (`Upsell_Renewal_Created_By__c = 'Flow'`) excluded.
+  BDR-sourced counts only `BDR-EMEA` / `DIR-BDR-EMEA` originating BDRs.
 - **Missing from routing**: an active AE / SMB / BDR / EM user in no pool of their kind
   (`RR:` or `RR Gov:` for AEs, `RR SMB*`, `RR BDR:`, `EM*`) 7+ days after their Salesforce user was created.
-  Users in their first 7 days show as "add next week", matching the add-in-week-2 practice.
+  Users in their first 7 days show as "add next week", matching the add-in-week-2 practice. Without a Legora start
+  date the anchor is the Salesforce user's creation, which usually comes before day 1, so it gets 14 days.
 - **Orphan accounts**: active accounts (Customer / Pipeline / Engaging or ARR > 0) in an EMEA Sales Region
   (LATAM included) whose owner is inactive, has no role, is RevOps or sits outside EMEA. Strategic and
   partnership owners are marked "review", not counted.

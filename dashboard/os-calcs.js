@@ -4,7 +4,7 @@
 // ===================== PIPELINE =====================
 dash.calc('pipe_team', {
   title: 'Pipeline by team and manager',
-  description: 'Open New Business and Upsell pipeline, commit, best case and stage bands per team and manager for this and next quarter, with closed won this quarter and renewals at stake past stage 0. Team comes from the owner role; "M|<manager>" rows total each manager across teams.',
+  description: 'Open New Business and Upsell pipeline, rep commit, rep best case and stage bands per team and manager for this and next quarter, with closed won this quarter (by the date actually closed) and renewals at stake past stage 0. Best case is the rep\'s best-case ARR, never less than their commit on the same deals, so it already includes commit. Team comes from the owner role; "M|<manager>" rows total each manager\'s direct reports across teams.',
   inputs: ['pipe_stage', 'won_q', 'renew_stake'],
   fn: (pipe_stage, won_q, renew_stake) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -32,7 +32,7 @@ dash.calc('pipe_team', {
       each(r, (o) => {
         if (q === thisQ) {
           o.thisPipe += +r.arrUsd || 0; o.thisOpps += +r.opps || 0;
-          o.thisCommit += +r.commitUsd || 0; o.thisBest += +r.bestCaseUsd || 0;
+          o.thisCommit += +r.commitUsd || 0; o.thisBest += Math.max(+r.bestCaseUsd || 0, +r.commitUsd || 0);
           o['this' + band] += +r.arrUsd || 0;
         } else if (q === nextQ) {
           o.nextPipe += +r.arrUsd || 0; o.nextOpps += +r.opps || 0;
@@ -110,7 +110,7 @@ dash.calc('cr_weeks', {
 
 dash.calc('cr_months', {
   title: 'Created opps per month',
-  description: 'Created opps and ARR per calendar month by type.',
+  description: 'Created opps and ARR per calendar month by type, the last 12 months including this one.',
   inputs: ['cr_monthly'],
   fn: (cr_monthly) => {
     const months = new Map();
@@ -122,7 +122,7 @@ dash.calc('cr_months', {
       m[t] += +r.opps || 0; m[t + 'Arr'] += +r.arrUsd || 0;
       m.opps += +r.opps || 0; m.arr += +r.arrUsd || 0;
     }
-    return [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
+    return [...months.values()].sort((a, b) => a.month.localeCompare(b.month)).slice(-12);
   },
 });
 
@@ -214,7 +214,7 @@ dash.calc('cr_bdrs', {
 // ===================== ROUTING =====================
 dash.calc('rr_people', {
   title: 'Who is in routing',
-  description: 'Active EMEA reps in a routed role (AE, SMB, BDR, EM) with their pools of that kind, 90-day assignments and a status. Missing: in no pool of their kind 7+ days after their start date (Legora start date in Salesforce, or when their Salesforce user was created). Suggested pools for someone in none: pools of their kind that at least half of their active same-role peers are in.',
+  description: 'Active EMEA reps in a routed role (AE, SMB, BDR, EM) with their pools of that kind, 90-day assignments and a status. Missing: in no pool of their kind 7+ days after their Legora start date in Salesforce, or 14+ days after their Salesforce user was created when no start date is set (users are often created before day 1). Suggested pools for someone in none: pools of their kind that at least half of their active same-role peers are in.',
   inputs: ['roster', 'rr_members', 'rr_assign'],
   fn: (roster, rr_members, rr_assign) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -258,7 +258,7 @@ dash.calc('rr_people', {
       const n = assigned.get(id15(u.userId)) || 0;
       const status = ofKind.length ? (n ? 'In routing' : 'In routing, none assigned')
         : days != null && days < 0 ? 'Not started'
-        : days != null && days < 7 ? 'New: add next week'
+        : days != null && days < (u.startDate ? 7 : 14) ? 'New: add next week'
         : days != null && days < 45 ? 'New joiner: overdue'
         : 'Missing';
       out.push({ userId: u.userId, name: u.name, region: TEAM[u.role] || 'Other', role: u.role, kind, manager: u.manager || '(no manager)', createdDate: String(u.createdDate || '').slice(0, 10) || null, startDate: u.startDate || null, suggested: ofKind.length ? '' : suggest(u, kind), daysIn: days, pools: ofKind.length, poolNames: ofKind.join(', '), otherPools: mine.length - ofKind.length, assignments: n, status });
@@ -269,7 +269,7 @@ dash.calc('rr_people', {
 
 dash.calc('rr_pools', {
   title: 'Pools and members',
-  description: 'Each EMEA LeanData pool (name across object types) with its members, their teams and managers, inactive members, 90-day assignments and how evenly they were spread (members with none while the pool had 10 or more).',
+  description: 'Each EMEA LeanData pool (name across object types) with its members, their teams and managers, inactive members, 90-day assignments to its current members and how evenly they were spread (members in the pool 30+ days who got none while the pool had 10 or more).',
   inputs: ['rr_members', 'rr_assign', 'roster'],
   fn: (rr_members, rr_assign, roster) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -279,14 +279,16 @@ dash.calc('rr_pools', {
     for (const m of rr_members) {
       if (!pools.has(m.poolName)) pools.set(m.poolName, { pool: m.poolName, family: kindOfPool(m.poolName), users: new Map(), assignments: 0, lastAssigned: null, per: new Map() });
       const id = String(m.userId).slice(0, 15);
-      pools.get(m.poolName).users.set(id, { id, name: m.userName, active: m.userActive !== false, region: TEAM[m.userRole] || 'Other', manager: mgr.get(id) || null });
+      pools.get(m.poolName).users.set(id, { id, name: m.userName, active: m.userActive !== false, region: TEAM[m.userRole] || 'Other', manager: mgr.get(id) || null, added: String(m.addedOn || '').slice(0, 10) || null });
     }
     for (const a of rr_assign) {
       const p = pools.get(a.poolName);
       if (!p) continue;
-      p.assignments += +a.assignments || 0;
       const id = String(a.userId || '').slice(0, 15);
-      if (id) p.per.set(id, (p.per.get(id) || 0) + (+a.assignments || 0));
+      if (id && p.users.has(id)) {
+        p.assignments += +a.assignments || 0;
+        p.per.set(id, (p.per.get(id) || 0) + (+a.assignments || 0));
+      }
       const d = String(a.lastAssigned || '').slice(0, 10);
       if (d && (!p.lastAssigned || d > p.lastAssigned)) p.lastAssigned = d;
     }
@@ -296,7 +298,8 @@ dash.calc('rr_pools', {
       const counts = us.filter((u) => u.active).map((u) => p.per.get(u.id) || 0);
       const minA = counts.length ? Math.min(...counts) : 0;
       const maxA = counts.length ? Math.max(...counts) : 0;
-      const starved = us.filter((u) => u.active && p.assignments >= 10 && !(p.per.get(u.id) || 0)).map((u) => u.name);
+      const cut30 = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+      const starved = us.filter((u) => u.active && p.assignments >= 10 && !(p.per.get(u.id) || 0) && (!u.added || u.added <= cut30)).map((u) => u.name);
       const flag = inactive ? 'Inactive member' : !p.assignments ? 'No assignments in 90 days' : starved.length ? 'Member getting none' : us.length === 1 ? 'Single member' : 'OK';
       return { pool: p.pool, family: p.family, members: us.length, inactiveMembers: inactive, memberNames: us.map((u) => u.name + (u.active ? '' : ' (inactive)')).sort().join(', '), regions: [...new Set(us.map((u) => u.region))].join('|'), managers: [...new Set(us.map((u) => u.manager).filter(Boolean))].join('|'), assignments: p.assignments, lastAssigned: p.lastAssigned, balance: counts.length > 1 ? minA + '–' + maxA : null, starved: starved.join(', '), flag };
     });
@@ -306,8 +309,8 @@ dash.calc('rr_pools', {
 dash.calc('rr_kpi', {
   title: 'Routing headline',
   description: 'Per team, per manager ("M|<manager>") and for all EMEA: reps missing from routing, joiners to add next week, inactive users still in pools, pools and pools with no assignment in 90 days.',
-  inputs: ['rr_people', 'rr_pools', 'rr_members'],
-  fn: (rr_people, rr_pools, rr_members) => {
+  inputs: ['rr_people', 'rr_pools', 'rr_members', 'roster'],
+  fn: (rr_people, rr_pools, rr_members, roster) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const regions = ['All', ...new Set(Object.values(TEAM))];
     const managers = [...new Set(rr_people.map((p) => p.manager).filter((m) => m && m !== '(no manager)'))];
@@ -316,7 +319,8 @@ dash.calc('rr_kpi', {
       const inR = (r) => region === 'All' || r === region;
       const people = rr_people.filter((p) => (isMgr ? p.manager === m : inR(p.region)));
       const pools = rr_pools.filter((p) => (isMgr ? p.managers.split('|').includes(m) : region === 'All' || p.regions.split('|').includes(region)));
-      const inactive = new Set(rr_members.filter((x) => x.userActive === false && (isMgr ? false : inR(TEAM[x.userRole] || 'Other'))).map((x) => x.userId));
+      const mgrOf = (id) => (roster.find((u) => String(u.userId).slice(0, 15) === String(id).slice(0, 15)) || {}).manager || null;
+      const inactive = new Set(rr_members.filter((x) => x.userActive === false && (isMgr ? mgrOf(x.userId) === m : inR(TEAM[x.userRole] || 'Other'))).map((x) => x.userId));
       return {
         region,
         missing: people.filter((p) => p.status === 'Missing' || p.status === 'New joiner: overdue').length,
@@ -408,14 +412,14 @@ dash.calc('hire_kpi', {
     const managers = [...new Set(people.map((p) => p.sfManager).filter(Boolean))];
     return regions.concat(managers.map((m) => 'M|' + m)).map((region) => {
       const ps = people.filter((p) => (region.startsWith('M|') ? p.sfManager === region.slice(2) : region === 'All' || p.region === region));
-      const recent = ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 90);
+      const recent = ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn < 90);
       return {
         region,
         headcount: ps.length,
-        joined30: ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 30).length,
+        joined30: ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn < 30).length,
         joined90: recent.length,
         overdue: recent.filter((p) => p.status === 'Overdue: add to pool').length,
-        noSf: recent.filter((p) => /Salesforce user/.test(p.status)).length,
+        noSf: recent.filter((p) => p.status === 'No Salesforce user').length,
       };
     });
   },
@@ -454,7 +458,7 @@ dash.calc('hire_teams', {
       if (!m.has(t)) m.set(t, { team: t, people: 0, joined90: 0 });
       const o = m.get(t);
       o.people += 1;
-      if (p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 90) o.joined90 += 1;
+      if (p.daysIn != null && p.daysIn >= 0 && p.daysIn < 90) o.joined90 += 1;
     }
     return [...m.values()].sort((a, b) => b.people - a.people);
   },
@@ -618,9 +622,9 @@ dash.calc('book_pool', {
 // ===================== PERSON =====================
 dash.calc('person', {
   title: 'Person view',
-  description: 'One row per Salesforce person (by name) joining their roster entry, pipeline, created opps, bookings and win rate, account book and routing.',
-  inputs: ['roster', 'pipe_reps', 'cr_leader', 'books_owner', 'rr_people', 'bookings'],
-  fn: (roster, pipe_reps, cr_leader, books_owner, rr_people, bookings) => {
+  description: 'One row per Salesforce person (by name) joining their roster entry, pipeline, created opps, account book and routing. Bookings are in their own calc, so the panel still opens when closed deals cannot be read.',
+  inputs: ['roster', 'pipe_reps', 'cr_leader', 'books_owner', 'rr_people'],
+  fn: (roster, pipe_reps, cr_leader, books_owner, rr_people) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const m = new Map();
     const get = (name) => {
@@ -642,9 +646,15 @@ dash.calc('person', {
       if (!o.role) { o.role = r.role; o.region = r.region; o.manager = r.manager; }
     }
     for (const r of rr_people) Object.assign(get(r.name), { pools: r.pools, poolNames: r.poolNames, assignments: r.assignments, routing: r.status });
-    for (const r of bookings) Object.assign(get(r.owner), { wonThisArr: r.wonThisArr, wonThis: r.wonThis, lostThis: r.lostThis, wonLastArr: r.wonLastArr, winRateThis: r.winRateThis, avgDealThis: r.avgDealThis });
-    return [...m.values()].map((o) => ({ wonThisArr: 0, wonThis: 0, lostThis: 0, wonLastArr: 0, winRateThis: null, avgDealThis: null, ...o, region: o.region || 'Other' }));
+    return [...m.values()].map((o) => ({ ...o, region: o.region || 'Other' }));
   },
+});
+
+dash.calc('person_bk', {
+  title: 'Person view, bookings',
+  description: 'Per rep, by name: won this quarter and last (ARR and count), lost this quarter, win rate and average won deal, from Bookings.',
+  inputs: ['bookings'],
+  fn: (bookings) => bookings.map((r) => ({ name: r.owner, wonThisArr: r.wonThisArr, wonThis: r.wonThis, lostThis: r.lostThis, wonLastArr: r.wonLastArr, winRateThis: r.winRateThis, avgDealThis: r.avgDealThis })),
 });
 
 dash.calc('person_hb', {
@@ -663,7 +673,7 @@ dash.calc('person_hb', {
 // ===================== ACTION ITEMS =====================
 dash.calc('gr_actions', {
   title: 'Action items from meetings',
-  description: 'Items under a "Next steps", "Action items", "Follow-ups" or "To-dos" heading of your Granola summaries (a bullet and the indented lines under it), plus to-do lines in your private notes. A due date is read from the wording relative to the meeting date ("today", "tomorrow", "this week", "next week", "by Friday", "in two weeks", "end of month", "by 30 Oct", "by 30/10"): overdue once it has passed, due soon within 3 days. The owner is the name in brackets after the item, before a colon, or the name a group of items sits under; it is yours when it matches your Granola name or email. "For you" is yours, or unassigned in a note you took. Placeholders such as "None" are left out.',
+  description: 'Items under a "Next steps", "Action items", "Follow-ups" or "To-dos" heading of your Granola summaries (a bullet and the indented lines under it), plus to-do lines in your private notes. A due date is read from the wording relative to the meeting date ("today", "tomorrow", "this week", "next week", "by Friday" (the next Friday after the meeting), "in two weeks", "end of month", "by 30 Oct", "by 30/10"): overdue once it has passed, due soon within 3 days. The owner is the name in brackets after the item, before a colon, or the name a group of items sits under; it is yours when it matches your Granola name or email. "For you" is yours, or unassigned in a note you took. Placeholders such as "None" are left out.',
   inputs: ['gr_notes'],
   fn: (gr_notes) => {
     const ACTION = /\b(next steps?|action items?|action points?|actions?|follow[- ]?ups?|to[- ]?dos?|tasks?)\b/i;
@@ -729,7 +739,7 @@ dash.calc('gr_actions', {
       let m;
       if (/\b(today|eod|end of (the )?day)\b/.test(s)) return iso(base);
       if (/\btomorrow\b/.test(s)) return iso(base + 864e5);
-      if (/\b(this week|eow|end of (the )?week|by friday)\b/.test(s)) return iso(friday(0));
+      if (/\b(this week|eow|end of (the )?week)\b/.test(s)) return iso(friday(0));
       if (/\bnext week\b/.test(s)) return iso(friday(1));
       if ((m = s.match(/\bin (\d+|one|two|three|four|a) weeks?\b/))) return iso(base + 7 * (NUM[m[1]] || +m[1]) * 864e5);
       if ((m = s.match(/\bin (\d+|one|two|three|four|a) days?\b/))) return iso(base + (NUM[m[1]] || +m[1]) * 864e5);
@@ -741,8 +751,9 @@ dash.calc('gr_actions', {
         if (t < base - 31 * 864e5) t = Date.UTC(d.getUTCFullYear() + 1, mon, day);
         return iso(t);
       };
-      if ((m = s.match(/\b(\d{1,2})(?:st|nd|rd|th)? (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/))) return mkDate(+m[1], MONTHS.indexOf(m[2]));
-      if ((m = s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (\d{1,2})(?:st|nd|rd|th)?\b/))) return mkDate(+m[2], MONTHS.indexOf(m[1]));
+      // whole month names or their usual short forms only, so 'Mark 3 accounts' or '2 decks' are not dates
+      if ((m = s.match(/\b(\d{1,2})(?:st|nd|rd|th)? (jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/))) return mkDate(+m[1], MONTHS.indexOf(m[2].slice(0, 3)));
+      if ((m = s.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?) (\d{1,2})(?:st|nd|rd|th)?\b/))) return mkDate(+m[2], MONTHS.indexOf(m[1].slice(0, 3)));
       if ((m = s.match(/\b(?:by|on|before|due) (\d{1,2})\/(\d{1,2})\b/)) && +m[2] >= 1 && +m[2] <= 12) return mkDate(+m[1], +m[2] - 1);
       return null;
     };
@@ -883,10 +894,10 @@ dash.calc('checks_hb', {
         out.push({ ...base, id: 'hb:' + h.id, severity: 'medium', what: 'No Salesforce user found', meta: 'Started ' + plural(h.daysIn, 'day', 'days') + ' ago' });
       }
       if (h.status === 'No Salesforce role' || h.status === 'Role outside EMEA sales') {
-        out.push({ ...base, id: 'hb:' + h.id + ':role', severity: 'medium', what: h.status === 'No Salesforce role' ? 'Salesforce user has no role' : 'Salesforce role ' + h.sfRole + ' is outside EMEA sales', meta: (h.title || 'Selling title') + ' in HiBob, so their pipeline, book and routing are not counted here' });
+        out.push({ ...base, screen: h.daysIn != null && h.daysIn < 90 ? 'hiring' : null, id: 'hb:' + h.id + ':role', severity: 'medium', what: h.status === 'No Salesforce role' ? 'Salesforce user has no role' : 'Salesforce role ' + h.sfRole + ' is outside EMEA sales', meta: (h.title || 'Selling title') + ' in HiBob, so their pipeline, book and routing are not counted here' });
       }
       if (h.mgrDiffers && h.status !== 'Not started') {
-        out.push({ ...base, id: 'hb:' + h.id + ':mgr', severity: 'low', what: h.sfManager ? 'Manager differs between HiBob and Salesforce' : 'No manager in Salesforce', meta: 'HiBob: ' + (h.manager || 'none') + ' · Salesforce: ' + (h.sfManager || 'none') });
+        out.push({ ...base, screen: h.daysIn != null && h.daysIn < 90 ? 'hiring' : null, id: 'hb:' + h.id + ':mgr', severity: 'low', what: h.sfManager ? 'Manager differs between HiBob and Salesforce' : 'No manager in Salesforce', meta: 'HiBob: ' + (h.manager || 'none') + ' · Salesforce: ' + (h.sfManager || 'none') });
       }
     }
     const rank = { high: 0, medium: 1, low: 2 };
@@ -943,7 +954,7 @@ dash.calc('pool_adds', {
 // ===================== DEALS =====================
 dash.calc('deal_list', {
   title: 'Largest deals with risk flags',
-  description: 'The largest open deals closing this or next quarter with risk flags: past due (close date gone), stale (no logged activity in 30 days), no next step, early stage (0–1) closing this quarter, and Commit while still at stage 0–2. The risk score adds 3 for past due or early Commit, 2 for early stage or stale, 1 for no next step.',
+  description: 'The largest open deals closing this or next quarter with risk flags: past due (close date gone), stale (no logged activity in 30 days), no next step (neither a next-step note nor a date), next step overdue (its date has passed), early stage (0–1) closing this quarter, and Commit while still at stage 0–2. The risk score adds 3 for past due or early Commit, 2 for early stage or stale, 1 for a missing or overdue next step.',
   inputs: ['top_deals'],
   fn: (top_deals) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -960,8 +971,10 @@ dash.calc('deal_list', {
       if (d.forecast === 'Commit' && stage <= 2) flags.push('Commit at early stage');
       if (thisQ && stage <= 1) flags.push('Early stage');
       if (!d.lastActivity || String(d.lastActivity) < ago30) flags.push('Stale 30d+');
-      if (!d.nextStep) flags.push('No next step');
-      const score = flags.reduce((s, f) => s + (f === 'Past due' || f === 'Commit at early stage' ? 3 : f === 'No next step' ? 1 : 2), 0);
+      const nsDate = d.nextStepDate ? String(d.nextStepDate).slice(0, 10) : null;
+      if (!d.nextStep && !nsDate) flags.push('No next step');
+      else if (nsDate && nsDate < today) flags.push('Next step overdue');
+      const score = flags.reduce((s, f) => s + (f === 'Past due' || f === 'Commit at early stage' ? 3 : f === 'No next step' || f === 'Next step overdue' ? 1 : 2), 0);
       return { oppId: d.oppId, opp: d.opp, account: d.account, owner: d.owner, role: d.role, region: TEAM[d.role] || 'Other', manager: d.manager || '(no manager)', stage: d.stage, rt: d.rt, closeDate: d.closeDate, quarter: thisQ ? 'this' : 'next', forecast: d.forecast || null, nextStep: d.nextStep || null, lastActivity: d.lastActivity || null, arrUsd: +d.arrUsd || 0, flags: flags.join(', '), risk: score };
     });
   },
@@ -985,7 +998,9 @@ dash.calc('person_deals', {
       if (d.rt !== 'Renewal' && d.forecast === 'Commit' && stage <= 2) flags.push('Commit at early stage');
       if (d.rt !== 'Renewal' && thisQ && stage <= 1) flags.push('Early stage');
       if (!d.lastActivity || String(d.lastActivity) < ago30) flags.push('Stale 30d+');
-      if (d.rt !== 'Renewal' && !d.nextStep) flags.push('No next step');
+      const nsDate = d.nextStepDate ? String(d.nextStepDate).slice(0, 10) : null;
+      if (d.rt !== 'Renewal' && !d.nextStep && !nsDate) flags.push('No next step');
+      else if (d.rt !== 'Renewal' && nsDate && nsDate < today) flags.push('Next step overdue');
       return { oppId: d.oppId, opp: d.opp, account: d.account, stage: d.stage, rt: d.rt, closeDate: d.closeDate, quarter: thisQ ? 'this' : 'later', forecast: d.forecast || null, nextStep: d.nextStep || null, lastActivity: d.lastActivity || null, arrUsd: d.rt === 'Renewal' ? +d.contractArrUsd || 0 : +d.arrUsd || 0, flags: flags.join(', ') };
     });
   },
@@ -994,12 +1009,12 @@ dash.calc('person_deals', {
 // ===================== FORECAST =====================
 dash.calc('forecast', {
   title: 'Forecast roll-up, this quarter',
-  description: 'Per team, per team and manager, per manager and for all EMEA, this quarter: closed won, rep commit and best case on open deals, open pipeline, and the roll-ups won + commit and won + commit + best case (New Business and Upsell, incremental ARR).',
+  description: 'Per team, per team and manager, per manager and for all EMEA, this quarter: closed won, rep commit and best case on open deals, open pipeline, and the two calls: won + commit, and won + best case (best case already includes commit, so it is not added on top). The upside is best case above commit. New Business and Upsell, incremental ARR.',
   inputs: ['pipe_team'],
   fn: (pipe_team) => pipe_team.map((r) => ({
     key: r.key, region: r.region, manager: r.manager, level: r.level,
-    won: r.won, commit: r.thisCommit, bestCase: r.thisBest, pipeline: r.thisPipe,
-    wonCommit: r.won + r.thisCommit, wonCommitBest: r.won + r.thisCommit + r.thisBest,
+    won: r.won, commit: r.thisCommit, bestCase: r.thisBest, upside: Math.max(0, r.thisBest - r.thisCommit), pipeline: r.thisPipe,
+    wonCommit: r.won + r.thisCommit, wonBest: r.won + Math.max(r.thisBest, r.thisCommit),
     commitShare: r.thisPipe > 0 ? r.thisCommit / r.thisPipe : null,
   })),
 });
@@ -1200,7 +1215,7 @@ dash.calc('ramp', {
       const daysToFirst = first ? Math.round((Date.parse(first + 'T00:00:00Z') - Date.parse(String(p.startDate).slice(0, 10) + 'T00:00:00Z')) / 864e5) : null;
       const isBdr = /^BDR-/.test(p.sfRole || '');
       const sourced = isBdr ? bdr.get(name) || 0 : null;
-      const status = !name ? 'No Salesforce user' : isBdr ? (sourced ? 'Sourcing' : p.daysIn >= 45 ? 'Not ramping' : 'Ramping') : !sell(p.sfRole) ? 'Not a selling role' : opps ? 'Ramping' : p.daysIn >= 45 ? 'Not ramping' : 'Too early';
+      const status = !name ? 'No Salesforce user' : isBdr ? (sourced ? 'Sourcing' : p.daysIn >= 45 ? 'Not ramping' : 'Too early') : !sell(p.sfRole) ? 'Not a selling role' : opps ? 'Ramping' : p.daysIn >= 45 ? 'Not ramping' : 'Too early';
       return { id: p.id, name: p.name, sfName: name, sfRole: p.sfRole, region: p.region, manager: p.sfManager || p.manager, startDate: p.startDate, daysIn: p.daysIn, opps, arr, perMonth: p.daysIn >= 14 ? opps / Math.max(1, p.daysIn / 30) : null, firstOpp: first, daysToFirst, pipeThisQ: name ? pipe.get(name) || 0 : 0, sourced, status };
     });
   },
@@ -1209,9 +1224,9 @@ dash.calc('ramp', {
 // ===================== 1:1s AND TEAMS =====================
 dash.calc('team_tree', {
   title: 'Teams and leaders',
-  description: 'Every active Salesforce user with an EMEA sales role or EMEA people below them, with their direct reports and whole team (everyone below them in the Salesforce manager chain) and the team\'s EMEA numbers added up, their own included: pipeline this and next quarter, past-due and stale opps, opps created this quarter, won this quarter and win rate, people missing from routing, reps with a risk score of 5 or more, and data checks about people in the team. The top EMEA leader is the deepest leader whose team still holds at least 90% of EMEA people.',
-  inputs: ['users_all', 'person', 'rr_people', 'rep_risk', 'checks'],
-  fn: (users_all, person, rr_people, rep_risk, checks) => {
+  description: 'Every active Salesforce user with an EMEA sales role or EMEA people below them, with their direct reports and whole team (everyone below them in the Salesforce manager chain) and the team\'s EMEA numbers added up, their own included: pipeline this and next quarter, past-due and stale opps, opps created this quarter, won this quarter and win rate, people missing from routing, reps with a risk score of 5 or more, and other data checks about people in the team (routing ones are the routing gaps). Won and win rate come from Bookings (by the date actually closed). The top EMEA leader is the deepest leader whose team still holds at least 90% of EMEA people.',
+  inputs: ['users_all', 'person', 'bookings', 'rr_people', 'rep_risk', 'checks'],
+  fn: (users_all, person, bookings, rr_people, rep_risk, checks) => {
     const users = new Map();
     for (const u of users_all) if (u.name && !users.has(u.name)) users.set(u.name, u);
     const kids = new Map();
@@ -1225,11 +1240,12 @@ dash.calc('team_tree', {
     const get = (n) => { if (!own.has(n)) own.set(n, blank()); return own.get(n); };
     for (const p of person) {
       if (!p.inRoster || p.isActive === false) continue;
-      Object.assign(get(p.name), { emea: 1, thisPipe: +p.thisPipe || 0, thisOpps: +p.thisOpps || 0, nextPipe: +p.nextPipe || 0, pastDue: +p.pastDue || 0, stale: +p.stale || 0, crOpps: +p.crOpps || 0, crArr: +p.crArr || 0, wonThisArr: +p.wonThisArr || 0, wonThis: +p.wonThis || 0, lostThis: +p.lostThis || 0 });
+      Object.assign(get(p.name), { emea: 1, thisPipe: +p.thisPipe || 0, thisOpps: +p.thisOpps || 0, nextPipe: +p.nextPipe || 0, pastDue: +p.pastDue || 0, stale: +p.stale || 0, crOpps: +p.crOpps || 0, crArr: +p.crArr || 0 });
     }
+    for (const b of bookings) if (own.has(b.owner)) Object.assign(own.get(b.owner), { wonThisArr: +b.wonThisArr || 0, wonThis: +b.wonThis || 0, lostThis: +b.lostThis || 0 });
     for (const r of rr_people) if (r.status === 'Missing' || r.status === 'New joiner: overdue') get(r.name).routingGaps += 1;
     for (const r of rep_risk) if (r.score >= 5) get(r.owner).riskReps += 1;
-    for (const c of checks) if (c.person) get(c.person).checks += 1;
+    for (const c of checks) if (c.person && c.area !== 'Routing') get(c.person).checks += 1;
     const KEYS = Object.keys(blank());
     const team = new Map();
     const roll = (n, seen) => {
@@ -1265,7 +1281,7 @@ dash.calc('team_tree', {
       out.push({
         name: n, userId: u.userId || p.userId || null, email: String(u.email || '').toLowerCase() || null, role: u.role || p.role || null,
         region: p.region || (u.role ? 'Other' : null), manager: u.manager || p.manager || null, inEmea: !!(own.get(n) || {}).emea,
-        isLeader: directs > 0, directs, teamSize: t.size, emeaPeople: t.emea, isTop: n === top,
+        isLeader: directs > 0, directs, teamSize: t.size, people: t.size + 1, emeaPeople: t.emea, isTop: n === top,
         thisPipe: t.thisPipe, thisOpps: t.thisOpps, nextPipe: t.nextPipe, pastDue: t.pastDue, stale: t.stale, crOpps: t.crOpps, crArr: t.crArr,
         wonThisArr: t.wonThisArr, wonThis: t.wonThis, lostThis: t.lostThis, winRate: t.wonThis + t.lostThis ? t.wonThis / (t.wonThis + t.lostThis) : null,
         routingGaps: t.routingGaps, riskReps: t.riskReps, checks: t.checks,

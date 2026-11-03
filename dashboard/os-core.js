@@ -321,7 +321,7 @@ window.OS = (() => {
     const t = tables[name];
     const s = state(...t.ids);
     if (s !== 'ok') return { s, list: [] };
-    let list = searchFilter(name, t.rows(), t.cols.map((c) => c.f));
+    let list = searchFilter(name, t.rows(), t.cols.map((c) => c.f).concat(t.opts.also || []));
     const st = sorts[name];
     if (st) {
       list = list.slice().sort((a, b) => {
@@ -334,7 +334,7 @@ window.OS = (() => {
   };
   const defTable = (name, ids, rows, cols, opts = {}) => {
     tables[name] = { ids, rows, cols, opts };
-    reg[name] = { kind: 'table', ids: () => ids, rows, fields: cols.map((c) => c.f), limit: opts.limit || 400 };
+    reg[name] = { kind: 'table', ids: () => ids, rows, fields: cols.map((c) => c.f).concat(opts.also || []), limit: opts.limit || 400 };
     dash.draw(name, (tbody) => {
       const { s, list } = tableRows(name);
       if (s !== 'ok' || !list.length) { tbody.replaceChildren(); return; }
@@ -351,7 +351,7 @@ window.OS = (() => {
           if (c.person && v && !/^\(/.test(String(v))) {
             td.appendChild(personBtn(c.person(r), txt));
           } else if (c.chips) {
-            String(v || '').split(', ').filter(Boolean).forEach((x) => td.appendChild(el('span', 'chip ' + c.chips(x), x)));
+            String(v || '').split(', ').filter(Boolean).forEach((x, i) => { if (i) td.appendChild(el('span', 'chip-sep', ', ')); td.appendChild(el('span', 'chip ' + c.chips(x), x)); });
             if (!v) td.textContent = '—';
           } else if (c.chip) {
             td.appendChild(el('span', 'chip ' + c.chip(v, r), txt));
@@ -410,7 +410,8 @@ window.OS = (() => {
       if (ths.length === t.cols.length) heads = ths.map((th) => th.textContent.trim());
     });
     const cell = (v) => (v == null ? '' : String(v).replace(/[\t\r\n]+/g, ' '));
-    return [heads.join('\t')].concat(list.map((r) => t.cols.map((c) => cell(r[c.f])).join('\t'))).join('\n');
+    const shown = (c, r) => (c.fmt ? c.fmt(r[c.f], r) : r[c.f] == null || r[c.f] === '' ? '' : r[c.f]);
+    return [heads.join('\t')].concat(list.map((r) => t.cols.map((c) => cell(shown(c, r))).join('\t'))).join('\n');
   };
 
   // lists: the drawing holds only items; sentences come from the message slot beside it
@@ -771,6 +772,7 @@ OS.oo = (() => {
       const [s, v] = t.dataset.viewTab.split(':');
       t.setAttribute('aria-selected', String(view[s] === v));
     });
+    document.querySelectorAll('[data-seg-views]').forEach((g) => { g.hidden = !g.dataset.segViews.split(' ').includes(screen + ':' + view[screen]); });
     document.querySelectorAll('[data-detail]').forEach((d) => { d.hidden = !person; });
     document.querySelectorAll('.app').forEach((a) => a.classList.toggle('has-detail', !!person && !!a.querySelector('[data-detail]')));
   };
@@ -874,7 +876,9 @@ OS.oo = (() => {
     if (rr) lines.push(`• Routing: ${OS.num(rr.missing)} reps missing from a pool, ${OS.num(rr.weekOne)} joiners to add next week`);
     if (ck) lines.push(`• Data checks: ${OS.num(ck.total)} open, ${OS.num(ck.high)} urgent`);
     if (orph && !p.mgr && (!p.region || p.region === 'All')) lines.push(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
-    if (gr) lines.push(`• My action items: ${OS.num(gr.forYou)} for me from ${OS.num(gr.meetings)} meetings`);
+    const mine = OS.state('gr_actions') === 'ok' ? (dash.data('gr_actions').data || []).filter((r) => r.forYou && !r.done && !OS.done.has(r)) : null;
+    if (mine) lines.push(`• My action items: ${OS.num(mine.length)} for me from ${OS.num(new Set(mine.map((r) => r.meetingId)).size)} meetings`);
+    else if (gr) lines.push(`• My action items: ${OS.num(gr.forYou)} for me`);
     return lines.length > 1 ? lines.join('\n') : '';
   };
   const checksChecklist = () => {
@@ -927,6 +931,7 @@ OS.oo = (() => {
         });
       }
       closePalette();
+      if (t.dataset.fill && t.closest('[data-palette]')) dash.setParams({ region: 'All', mgr: '' });
       go(t.dataset.nav, t.dataset.navView);
       if (t.dataset.fill) OS.redraw(t.dataset.fill);
       return;
@@ -972,7 +977,7 @@ OS.oo = (() => {
     if (pal) {
       if (e.key === 'Escape') { closePalette(); return; }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        const items = [...pal.querySelectorAll('.pal-item')];
+        const items = [...pal.querySelectorAll('.pal-item')].filter((b) => !b.closest('[hidden]'));
         if (!items.length) return;
         e.preventDefault();
         const i = items.indexOf(document.activeElement);
@@ -982,7 +987,7 @@ OS.oo = (() => {
         return;
       }
       if (e.key === 'Enter' && e.target.matches('input[data-search="palette-list"]')) {
-        const first = pal.querySelector('.pal-item');
+        const first = [...pal.querySelectorAll('.pal-item')].find((b) => !b.closest('[hidden]'));
         if (first) { e.preventDefault(); first.click(); }
         return;
       }
@@ -1045,6 +1050,8 @@ OS.oo = (() => {
       document.querySelectorAll('[data-copy-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:'); });
     }
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
+    document.querySelectorAll('[data-scope-tag]').forEach((n) => { n.hidden = !(p.mgr || (p.region && p.region !== 'All')); });
+    document.querySelectorAll('[data-legend]').forEach((n) => { n.hidden = n.dataset.legend !== (p.mgr ? 'mgr' : 'team'); });
     document.querySelectorAll('.os-region').forEach((sel) => { sel.value = p.region || 'All'; });
     document.querySelectorAll('.os-only-missing').forEach((c) => { c.checked = !!p.onlyMissing; });
     document.querySelectorAll('.os-orphan-reason').forEach((s) => { s.value = p.orphanReason || ''; });
@@ -1059,7 +1066,7 @@ OS.oo = (() => {
     const part = hr < 12 ? 'morning' : hr < 18 ? 'afternoon' : 'evening';
     document.querySelectorAll('[data-hello]').forEach((h) => { h.hidden = h.dataset.hello !== part; });
     OS.ask.refresh();
-    syncCopyList();
+    if (screen === 'actions') syncCopyList();
     // person panel notes and copy button, only while the panel is open
     if (p.person) {
       const sf = OS.state('person');

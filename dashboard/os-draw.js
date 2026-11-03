@@ -279,7 +279,8 @@ const checkItem = (c) => {
   main.append(title, OS.el('span', 'itm-detail', c.what + (c.meta ? ' · ' + c.meta : '')));
   const meta = OS.el('div', 'itm-meta');
   meta.append(OS.el('span', 'chip', c.area));
-  const go = OS.el('button', 'ibtn');
+  const go = c.screen ? OS.el('button', 'ibtn') : null;
+  if (go) {
   go.type = 'button';
   go.setAttribute('aria-label', 'Go to ' + c.area);
   go.dataset.nav = c.screen;
@@ -288,6 +289,7 @@ const checkItem = (c) => {
   if (c.screen === 'pipeline') go.dataset.navView = 'reps';
   if (c.screen === 'hiring') go.dataset.navView = 'joiners';
   go.appendChild(OS.icon(OS.ICON.go));
+  }
   const how = c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
     : c.area === 'Pipeline' ? ' Pull their past-due opportunities and propose a new close date, stage or closing each one.'
     : c.area === 'Books' ? ' List the accounts behind it and propose who should own them.'
@@ -295,7 +297,7 @@ const checkItem = (c) => {
   const ask = OS.links.ask(OS.ask.data('Fix: ' + c.title + ' (' + c.what + ')', 'Help me fix this data check from the EMEA RevOps OS. ' + c.area + ': ' + c.title + ': ' + c.what + (c.meta ? ' (' + c.meta + ')' : '') + '.' + how,
     { kind: 'data_check', area: c.area, severity: c.severity, person: c.person, manager: c.manager }));
   if (ask) meta.append(ask);
-  meta.append(go);
+  if (go) meta.append(go);
   li.append(OS.el('span', 'itm-dot ' + c.severity), main, meta);
   return li;
 };
@@ -529,7 +531,12 @@ OS.defList('palette-list', ['roster'], paletteRows, (rows) => rows.map((r) => {
   b.append(OS.el('span', 'pal-kind ' + r.kind, r.kind === 'person' ? 'Person' : r.kind === 'pool' ? 'Pool' : 'Book'), OS.el('span', 'pal-label', r.label), OS.el('span', 'pal-sub', r.sub || ''));
   li.append(b);
   return li;
-}), { msg: () => (!(OS.queries['palette-list'] || '').trim() ? 'empty' : paletteRows().length ? null : 'nomatch') });
+}), { msg: () => {
+  if (!(OS.queries['palette-list'] || '').trim()) return 'empty';
+  if (paletteRows().length) return null;
+  if (OS.state('rr_pools') === 'loading' || OS.state('books') === 'loading') return 'loading';
+  return [...document.querySelectorAll('.pal-go')].some((b) => !b.closest('[hidden]')) ? null : 'nomatch';
+} });
 
 // ===================== THIS WEEK (HOME) =====================
 OS.defList('home-started', ['people'], () => (dash.data('people').data || []).filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 6)
@@ -577,9 +584,11 @@ OS.defTable('deal-table', ['deal_list'], () => {
   { f: 'closeDate', fmt: OS.shortDay }, { f: 'forecast' },
   { f: 'arrUsd', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.arrUsd) },
   { f: 'flags', chips: flagCls }, { f: 'risk', fmt: OS.num, num: true },
-], { key: 'oppId', limit: 100 });
+], { key: 'oppId', limit: 100, also: ['account'] });
 
-OS.defList('pd-deals', ['person_deals'], () => dash.data('person_deals').data || [], (rows) => rows.map((x) => {
+// while the query re-runs for another person, the old person's deals stay hidden
+const pdDeals = () => (dash.data('deals').refreshing ? [] : dash.data('person_deals').data || []);
+OS.defList('pd-deals', ['person_deals'], pdDeals, (rows) => rows.map((x) => {
   const li = OS.el('li', 'itm');
   li.dataset.key = x.oppId;
   const main = OS.el('div', 'itm-main');
@@ -601,7 +610,7 @@ OS.defList('pd-deals', ['person_deals'], () => dash.data('person_deals').data ||
   meta.append(cp);
   li.append(OS.el('span', 'itm-dot ' + (x.flags ? 'medium' : 'low')), main, meta);
   return li;
-}));
+}), { msg: () => (dash.data('deals').refreshing ? 'loading' : pdDeals().length ? null : 'empty') });
 
 // ===================== FORECAST =====================
 const forecastRows = () => {
@@ -610,18 +619,18 @@ const forecastRows = () => {
   if (mgrPick()) return rows.filter((r) => r.level === 'team' && r.manager === mgrPick());
   return region === 'All' ? rows.filter((r) => r.level === 'region' && (r.won || r.pipeline)) : rows.filter((r) => r.level === 'team' && r.region === region);
 };
-OS.defTable('fc-table', ['forecast'], () => forecastRows().map((r) => ({ ...r, label: OS.region() === 'All' && !mgrPick() ? r.region : r.manager })).sort((a, b) => b.wonCommitBest - a.wonCommitBest), [
-  { f: 'label' },
+OS.defTable('fc-table', ['forecast'], () => forecastRows().slice().sort((a, b) => b.wonBest - a.wonBest), [
+  { f: 'region' }, { f: 'manager' },
   { f: 'won', fmt: OS.usd, num: true }, { f: 'commit', fmt: OS.usd, num: true }, { f: 'bestCase', fmt: OS.usd, num: true },
-  { f: 'wonCommit', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.wonCommitBest) },
-  { f: 'wonCommitBest', fmt: OS.usd, num: true }, { f: 'pipeline', fmt: OS.usd, num: true },
+  { f: 'wonCommit', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.wonBest) },
+  { f: 'wonBest', fmt: OS.usd, num: true }, { f: 'pipeline', fmt: OS.usd, num: true },
   { f: 'commitShare', fmt: OS.pct, num: true },
 ], { key: 'key' });
-OS.defChart('fc-chart', ['forecast'], () => forecastRows().map((r) => ({ label: OS.region() === 'All' && !mgrPick() ? r.region : r.manager, won: r.won, commit: r.commit, best: r.bestCase, total: r.wonCommitBest }))
+OS.defChart('fc-chart', ['forecast'], () => forecastRows().map((r) => ({ label: mgrPick() || OS.region() === 'All' ? r.region : r.manager, won: r.won, commit: r.commit, best: r.upside, total: r.wonBest }))
   .filter((r) => r.total > 0).sort((a, b) => b.total - a.total), (box, rows) => OS.hbars(box, rows, [
   { k: 'won', name: 'Closed won', color: dash.colors[0] },
   { k: 'commit', name: 'Commit', color: dash.colors[1] },
-  { k: 'best', name: 'Best case', color: dash.colors[2] },
+  { k: 'best', name: 'Best case above commit', color: dash.colors[2] },
 ], OS.usd));
 dash.draw('kpi-fc', (el) => OS.value(el, ['forecast'], () => OS.usd(markRow(el, 'key', pipeKey(), (dash.data('forecast').data || []).find((r) => r.key === pipeKey()))[keepField(el)] || 0)));
 
@@ -660,12 +669,12 @@ OS.defTable('risk-table', ['rep_risk'], () => (dash.data('rep_risk').data || [])
 ], { key: 'owner' });
 
 // ===================== PACE / BOOKINGS / RAMP =====================
-const signed = (v) => (v == null ? '—' : (v >= 0 ? '+' : '−') + d3.format('.0%')(Math.abs(v)));
+const signed = (v) => (v == null ? '—' : Math.abs(v) < 0.005 ? '0%' : (v > 0 ? '+' : '−') + d3.format('.0%')(Math.abs(v)));
 dash.draw('kpi-pace', (el) => {
   OS.value(el, ['cr_pace'], () => signed(firstRow('cr_pace')[el.dataset.field]));
   const v = OS.state('cr_pace') === 'ok' ? firstRow('cr_pace')[el.dataset.field] : null;
-  el.classList.toggle('os-ok', v != null && v >= 0);
-  el.classList.toggle('os-bad', v != null && v < 0);
+  el.classList.toggle('os-ok', v != null && v >= 0.005);
+  el.classList.toggle('os-bad', v != null && v <= -0.005);
 });
 dash.draw('kpi-pace-num', (el) => OS.value(el, ['cr_pace'], () => OS.num(firstRow('cr_pace')[el.dataset.field] || 0)));
 dash.draw('kpi-book', (el) => OS.value(el, ['bookings_kpi'], () => {
@@ -681,7 +690,7 @@ OS.defTable('book-table', ['bookings'], () => (dash.data('bookings').data || [])
 ], { key: 'owner' });
 OS.defChart('lost-chart', ['lost_reasons'], () => {
   const scope = mgrPick() ? 'M|' + mgrPick() : OS.region();
-  return (dash.data('lost_reasons').data || []).filter((r) => r.scope === scope && (r.thisOpps || r.lastOpps))
+  return (dash.data('lost_reasons').data || []).filter((r) => r.scope === scope && r.thisOpps)
     .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
     .sort((a, b) => b.thisQ - a.thisQ || b.lastQ - a.lastQ);
 }, (box, rows) => OS.hbars(box, rows, [{ k: 'thisQ', name: 'This quarter', color: dash.colors[0] }], OS.num));
@@ -825,7 +834,7 @@ dash.draw('kpi-team', (el) => OS.value(el, ['team_tree'], () => {
   const r = teamRow(el);
   const v = r[keepField(el)];
   const fmt = el.dataset.fmt;
-  return v == null ? '—' : fmt === 'usd' ? OS.usd(v) : fmt === 'pct' ? OS.pct(v) : OS.num(fmt === 'size' ? v + 1 : v);
+  return v == null ? '—' : fmt === 'usd' ? OS.usd(v) : fmt === 'pct' ? OS.pct(v) : OS.num(v);
 }));
 const agendaBtn = (r) => {
   if (!r.email) return null;

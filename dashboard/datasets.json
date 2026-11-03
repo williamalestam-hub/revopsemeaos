@@ -49,13 +49,13 @@
  },
  "won_q": {
   "title": "Closed won this quarter",
-  "description": "EMEA closed-won opportunities this quarter by owner role, manager and type, in incremental ARR (USD).",
+  "description": "EMEA closed-won opportunities this quarter (by the date they were actually closed, as in Bookings) by owner role, manager and type, in incremental ARR (USD).",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name recordType, COUNT(Id) wonOpps, SUM(Finance_ARR_USD__c) wonArrUsd FROM Opportunity WHERE IsWon = true AND CloseDate = THIS_FISCAL_QUARTER AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"
+    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name recordType, COUNT(Id) wonOpps, SUM(Finance_ARR_USD__c) wonArrUsd FROM Opportunity WHERE IsWon = true AND Actual_Close_Date__c = THIS_FISCAL_QUARTER AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"
    }
   }
  },
@@ -121,13 +121,13 @@
  },
  "cr_bdr": {
   "title": "BDR-sourced opps",
-  "description": "Opportunities sourced by EMEA BDRs this and last quarter, per BDR, whoever owns them.",
+  "description": "Opportunities sourced by EMEA BDRs (BDR-EMEA and DIR-BDR-EMEA roles) this and last quarter, per BDR, whoever owns them; renewals auto-created by Flow left out.",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT CALENDAR_YEAR(convertTimezone(CreatedDate)) yr, CALENDAR_QUARTER(convertTimezone(CreatedDate)) qtr, Originating_BDR__r.Name bdr, Originating_BDR__r.Manager.Name bdrManager, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND Originating_BDR_Role__c LIKE '%EMEA%' GROUP BY CALENDAR_YEAR(convertTimezone(CreatedDate)), CALENDAR_QUARTER(convertTimezone(CreatedDate)), Originating_BDR__r.Name, Originating_BDR__r.Manager.Name LIMIT 2000"
+    "q": "SELECT CALENDAR_YEAR(convertTimezone(CreatedDate)) yr, CALENDAR_QUARTER(convertTimezone(CreatedDate)) qtr, Originating_BDR__r.Name bdr, Originating_BDR__r.Manager.Name bdrManager, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND Originating_BDR_Role__c IN ('BDR-EMEA', 'DIR-BDR-EMEA') AND (RecordType.Name != 'Renewal' OR Upsell_Renewal_Created_By__c != 'Flow') GROUP BY CALENDAR_YEAR(convertTimezone(CreatedDate)), CALENDAR_QUARTER(convertTimezone(CreatedDate)), Originating_BDR__r.Name, Originating_BDR__r.Manager.Name LIMIT 2000"
    }
   }
  },
@@ -275,13 +275,13 @@
  },
  "bk_books": {
   "title": "Account books by owner",
-  "description": "Accounts per account book (Territory ID) and owner, for EMEA owners or EMEA regions.",
+  "description": "Accounts per account book (Territory ID) and owner, for accounts in an EMEA sales region (LATAM included).",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Territory_ID__c book, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, COUNT(Id) accounts, SUM(ARR_USD__c) arrUsd FROM Account WHERE Territory_ID__c != null AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Sales_Region__c IN ('Northern Europe','FME','DACH','Iberia','Southern Europe','MEA','LATAM')) GROUP BY Territory_ID__c, Owner.Name, Owner.UserRole.Name, Owner.IsActive LIMIT 2000"
+    "q": "SELECT Territory_ID__c book, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, COUNT(Id) accounts, SUM(ARR_USD__c) arrUsd FROM Account WHERE Territory_ID__c != null AND Sales_Region__c IN ('Northern Europe','FME','DACH','Iberia','Southern Europe','MEA','LATAM') GROUP BY Territory_ID__c, Owner.Name, Owner.UserRole.Name, Owner.IsActive LIMIT 2000"
    }
   }
  },
@@ -371,13 +371,13 @@
  },
  "top_deals": {
   "title": "Largest open deals",
-  "description": "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and last activity.",
+  "description": "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and its date, and last activity.",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Id oppId, Name opp, Account.Name account, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND RecordType.Name != 'Renewal' AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Id, Name, Account.Name, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, LastActivityDate, DAY_ONLY(CreatedDate) ORDER BY SUM(Finance_ARR_USD__c) DESC NULLS LAST LIMIT 300"
+    "q": "SELECT Id oppId, Name opp, Account.Name account, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND RecordType.Name != 'Renewal' AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Id, Name, Account.Name, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate, DAY_ONLY(CreatedDate) ORDER BY SUM(Finance_ARR_USD__c) DESC NULLS LAST LIMIT 300"
    }
   }
  },
@@ -401,7 +401,7 @@
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Id oppId, Name opp, Account.Name account, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, LastActivityDate lastActivity, SUM(Finance_ARR_USD__c) arrUsd, SUM(Order_Form_ARR_USD__c) contractArrUsd FROM Opportunity WHERE IsClosed = false AND OwnerId = {{dealOwnerId}} GROUP BY Id, Name, Account.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, LastActivityDate ORDER BY CloseDate ASC LIMIT 200"
+    "q": "SELECT Id oppId, Name opp, Account.Name account, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, SUM(Finance_ARR_USD__c) arrUsd, SUM(Order_Form_ARR_USD__c) contractArrUsd FROM Opportunity WHERE IsClosed = false AND OwnerId = {{dealOwnerId}} GROUP BY Id, Name, Account.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate ORDER BY CloseDate ASC LIMIT 200"
    },
    "rules": {
     "dealOwnerId": {

@@ -48,9 +48,9 @@ ds("pipe_stale", "Stale opps by rep",
    WHERE {OPEN_WINDOW} AND RecordType.Name != 'Renewal' AND (LastActivityDate = null OR LastActivityDate < LAST_N_DAYS:30) AND {OWNER}
    GROUP BY Owner.Name LIMIT 2000"""))
 ds("won_q", "Closed won this quarter",
-   "EMEA closed-won opportunities this quarter by owner role, manager and type, in incremental ARR (USD).",
+   "EMEA closed-won opportunities this quarter (by the date they were actually closed, as in Bookings) by owner role, manager and type, in incremental ARR (USD).",
    SF(f"""SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name recordType, COUNT(Id) wonOpps,
-   SUM(Finance_ARR_USD__c) wonArrUsd FROM Opportunity WHERE IsWon = true AND CloseDate = THIS_FISCAL_QUARTER AND {OWNER}
+   SUM(Finance_ARR_USD__c) wonArrUsd FROM Opportunity WHERE IsWon = true AND Actual_Close_Date__c = THIS_FISCAL_QUARTER AND {OWNER}
    GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"""))
 ds("renew_stake", "Renewals at stake",
    "Open EMEA renewals closing this or next quarter by owner role, manager and stage, with the renewing contract ARR (USD).",
@@ -85,10 +85,11 @@ ds("cr_owner_q", "Created opps by rep",
    WHERE CreatedDate = THIS_FISCAL_QUARTER AND {OWNER} AND {CREATED_NOT_FLOW}
    GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"""))
 ds("cr_bdr", "BDR-sourced opps",
-   "Opportunities sourced by EMEA BDRs this and last quarter, per BDR, whoever owns them.",
-   SF("""SELECT CALENDAR_YEAR(convertTimezone(CreatedDate)) yr, CALENDAR_QUARTER(convertTimezone(CreatedDate)) qtr,
+   "Opportunities sourced by EMEA BDRs (BDR-EMEA and DIR-BDR-EMEA roles) this and last quarter, per BDR, whoever owns them; renewals auto-created by Flow left out.",
+   SF(f"""SELECT CALENDAR_YEAR(convertTimezone(CreatedDate)) yr, CALENDAR_QUARTER(convertTimezone(CreatedDate)) qtr,
    Originating_BDR__r.Name bdr, Originating_BDR__r.Manager.Name bdrManager, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd
-   FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND Originating_BDR_Role__c LIKE '%EMEA%'
+   FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND Originating_BDR_Role__c IN ('BDR-EMEA', 'DIR-BDR-EMEA')
+   AND {CREATED_NOT_FLOW}
    GROUP BY CALENDAR_YEAR(convertTimezone(CreatedDate)), CALENDAR_QUARTER(convertTimezone(CreatedDate)), Originating_BDR__r.Name,
    Originating_BDR__r.Manager.Name LIMIT 2000"""))
 
@@ -154,9 +155,9 @@ ds("bk_orphans", "Orphan accounts",
    GROUP BY Id, Name, Owner.Name, Owner.IsActive, Owner.UserRole.Name, BillingCountryCode, Sales_Region__c, Account_Status__c
    ORDER BY SUM(ARR_USD__c) DESC NULLS LAST LIMIT 1500"""))
 ds("bk_books", "Account books by owner",
-   "Accounts per account book (Territory ID) and owner, for EMEA owners or EMEA regions.",
+   "Accounts per account book (Territory ID) and owner, for accounts in an EMEA sales region (LATAM included).",
    SF(f"""SELECT Territory_ID__c book, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, COUNT(Id) accounts,
-   SUM(ARR_USD__c) arrUsd FROM Account WHERE Territory_ID__c != null AND ({OWNER} OR {GEO})
+   SUM(ARR_USD__c) arrUsd FROM Account WHERE Territory_ID__c != null AND {GEO}
    GROUP BY Territory_ID__c, Owner.Name, Owner.UserRole.Name, Owner.IsActive LIMIT 2000"""))
 
 
@@ -213,13 +214,13 @@ ds("pipe_nocontact", "Deals with no contact role",
 
 # ---------- Deals (record level, for inspection) ----------
 ds("top_deals", "Largest open deals",
-   "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and last activity.",
+   "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and its date, and last activity.",
    SF(f"""SELECT Id oppId, Name opp, Account.Name account, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager,
    StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep,
-   LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity
+   Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity
    WHERE {OPEN_WINDOW} AND RecordType.Name != 'Renewal' AND {OWNER}
    GROUP BY Id, Name, Account.Name, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName, RecordType.Name, CloseDate,
-   Rep_Forecast_Category__c, NextStep, LastActivityDate, DAY_ONLY(CreatedDate)
+   Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate, DAY_ONLY(CreatedDate)
    ORDER BY SUM(Finance_ARR_USD__c) DESC NULLS LAST LIMIT 300"""))
 ds("top_renewals", "Largest open renewals",
    "The 300 largest open EMEA renewals closing this or next quarter by renewing contract ARR, with prior ARR, net change, stage, forecast, next step and last activity.",
@@ -232,9 +233,9 @@ ds("top_renewals", "Largest open renewals",
 D["deals"] = {"title": "Open deals of one person",
   "description": "Every open opportunity (any type and close date, up to 200) owned by the person open in the person panel.",
   "source": {"kind": "query", **SF("""SELECT Id oppId, Name opp, Account.Name account, StageName stage, RecordType.Name rt, CloseDate closeDate,
-   Rep_Forecast_Category__c forecast, NextStep nextStep, LastActivityDate lastActivity, SUM(Finance_ARR_USD__c) arrUsd,
+   Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, SUM(Finance_ARR_USD__c) arrUsd,
    SUM(Order_Form_ARR_USD__c) contractArrUsd FROM Opportunity WHERE IsClosed = false AND OwnerId = {{dealOwnerId}}
-   GROUP BY Id, Name, Account.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, LastActivityDate
+   GROUP BY Id, Name, Account.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate
    ORDER BY CloseDate ASC LIMIT 200"""),
    "rules": {"dealOwnerId": {"type": "string", "pattern": "^005[A-Za-z0-9]{12}([A-Za-z0-9]{3})?$"}}}}
 
