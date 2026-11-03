@@ -26,7 +26,7 @@ const sfRows = ({ answer }) => {
   'cr_daily', 'cr_monthly', 'cr_source', 'cr_owner_q', 'cr_bdr',
   'rr_members', 'rr_assign', 'roster',
   'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'top_deals', 'top_renewals', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
-  'users_all',
+  'users_all', 'mv_outcomes', 'mv_close', 'age_stuck', 'cycle_team', 'coverage_base', 'bk_stale', 'bk_em_cover',
 ].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped)', fn: sfRows }));
 
 dash.loader('hb_people', {
@@ -52,6 +52,32 @@ dash.loader('hb_people', {
       startDate: g(e, 'work/startDate') ?? null,
     }));
     return { columns: ['id', 'name', 'email', 'title', 'department', 'team', 'site', 'manager', 'secondManager', 'startDate'], rows };
+  },
+});
+
+// Field history comes back as API-named rows with the opportunity nested; this unwraps them.
+dash.loader('mv_fields', {
+  description: 'Field history as rows: the opportunity, its owner id and current ARR (unwrapped from the nested opportunity), the field, old and new value, and when',
+  fn: ({ answer }) => {
+    let a = answer;
+    if (Array.isArray(a) && a.length && a[0] && a[0].type === 'text') a = a.map((c) => c.text).join('');
+    if (typeof a === 'string') {
+      try { a = JSON.parse(a); } catch (e) { throw new Error(a.slice(0, 400)); }
+    }
+    if (!a || !Array.isArray(a.records)) {
+      const first = Array.isArray(a) ? a[0] : a;
+      throw new Error(String((first && (first.message || first.error || first.errorCode)) || 'Salesforce answer had no records list'));
+    }
+    const rows = a.records.map((r) => ({
+      oppId: r.OpportunityId || null,
+      ownerId: r.Opportunity ? r.Opportunity.OwnerId || null : null,
+      arrUsd: r.Opportunity && r.Opportunity.Finance_ARR_USD__c != null ? +r.Opportunity.Finance_ARR_USD__c : null,
+      field: r.Field || null,
+      oldValue: r.OldValue == null ? null : String(r.OldValue),
+      newValue: r.NewValue == null ? null : String(r.NewValue),
+      at: r.CreatedDate || null,
+    }));
+    return { columns: ['oppId', 'ownerId', 'arrUsd', 'field', 'oldValue', 'newValue', 'at'], rows, cut: a.done === false };
   },
 });
 

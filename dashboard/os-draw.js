@@ -581,6 +581,7 @@ OS.defTable('deal-table', ['deal_list'], () => {
   return (dash.data('deal_list').data || []).filter((x) => x.quarter === pq && inTeam(x) && (!flag || x.flags.split(', ').includes(flag)));
 }, [
   { f: 'opp', wrap: true, after: (r) => dealActs(r) }, { f: 'owner', person: (r) => r.owner }, { f: 'stage' },
+  { f: 'daysInStage', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, cls: (v, r) => (/Stuck in stage/.test(r.flags || '') ? 'os-warn' : '') },
   { f: 'closeDate', fmt: OS.shortDay }, { f: 'forecast' },
   { f: 'arrUsd', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.arrUsd) },
   { f: 'flags', chips: flagCls }, { f: 'risk', fmt: OS.num, num: true },
@@ -663,6 +664,7 @@ OS.defTable('risk-table', ['rep_risk'], () => (dash.data('rep_risk').data || [])
   { f: 'early', fmt: OS.num, num: true }, { f: 'earlyShare', fmt: OS.pct, num: true, cls: (v) => (v != null && v >= 0.3 ? 'os-warn' : '') },
   { f: 'noContact', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'nextOverdue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'stuck', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'pastDue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'stale', fmt: OS.num, num: true },
   { f: 'score', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.score) },
@@ -872,6 +874,7 @@ OS.defTable('bk-plan-table', ['book_moves'], () => (dash.data('book_moves').data
   { f: 'from', person: (r) => r.from },
   { f: 'to', person: (r) => r.to },
   { f: 'accounts', fmt: OS.num, num: true },
+  { f: 'untouched', fmt: OS.num, num: true },
   { f: 'fromAfter', fmt: OS.num, num: true },
   { f: 'toAfter', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true },
   { f: 'teamMedian', fmt: (v) => (v == null ? '—' : OS.num(Math.round(v))), num: true },
@@ -932,3 +935,58 @@ dash.draw('oo-mail', (box) => {
   box.replaceChildren(...(a ? [a] : []));
   if (a) a.setAttribute('aria-label', 'Email the agenda to ' + name);
 });
+
+// ===================== MOVEMENT =====================
+const scopeRowOf = (el, id) => markRow(el, 'region', scopeKey(), (dash.data(id).data || []).find((r) => r.region === scopeKey()));
+const fmtBy = (el, v) => (v == null ? '—' : el.dataset.fmt === 'usd' ? OS.usd(v) : el.dataset.fmt === 'pct' ? OS.pct(v) : el.dataset.fmt === 'x' ? d3.format('.1f')(v) + '×' : el.dataset.fmt === 'days' ? OS.num(Math.round(v)) + 'd' : OS.num(v));
+dash.draw('kpi-mv', (el) => OS.value(el, ['moves_kpi'], () => fmtBy(el, scopeRowOf(el, 'moves_kpi')[keepField(el)] || 0)));
+OS.defTable('mv-table', ['pipe_moves'], () => (dash.data('pipe_moves').data || []).filter(inTeam)
+  .filter((r) => r.created || r.won || r.lost || r.pushed || r.pulled || r.up || r.down || r.intoCommit || r.outCommit)
+  .sort((a, b) => (b.pushedArr + b.lostArr + b.outCommitArr) - (a.pushedArr + a.lostArr + a.outCommitArr)), [
+  { f: 'owner', person: (r) => r.owner }, { f: 'region' },
+  { f: 'created', fmt: OS.num, num: true }, { f: 'createdArr', fmt: OS.usd, num: true },
+  { f: 'won', fmt: OS.num, num: true }, { f: 'wonArr', fmt: OS.usd, num: true, cls: (v) => (v > 0 ? 'os-ok' : '') },
+  { f: 'lost', fmt: OS.num, num: true }, { f: 'lostArr', fmt: OS.usd, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'pushed', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') }, { f: 'pushedArr', fmt: OS.usd, num: true },
+  { f: 'pulled', fmt: OS.num, num: true },
+  { f: 'up', fmt: OS.num, num: true }, { f: 'down', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'intoCommit', fmt: OS.num, num: true }, { f: 'outCommit', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+], { key: 'owner' });
+
+// ===================== COVERAGE =====================
+const covKey = () => (mgrPick() ? 'M|' + mgrPick() : OS.region() === 'All' ? 'All|All' : OS.region() + '|All');
+dash.draw('kpi-cov', (el) => OS.value(el, ['pipe_cover'], () => fmtBy(el, markRow(el, 'key', covKey(), (dash.data('pipe_cover').data || []).find((r) => r.key === covKey()))[keepField(el)])));
+const covStatus = (r) => (r.avgBookings <= 0 ? 'No history' : r.aheadOfUsual ? 'Ahead of a usual quarter' : r.coverageThis >= 3 ? 'Covered' : r.coverageThis >= 1.5 ? 'Watch' : 'Thin');
+OS.defTable('cov-table', ['pipe_cover'], () => {
+  const rows = dash.data('pipe_cover').data || [];
+  const pick = mgrPick() ? rows.filter((r) => r.level === 'team' && r.manager === mgrPick())
+    : OS.region() === 'All' ? rows.filter((r) => r.level === 'region' && (r.avgBookings || r.openThis || r.openNext))
+    : rows.filter((r) => r.level === 'team' && r.region === OS.region());
+  return pick.map((r) => ({ ...r, status: covStatus(r) })).sort((a, b) => b.avgBookings - a.avgBookings);
+}, [
+  { f: 'region' }, { f: 'manager' },
+  { f: 'avgBookings', fmt: OS.usd, num: true }, { f: 'wonSoFar', fmt: OS.usd, num: true },
+  { f: 'openThis', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.openThis) },
+  { f: 'coverageThis', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v) + '×'), num: true },
+  { f: 'openNext', fmt: OS.usd, num: true }, { f: 'coverageNext', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v) + '×'), num: true },
+  { f: 'winRate', fmt: (v) => (v == null ? '—' : OS.pct(v)), num: true },
+  { f: 'expectedThis', fmt: (v) => (v == null ? '—' : OS.usd(v)), num: true },
+  { f: 'avgCycleDays', fmt: (v) => (v == null ? '—' : OS.num(Math.round(v))), num: true },
+  { f: 'status', chip: (v) => (v === 'Thin' ? 'bad' : v === 'Watch' ? 'warn' : v === 'Covered' || /Ahead/.test(v) ? 'ok' : '') },
+], { key: 'key' });
+
+// ===================== ENGAGEMENT =====================
+dash.draw('kpi-eng', (el) => OS.value(el, ['engagement_kpi'], () => fmtBy(el, scopeRowOf(el, 'engagement_kpi')[keepField(el)] || 0)));
+OS.defTable('eng-table', ['engagement'], () => (dash.data('engagement').data || []).filter(inTeam)
+  .filter((r) => r.untouched || r.noEm || r.emNotEm)
+  .sort((a, b) => b.untouched - a.untouched || b.noEm - a.noEm), [
+  { f: 'owner', person: (r) => r.owner }, { f: 'region' },
+  { f: 'active', fmt: OS.num, num: true },
+  { f: 'untouched', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.untouched) },
+  { f: 'share', fmt: (v) => (v == null ? '—' : OS.pct(v)), num: true, cls: (v) => (v != null && v >= 0.2 ? 'os-warn' : '') },
+  { f: 'never', fmt: OS.num, num: true },
+  { f: 'untouchedCustomers', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'noEm', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'emNotEm', fmt: OS.num, num: true },
+  { f: 'flag', cls: (v) => (v ? 'os-warn' : '') },
+], { key: 'owner' });

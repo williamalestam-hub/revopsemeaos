@@ -962,7 +962,7 @@ dash.calc('pool_adds', {
 // ===================== DEALS =====================
 dash.calc('deal_list', {
   title: 'Largest deals with risk flags',
-  description: 'The largest open deals closing this or next quarter with risk flags: past due (close date gone), stale (no logged activity in 30 days), no next step (neither a next-step note nor a date), next step overdue (its date has passed), early stage (0–1) closing this quarter, and Commit while still at stage 0–2. The risk score adds 3 for past due or early Commit, 2 for early stage or stale, 1 for a missing or overdue next step.',
+  description: 'The largest open deals closing this or next quarter with risk flags: past due (close date gone), stale (no logged activity in 30 days), no next step (neither a next-step note nor a date), next step overdue (its date has passed), stuck in stage (longer than about twice the usual time: stage 0 35 days, 1 55, 2 60, 3 40, 4 30, 5 45, 6 40), early stage (0–1) closing this quarter, and Commit while still at stage 0–2. The risk score adds 3 for past due or early Commit, 2 for early stage or stale, 1 for a missing or overdue next step.',
   inputs: ['top_deals'],
   fn: (top_deals) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -982,8 +982,10 @@ dash.calc('deal_list', {
       const nsDate = d.nextStepDate ? String(d.nextStepDate).slice(0, 10) : null;
       if (!d.nextStep && !nsDate) flags.push('No next step');
       else if (nsDate && nsDate < today) flags.push('Next step overdue');
+      const LIMIT = [35, 55, 60, 40, 30, 45, 40];
+      if (d.daysInStage != null && stage >= 0 && stage <= 6 && +d.daysInStage > LIMIT[stage]) flags.push('Stuck in stage');
       const score = flags.reduce((s, f) => s + (f === 'Past due' || f === 'Commit at early stage' ? 3 : f === 'No next step' || f === 'Next step overdue' ? 1 : 2), 0);
-      return { oppId: d.oppId, opp: d.opp, account: d.account, owner: d.owner, role: d.role, region: TEAM[d.role] || 'Other', manager: d.manager || '(no manager)', stage: d.stage, rt: d.rt, closeDate: d.closeDate, quarter: thisQ ? 'this' : 'next', forecast: d.forecast || null, nextStep: d.nextStep || null, lastActivity: d.lastActivity || null, arrUsd: +d.arrUsd || 0, flags: flags.join(', '), risk: score };
+      return { oppId: d.oppId, opp: d.opp, account: d.account, owner: d.owner, role: d.role, region: TEAM[d.role] || 'Other', manager: d.manager || '(no manager)', stage: d.stage, rt: d.rt, closeDate: d.closeDate, quarter: thisQ ? 'this' : 'next', forecast: d.forecast || null, nextStep: d.nextStep || null, lastActivity: d.lastActivity || null, arrUsd: +d.arrUsd || 0, daysInStage: d.daysInStage != null ? +d.daysInStage : null, ageDays: d.ageDays != null ? +d.ageDays : null, flags: flags.join(', '), risk: score };
     });
   },
 });
@@ -1009,6 +1011,8 @@ dash.calc('person_deals', {
       const nsDate = d.nextStepDate ? String(d.nextStepDate).slice(0, 10) : null;
       if (d.rt !== 'Renewal' && !d.nextStep && !nsDate) flags.push('No next step');
       else if (d.rt !== 'Renewal' && nsDate && nsDate < today) flags.push('Next step overdue');
+      const LIMIT = [35, 55, 60, 40, 30, 45, 40];
+      if (d.rt !== 'Renewal' && d.daysInStage != null && stage >= 0 && stage <= 6 && +d.daysInStage > LIMIT[stage]) flags.push('Stuck in stage');
       return { oppId: d.oppId, opp: d.opp, account: d.account, stage: d.stage, rt: d.rt, closeDate: d.closeDate, quarter: thisQ ? 'this' : 'later', forecast: d.forecast || null, nextStep: d.nextStep || null, lastActivity: d.lastActivity || null, arrUsd: d.rt === 'Renewal' ? +d.contractArrUsd || 0 : +d.arrUsd || 0, flags: flags.join(', ') };
     });
   },
@@ -1056,15 +1060,15 @@ dash.calc('renewal_list', {
 // ===================== REP RISK =====================
 dash.calc('rep_risk', {
   title: 'Deal risk per rep',
-  description: 'Per rep, for open New Business and Upsell: pipeline this quarter, deals pushed out of this quarter or pulled in (latest close-date change in the last 30 days), close-date edits in 30 days, early-stage deals (stage 0–1) closing this quarter, deals closing this quarter with no contact role, past-due and stale deals, and deals closing this or next quarter with an overdue or missing next-step date. Risk score = 3 per past-due deal + 2 per deal pushed out + 1 per early-stage or no-contact deal + 0.5 per stale deal.',
-  inputs: ['pipe_reps', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'pipe_nextstep'],
-  fn: (pipe_reps, pipe_slips, pipe_edits, pipe_early, pipe_nocontact, pipe_nextstep) => {
+  description: 'Per rep, for open New Business and Upsell: pipeline this quarter, deals pushed out of this quarter or pulled in (latest close-date change in the last 30 days), close-date edits in 30 days, early-stage deals (stage 0–1) closing this quarter, deals closing this quarter with no contact role, past-due and stale deals, and deals closing this or next quarter with an overdue or missing next-step date. Stuck deals have sat in their stage longer than about twice the usual time. Risk score = 3 per past-due deal + 2 per deal pushed out + 1 per early-stage, no-contact or stuck deal + 0.5 per stale deal.',
+  inputs: ['pipe_reps', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'pipe_nextstep', 'age_stuck'],
+  fn: (pipe_reps, pipe_slips, pipe_edits, pipe_early, pipe_nocontact, pipe_nextstep, age_stuck) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const now = new Date();
     const thisQ = now.getUTCFullYear() * 10 + Math.floor(now.getUTCMonth() / 3) + 1;
     const m = new Map();
     const get = (owner, role, manager) => {
-      if (!m.has(owner)) m.set(owner, { owner, role: role || null, region: TEAM[role] || 'Other', manager: manager || '(no manager)', thisPipe: 0, pushedOut: 0, pushedOutArr: 0, pulledIn: 0, edits: 0, repeatEdits: 0, early: 0, earlyArr: 0, noContact: 0, noContactArr: 0, pastDue: 0, stale: 0, nextOverdue: 0, nextNone: 0 });
+      if (!m.has(owner)) m.set(owner, { owner, role: role || null, region: TEAM[role] || 'Other', manager: manager || '(no manager)', thisPipe: 0, pushedOut: 0, pushedOutArr: 0, pulledIn: 0, edits: 0, repeatEdits: 0, early: 0, earlyArr: 0, noContact: 0, noContactArr: 0, pastDue: 0, stale: 0, nextOverdue: 0, nextNone: 0, stuck: 0, stuckArr: 0 });
       const o = m.get(owner);
       if (!o.role && role) { o.role = role; o.region = TEAM[role] || 'Other'; }
       if (o.manager === '(no manager)' && manager) o.manager = manager;
@@ -1080,9 +1084,10 @@ dash.calc('rep_risk', {
     for (const r of pipe_early) { const o = get(r.owner, r.role, r.manager); o.early += +r.opps || 0; o.earlyArr += +r.arrUsd || 0; }
     for (const r of pipe_nocontact) { const o = get(r.owner, r.role, r.manager); o.noContact += +r.noContactOpps || 0; o.noContactArr += +r.noContactArrUsd || 0; }
     for (const r of pipe_nextstep) { const o = get(r.owner, r.role, r.manager); o.nextOverdue += +r.overdueOpps || 0; o.nextNone += Math.max(0, (+r.flaggedOpps || 0) - (+r.overdueOpps || 0)); }
+    for (const r of age_stuck) { const o = get(r.owner, r.role, r.manager); o.stuck += +r.stuckOpps || 0; o.stuckArr += +r.stuckArrUsd || 0; }
     for (const r of pipe_edits) if (m.has(r.owner)) { const o = m.get(r.owner); o.edits = +r.closeDateEdits || 0; o.repeatEdits = Math.max(0, (+r.closeDateEdits || 0) - (+r.oppsEdited || 0)); }
     return [...m.values()].map((o) => {
-      const score = Math.round(o.pastDue * 3 + o.pushedOut * 2 + o.early + o.noContact + o.stale * 0.5);
+      const score = Math.round(o.pastDue * 3 + o.pushedOut * 2 + o.early + o.noContact + o.stuck + o.stale * 0.5);
       return { ...o, earlyShare: o.thisPipe > 0 ? o.earlyArr / o.thisPipe : null, score };
     }).filter((o) => o.score > 0 || o.thisPipe > 0);
   },
@@ -1099,7 +1104,7 @@ dash.calc('risk_kpi', {
     return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
       const rs = rep_risk.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
       const pipe = sum(rs, 'thisPipe');
-      return { region, pushedOut: sum(rs, 'pushedOut'), pushedOutArr: sum(rs, 'pushedOutArr'), early: sum(rs, 'early'), earlyArr: sum(rs, 'earlyArr'), earlyShare: pipe > 0 ? sum(rs, 'earlyArr') / pipe : null, noContact: sum(rs, 'noContact'), noContactArr: sum(rs, 'noContactArr'), pastDue: sum(rs, 'pastDue') };
+      return { region, pushedOut: sum(rs, 'pushedOut'), pushedOutArr: sum(rs, 'pushedOutArr'), early: sum(rs, 'early'), earlyArr: sum(rs, 'earlyArr'), earlyShare: pipe > 0 ? sum(rs, 'earlyArr') / pipe : null, noContact: sum(rs, 'noContact'), noContactArr: sum(rs, 'noContactArr'), pastDue: sum(rs, 'pastDue'), stuck: sum(rs, 'stuck'), stuckArr: sum(rs, 'stuckArr') };
     });
   },
 });
@@ -1378,9 +1383,9 @@ dash.calc('oo_followups', {
 
 dash.calc('oo_points', {
   title: '1:1 numbers and talking points',
-  description: 'For each EMEA person and leader, the numbers and talking points a 1:1 agenda opens with: for a leader the whole team (everyone below them), otherwise their own. Numbers: pipeline this and next quarter, created this quarter, won this quarter and win rate. Talking points, most urgent first: past-due opps, deals pushed out of the quarter, early-stage deals closing this quarter, overdue or missing next steps, no contact role, stale opps, the riskiest large deals, renewals rated HIGH or downselling, people missing from routing, book balance and data checks.',
-  inputs: ['team_tree', 'rep_risk', 'deal_list', 'renewal_list', 'rr_people', 'books_owner', 'checks', 'cr_bdrs'],
-  fn: (team_tree, rep_risk, deal_list, renewal_list, rr_people, books_owner, checks, cr_bdrs) => {
+  description: 'For each EMEA person and leader, the numbers and talking points a 1:1 agenda opens with: for a leader the whole team (everyone below them), otherwise their own. Numbers: pipeline this and next quarter, created this quarter, won this quarter and win rate. Talking points, most urgent first: past-due opps, deals pushed out of the quarter, early-stage deals closing this quarter, overdue or missing next steps, deals stuck in their stage, no contact role, stale opps, the riskiest large deals, renewals rated High, downselling or past due, people missing from routing, book balance, untouched accounts, customers without an Engagement Manager, and data checks. A BDR\'s numbers are what they sourced.',
+  inputs: ['team_tree', 'rep_risk', 'deal_list', 'renewal_list', 'rr_people', 'books_owner', 'checks', 'cr_bdrs', 'engagement'],
+  fn: (team_tree, rep_risk, deal_list, renewal_list, rr_people, books_owner, checks, cr_bdrs, engagement) => {
     const usd = (v) => {
       const n = +v || 0, a = Math.abs(n);
       if (a < 0.5) return '$0';
@@ -1423,6 +1428,7 @@ dash.calc('oo_points', {
       if (sum('early')) push('talk', 'medium', plural(sum('early'), 'early-stage deal', 'early-stage deals') + ' (stage 0–1, ' + usd(sum('earlyArr')) + ') still closing this quarter' + who('early') + '.', { screen: 'pipeline', view: 'risk' });
       const ns = sum('nextOverdue') + sum('nextNone');
       if (ns) push('talk', 'medium', plural(ns, 'deal has', 'deals have') + ' an overdue or missing next step.', { screen: 'pipeline', view: 'risk' });
+      if (sum('stuck')) push('talk', 'medium', plural(sum('stuck'), 'deal is', 'deals are') + ' stuck in their stage for longer than usual (' + usd(sum('stuckArr')) + ')' + who('stuck') + '.', { screen: 'pipeline', view: 'deals' });
       if (sum('noContact')) push('talk', 'low', plural(sum('noContact'), 'deal', 'deals') + ' closing this quarter with no contact role.', { screen: 'pipeline', view: 'risk' });
       if (t.stale) push('talk', 'low', plural(t.stale, 'opp', 'opps') + ' with no activity in 30 days.', { screen: 'pipeline', view: 'reps' });
       // the riskiest large deals
@@ -1445,6 +1451,11 @@ dash.calc('oo_points', {
       const bk = books_owner.filter((b) => inT.has(b.owner) && (b.balance === 'Heavy' || b.balance === 'Light'));
       if (bk.length && lead) push('talk', 'low', 'Books out of balance: ' + bk.slice(0, 4).map((b) => b.owner + ' ' + b.balance.toLowerCase() + ' (' + b.active + ' active, ' + (b.vsMedian != null ? b.vsMedian.toFixed(1) + '× median' : '') + ')').join(', ') + '.', { screen: 'books', view: 'reps' });
       else if (bk.length) push('talk', 'low', 'Book is ' + bk[0].balance.toLowerCase() + ': ' + bk[0].active + ' active accounts, ' + (bk[0].vsMedian != null ? bk[0].vsMedian.toFixed(1) + '× the team median' : 'against the team median') + '.', { screen: 'books', view: 'reps' });
+      // book engagement
+      const eg = engagement.filter((e) => inT.has(e.owner));
+      const untouched = eg.reduce((a, e) => a + (+e.untouched || 0), 0), noEm = eg.reduce((a, e) => a + (+e.noEm || 0), 0);
+      if (untouched) push('talk', untouched >= 10 ? 'medium' : 'low', plural(untouched, 'active account', 'active accounts') + ' nobody has touched in 90 days' + (lead && eg.filter((e) => e.untouched).length ? ' (' + eg.filter((e) => e.untouched).sort((a, b) => b.untouched - a.untouched).slice(0, 3).map((e) => e.owner + ' ' + e.untouched).join(', ') + ')' : '') + '.', { screen: 'books', view: 'engage' });
+      if (noEm) push('talk', 'low', plural(noEm, 'customer has', 'customers have') + ' no active Engagement Manager.', { screen: 'books', view: 'engage' });
       // data checks
       const ck = checks.filter((c) => c.person && c.area !== 'Routing' && c.area !== 'Pipeline' && inT.has(c.person));
       if (ck.length) push('talk', ck.some((c) => c.severity === 'high') ? 'medium' : 'low', plural(ck.length, 'data check', 'data checks') + ': ' + ck.slice(0, 3).map((c) => c.title + ' (' + c.what.toLowerCase() + ')').join('; ') + (ck.length > 3 ? '; and ' + (ck.length - 3) + ' more' : '') + '.', { screen: 'actions', view: 'checks' });
@@ -1458,9 +1469,12 @@ dash.calc('oo_points', {
 // ===================== TERRITORY PLANNING =====================
 dash.calc('book_moves', {
   title: 'Suggested book moves',
-  description: 'A starting point for territory planning: within each AE team and SMB, active accounts (customer, pipeline, engaging) to move from Heavy books (2x the team median or more) to Light ones (half the median or less), largest gaps first, each move taking both reps toward the median. Active reps who own no accounts yet count as Light. A receiver who joined in the last 90 days (Salesforce user created or Legora start date) is marked as a new joiner; what a Heavy book has left over when no Light book remains is listed without a receiver.',
-  inputs: ['books_owner', 'roster'],
-  fn: (books_owner, roster) => {
+  description: 'A starting point for territory planning: within each AE team and SMB, active accounts (customer, pipeline, engaging) to move from Heavy books (2x the team median or more) to Light ones (half the median or less), largest gaps first, each move taking both reps toward the median. Active reps who own no accounts yet count as Light. A receiver who joined in the last 90 days (Salesforce user created or Legora start date) is marked as a new joiner; what a Heavy book has left over when no Light book remains is listed without a receiver. Each move starts with the giver\'s accounts that nobody has touched in 90 days.',
+  inputs: ['books_owner', 'roster', 'bk_stale'],
+  fn: (books_owner, roster, bk_stale) => {
+    const pool = new Map();
+    for (const r of bk_stale) pool.set(r.owner, (pool.get(r.owner) || 0) + (+r.accounts || 0));
+    const firstUntouched = (giver, n) => { const left = pool.get(giver) || 0; const u = Math.min(n, left); pool.set(giver, left - u); return u; };
     const since = (d) => { const t = Date.parse(String(d || '').slice(0, 10) + 'T00:00:00Z'); return Number.isNaN(t) ? null : Math.floor((Date.now() - t) / 864e5); };
     const joined = new Map();
     for (const u of roster) {
@@ -1489,7 +1503,8 @@ dash.calc('book_moves', {
         const fromBefore = now.get(from.owner), toBefore = now.get(to.owner);
         now.set(from.owner, fromBefore - n); now.set(to.owner, toBefore + n);
         const d = joined.get(to.owner);
-        out.push({ key: team + '|' + from.owner + '|' + to.owner, region: team, manager: from.manager, toManager: to.manager, from: from.owner, to: to.owner, accounts: n, fromBefore, fromAfter: fromBefore - n, toBefore, toAfter: toBefore + n, teamMedian: med, note: d != null && d <= 90 ? 'To a new joiner' : '' });
+        const u = firstUntouched(from.owner, n);
+        out.push({ key: team + '|' + from.owner + '|' + to.owner, region: team, manager: from.manager, toManager: to.manager, from: from.owner, to: to.owner, accounts: n, untouched: u, fromBefore, fromAfter: fromBefore - n, toBefore, toAfter: toBefore + n, teamMedian: med, note: [d != null && d <= 90 ? 'To a new joiner' : '', u ? 'Start with the ' + u + ' untouched in 90 days' : ''].filter(Boolean).join('; ') });
         give[i].left -= n; take[j].left -= n;
         if (!give[i].left) i++;
         if (!take[j].left) j++;
@@ -1497,7 +1512,8 @@ dash.calc('book_moves', {
       for (; i < give.length; i++) {
         if (give[i].left <= 0) continue;
         const from = give[i].r, b = now.get(from.owner);
-        out.push({ key: team + '|' + from.owner + '|', region: team, manager: from.manager, toManager: null, from: from.owner, to: null, accounts: give[i].left, fromBefore: b, fromAfter: b - give[i].left, toBefore: null, toAfter: null, teamMedian: med, note: 'No Light book in the team to take them' });
+        const u = firstUntouched(from.owner, give[i].left);
+        out.push({ key: team + '|' + from.owner + '|', region: team, manager: from.manager, toManager: null, from: from.owner, to: null, accounts: give[i].left, untouched: u, fromBefore: b, fromAfter: b - give[i].left, toBefore: null, toAfter: null, teamMedian: med, note: 'No Light book in the team to take them' + (u ? '; ' + u + ' of them untouched in 90 days' : '') });
       }
     }
     return out;
@@ -1518,5 +1534,169 @@ dash.calc('oo_kpi', {
       week: oo_upcoming.filter((r) => at(r) != null && at(r) - today < 7 * 864e5).length,
       total: oo_upcoming.length,
     }];
+  },
+});
+
+// ===================== WEEKLY MOVEMENT =====================
+dash.calc('pipe_moves', {
+  title: 'Pipeline movement, last 7 days',
+  description: 'Per EMEA rep, New Business and Upsell in the last 7 days: opportunities created, won and lost (by the date actually closed), close dates pushed out of this quarter or pulled into it, stage moved up or down (first stage of the week against the last; round trips left out), and moved into or out of Commit. Each deal counts once per measure, at its current ARR, for its current owner; deals created this week only count as created.',
+  inputs: ['mv_outcomes', 'mv_close', 'mv_fields', 'roster'],
+  fn: (mv_outcomes, mv_close, mv_fields, roster) => {
+    const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
+    const now = new Date();
+    const curQ = now.getUTCFullYear() * 10 + Math.floor(now.getUTCMonth() / 3) + 1;
+    const byId = new Map(roster.map((u) => [String(u.userId).slice(0, 15), u]));
+    const m = new Map();
+    const get = (owner, role, manager) => {
+      if (!m.has(owner)) m.set(owner, { owner, role: role || null, region: TEAM[role] || 'Other', manager: manager || '(no manager)', created: 0, createdArr: 0, createdThisQ: 0, won: 0, wonArr: 0, lost: 0, lostArr: 0, pushed: 0, pushedArr: 0, pulled: 0, pulledArr: 0, up: 0, upArr: 0, down: 0, downArr: 0, intoCommit: 0, intoCommitArr: 0, outCommit: 0, outCommitArr: 0 });
+      return m.get(owner);
+    };
+    for (const r of mv_outcomes) { const o = get(r.owner, r.role, r.manager); if (r.won) { o.won += +r.n || 0; o.wonArr += +r.arr || 0; } else { o.lost += +r.n || 0; o.lostArr += +r.arr || 0; } }
+    for (const r of mv_close) {
+      const o = get(r.owner, r.role, r.manager);
+      const to = r.toFY * 10 + r.toFQ;
+      if (r.fromFY == null) { o.created += +r.opps || 0; o.createdArr += +r.arr || 0; if (to === curQ) o.createdThisQ += +r.opps || 0; continue; }
+      const from = r.fromFY * 10 + r.fromFQ;
+      if (from === curQ && to !== curQ) { o.pushed += +r.opps || 0; o.pushedArr += +r.arr || 0; }
+      else if (to === curQ && from !== curQ) { o.pulled += +r.opps || 0; o.pulledArr += +r.arr || 0; }
+    }
+    const per = new Map();
+    for (const r of mv_fields) {
+      const k = r.oppId + '|' + r.field;
+      if (!per.has(k)) per.set(k, { oppId: r.oppId, ownerId: r.ownerId, arr: +r.arrUsd || 0, field: r.field, first: r.oldValue, last: r.newValue });
+      else per.get(k).last = r.newValue;
+    }
+    const ord = (v) => { const d = parseInt(String(v || ''), 10); return Number.isNaN(d) ? null : d; };
+    for (const x of per.values()) {
+      const u = byId.get(String(x.ownerId || '').slice(0, 15));
+      if (!u) continue;
+      const o = get(u.name, u.role, u.manager);
+      if (x.field === 'StageName') {
+        const a = ord(x.first), b = ord(x.last);
+        if (a == null || b == null || a === b) continue;
+        if (b > a) { o.up += 1; o.upArr += x.arr; } else { o.down += 1; o.downArr += x.arr; }
+      } else {
+        const was = x.first === 'Commit', is = x.last === 'Commit';
+        if (!was && is) { o.intoCommit += 1; o.intoCommitArr += x.arr; }
+        else if (was && !is) { o.outCommit += 1; o.outCommitArr += x.arr; }
+      }
+    }
+    return [...m.values()];
+  },
+});
+
+dash.calc('moves_kpi', {
+  title: 'Pipeline movement headline',
+  description: 'The last 7 days of pipeline movement added up per team, per manager ("M|<manager>", their direct reports) and for all EMEA.',
+  inputs: ['pipe_moves'],
+  fn: (pipe_moves) => {
+    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+    const managers = [...new Set(pipe_moves.map((r) => r.manager).filter((x) => x && x !== '(no manager)'))];
+    const F = ['created', 'createdArr', 'createdThisQ', 'won', 'wonArr', 'lost', 'lostArr', 'pushed', 'pushedArr', 'pulled', 'pulledArr', 'up', 'upArr', 'down', 'downArr', 'intoCommit', 'intoCommitArr', 'outCommit', 'outCommitArr'];
+    return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
+      const rs = pipe_moves.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
+      const o = { region };
+      for (const f of F) o[f] = rs.reduce((s, r) => s + (+r[f] || 0), 0);
+      o.netCommitArr = o.intoCommitArr - o.outCommitArr;
+      return o;
+    });
+  },
+});
+
+// ===================== COVERAGE =====================
+dash.calc('pipe_cover', {
+  title: 'Coverage against usual bookings',
+  description: 'Per team, team and manager, manager ("M|<manager>", direct reports) and all EMEA, New Business and Upsell: average quarterly bookings over the last 4 completed quarters (missing quarters count as 0), won so far this quarter, open pipeline this and next quarter, coverage (open this quarter over what is still to win to reach the usual quarter, open next quarter over a usual quarter), the win rate by ARR over those 4 quarters (admin merges left out; falls back to all EMEA under 10 closed deals), expected close at that win rate, and the average days from creation to win.',
+  inputs: ['coverage_base', 'cycle_team'],
+  fn: (coverage_base, cycle_team) => {
+    const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
+    const now = new Date();
+    const idx = (fy, fq) => fy * 4 + (fq - 1);
+    const cur = idx(now.getUTCFullYear(), Math.floor(now.getUTCMonth() / 3) + 1);
+    const m = new Map();
+    const blank = (key, region, manager, level) => ({ key, region, manager, level, wonHist: 0, lostHist: 0, closedN: 0, histQs: new Set(), wonSoFar: 0, openThis: 0, openNext: 0, cyc: 0, cycN: 0 });
+    const get = (region, manager) => { const key = region + '|' + manager; if (!m.has(key)) m.set(key, blank(key, region, manager, region === 'All' ? 'all' : region === 'M' ? 'manager' : manager === 'All' ? 'region' : 'team')); return m.get(key); };
+    const each = (role, manager, f) => { const region = TEAM[role] || 'Other'; const mg = manager || '(no manager)'; [get('All', 'All'), get(region, 'All'), get(region, mg), get('M', mg)].forEach(f); };
+    get('All', 'All');
+    for (const r of coverage_base) {
+      if (r.fy == null) continue;
+      const q = idx(+r.fy, +r.fq);
+      const arr = +r.arr || 0, n = +r.n || 0;
+      each(r.role, r.manager, (o) => {
+        if (r.closed) {
+          if (q >= cur - 4 && q < cur) { if (r.won) { o.wonHist += arr; if (arr > 0) o.histQs.add(q); } else o.lostHist += arr; o.closedN += n; }
+          else if (q === cur && r.won) o.wonSoFar += arr;
+        } else if (q <= cur) o.openThis += arr;
+        else if (q === cur + 1) o.openNext += arr;
+      });
+    }
+    for (const r of cycle_team) each(r.role, r.manager, (o) => { o.cyc += (+r.avgCycleDays || 0) * (+r.wonOpps || 0); o.cycN += +r.wonOpps || 0; });
+    const all = m.get('All|All');
+    const rate = (o) => (o.wonHist + o.lostHist > 0 ? o.wonHist / (o.wonHist + o.lostHist) : null);
+    return [...m.values()].map((o) => {
+      const avg = o.wonHist / 4;
+      const fallback = o.closedN < 10 || rate(o) == null;
+      const wr = fallback ? rate(all) : rate(o);
+      const left = avg - o.wonSoFar;
+      return {
+        key: o.key, region: o.region, manager: o.manager, level: o.level,
+        avgBookings: avg, histQuarters: o.histQs.size, wonSoFar: o.wonSoFar, openThis: o.openThis, openNext: o.openNext,
+        toGo: left > 0 ? left : 0, coverageThis: left > 0 ? o.openThis / left : null, aheadOfUsual: avg > 0 && left <= 0,
+        coverageNext: avg > 0 ? o.openNext / avg : null, winRate: wr, winRateFallback: fallback,
+        expectedThis: wr != null ? o.openThis * wr : null, expectedNext: wr != null ? o.openNext * wr : null,
+        projectedThis: wr != null ? o.wonSoFar + o.openThis * wr : null, avgCycleDays: o.cycN ? o.cyc / o.cycN : null,
+      };
+    });
+  },
+});
+
+// ===================== BOOK ENGAGEMENT =====================
+dash.calc('engagement', {
+  title: 'Book engagement',
+  description: 'Per EMEA owner: active accounts (customer, pipeline, engaging) that nobody has logged an activity on in 90 days, of them never touched, untouched customers, the share of their active book, customers without an Engagement Manager or with an inactive one, and customers whose Engagement Manager is not in an EM role. An untouched book is 3 or more untouched accounts, or 20% or more of an active book of 10 or more.',
+  inputs: ['books_owner', 'bk_stale', 'bk_em_cover'],
+  fn: (books_owner, bk_stale, bk_em_cover) => {
+    const m = new Map();
+    const get = (owner) => {
+      if (!m.has(owner)) {
+        const b = books_owner.find((x) => x.owner === owner) || {};
+        m.set(owner, { owner, region: b.region || 'Other', manager: b.manager || '(no manager)', role: b.role || null, active: +b.active || 0, untouched: 0, never: 0, untouchedCustomers: 0, untouchedArr: 0, customers: 0, noEm: 0, noEmArr: 0, emNotEm: 0 });
+      }
+      return m.get(owner);
+    };
+    for (const b of books_owner) if (b.active) get(b.owner);
+    for (const r of bk_stale) {
+      const o = get(r.owner);
+      o.untouched += +r.accounts || 0;
+      o.never += (+r.accounts || 0) - (+r.everTouched || 0);
+      if (r.status === 'Customer') { o.untouchedCustomers += +r.accounts || 0; o.untouchedArr += +r.arrUsd || 0; }
+    }
+    for (const r of bk_em_cover) {
+      const o = get(r.owner);
+      o.customers += +r.customers || 0;
+      if (r.emActive !== true) { o.noEm += (+r.customers || 0); o.noEmArr += +r.arrUsd || 0; }
+      else if (!/^(EM-|DIR-EM-)/.test(r.emRole || '')) o.emNotEm += +r.customers || 0;
+    }
+    return [...m.values()].map((o) => {
+      const share = o.active ? o.untouched / o.active : null;
+      return { ...o, share, flag: o.untouched >= 3 || (share != null && share >= 0.2 && o.active >= 10) ? 'Untouched book' : o.noEm ? 'Customers without an EM' : '' };
+    }).filter((o) => o.active || o.customers);
+  },
+});
+
+dash.calc('engagement_kpi', {
+  title: 'Book engagement headline',
+  description: 'Untouched active accounts, their share of the active book, never-touched accounts and customers without an Engagement Manager, per team, per manager and for all EMEA.',
+  inputs: ['engagement'],
+  fn: (engagement) => {
+    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+    const managers = [...new Set(engagement.map((r) => r.manager).filter((x) => x && x !== '(no manager)'))];
+    const sum = (rs, f) => rs.reduce((s, r) => s + (+r[f] || 0), 0);
+    return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
+      const rs = engagement.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
+      const active = sum(rs, 'active'), untouched = sum(rs, 'untouched');
+      return { region, active, untouched, share: active ? untouched / active : null, never: sum(rs, 'never'), untouchedCustomers: sum(rs, 'untouchedCustomers'), customers: sum(rs, 'customers'), noEm: sum(rs, 'noEm'), noEmArr: sum(rs, 'noEmArr'), flagged: rs.filter((r) => r.flag === 'Untouched book').length };
+    });
   },
 });

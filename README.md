@@ -36,15 +36,15 @@ manager, their team (with a "Prep a 1:1" button).
 | Home | Headline numbers, your next steps from meetings, the most urgent data checks, pipeline by team, created per week | all of the below |
 | 1:1s | An agenda for each 1:1 with a colleague in the next 14 days (from your calendar), or for anyone you pick: open follow-ups from your Granola notes with them (tick them off as you go), the last 1:1 note, their numbers (for a leader, their whole team's) and talking points (past-due and pushed-out deals, early-stage deals closing this quarter, missing next steps, risky large deals and renewals, routing gaps, book balance, data checks). Copy the agenda into the invite or your notes. **Team scorecard**: each direct report with their whole team's numbers, starting from you, or from the top EMEA leader when no EMEA people report to you | Google Calendar `list_events`, Salesforce `getUserInfo` and `User`, Granola, the Salesforce sources |
 | Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), with due dates read from the wording (overdue / due soon), plus data checks: routing gaps, joiners with no Salesforce user, selling titles outside EMEA sales roles, manager differences, past-due opps, orphan accounts, split books | Granola `list_meetings` + `get_meetings`; the Salesforce and HiBob sources |
-| Pipeline | Open NB + Upsell pipeline by team → manager → rep; **Forecast** roll-up (won, won + commit, won + commit + best case); **Top deals**: the 300 largest open deals with risk flags (past due, Commit at early stage, early stage closing this quarter, stale 30d+, no next step) and a risk score; renewals at stake | `Opportunity` |
+| Pipeline | Open NB + Upsell pipeline by team → manager → rep; **Forecast** roll-up (won, won + commit, won + best case); **Top deals**: the 300 largest open deals with risk flags (past due, Commit at early stage, early stage closing this quarter, stale 30d+, no next step, next step overdue, stuck in stage) and a risk score; **Rep risk** with stuck deals; renewals at stake; **This week**: what moved in the last 7 days per rep (created, won, lost, close dates pushed out of or pulled into this quarter, stage up or down, into or out of Commit); **Coverage**: open pipeline against what the team usually books, win rate, expected close and sales cycle | `Opportunity`, `OpportunityHistory`, `OpportunityFieldHistory` |
 | Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards | `Opportunity` |
 | Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to their Salesforce user (by work email, then name) and routing pools; ramp of recent joiners; selling titles without an EMEA sales role and HiBob vs Salesforce manager differences are flagged | HiBob `commons_searchEmployees`, `User`, LeanData pools |
 | Routing pools | Every EMEA LeanData pool and its members, 90-day assignments and how evenly they're spread, reps missing from routing, joiners due in week 2, inactive members, members getting none | `LeanData__Round_Robin_Setting__c`, `LeanData__Log__c` (counts only), `User` |
-| Account books | Book size per rep (incl. EM book), territory coverage by Sales Region, orphan accounts with reason, split books, routing vs book mismatches, and **Plan moves**: suggested account moves from Heavy to Light books within each team | `Account`, `Opportunity`, LeanData pools |
+| Account books | Book size per rep (incl. EM book), territory coverage by Sales Region, orphan accounts with reason, split books, routing vs book mismatches, **Engagement**: active accounts nobody has touched in 90 days (or ever) and customers without an active Engagement Manager, and **Plan moves**: suggested account moves from Heavy to Light books within each team, untouched accounts first | `Account`, `Opportunity`, LeanData pools |
 
-A **Team** filter (France, DACH, Southern Europe, Iberia & LATAM, Benelux, Nordics, CEE, MEA, SMB,
-Engagement, BDR, Leadership) in the sidebar applies across screens. It is worked out from the owner's Salesforce role
-and never re-runs a query.
+The **scope pill** (a team: France, DACH, Southern Europe, Iberia & LATAM, Benelux, Nordics, CEE, MEA, SMB,
+Engagement, BDR, Leadership; or one manager) applies across screens. Teams are worked out from the owner's
+Salesforce role and changing scope never re-runs a query.
 
 ## Scope and definitions
 
@@ -73,6 +73,22 @@ and never re-runs a query.
   invited (meeting rooms aside), it isn't all-day, cancelled or declined by you. Follow-ups for a colleague
   are open items from Granola meetings of up to three people they attended, plus items they own by full name.
   A leader's numbers add up everyone below them in Salesforce's manager chain, their own included.
+- **This week (movement)**: the last 7 days, New Business and Upsell, per current owner and at the deal's current
+  ARR. Won and lost count by the date actually closed. Created counts opportunities whose first history row is in the
+  window. Pushed is an open deal whose close date left this quarter; pulled is one whose close date came into it.
+  Stage and Commit compare the first value of the week with the last, so a round trip doesn't count; deals created
+  this week only count as created.
+- **Coverage**: there are no quotas in Salesforce, so coverage compares open pipeline with what the team usually
+  books: the average won per quarter over the last 4 completed quarters (a quarter with nothing won counts as 0).
+  Coverage this quarter = open this quarter ÷ what is still to win to reach a usual quarter; next quarter = open
+  next quarter ÷ a usual quarter. Win rate is by ARR over the same 4 quarters, admin merges left out, and falls back
+  to all EMEA when a team has fewer than 10 closed deals. Expected close = won so far + open × win rate, an upper
+  bound because deals that slip out are not removed. Sales cycle is the average days from creation to win.
+- **Stuck in stage**: an open deal closing this or next quarter that has sat in its stage longer than about twice
+  the usual time: stage 0 35 days, 1 55, 2 60, 3 40, 4 30, 5 45, 6 40. It adds 1 to the rep's risk score.
+- **Untouched accounts**: active accounts (customer, pipeline, engaging) with no logged activity in 90 days
+  (`LastActivityDate`), or ever. An untouched book is 3 or more of them, or 20% or more of an active book of 10+.
+  Customers without an Engagement Manager include those whose Engagement Manager is inactive.
 - **Book moves**: per AE team and SMB, active accounts to move from books at 2× the team median or more to
   books at half or less, largest gaps first, each move stopping at the median for both reps.
 - **People matching**: a HiBob person is matched to an active Salesforce user by work email (any role;
@@ -102,7 +118,9 @@ and never re-runs a query.
 
 ## Known gaps
 
-- No quota or target data in Salesforce, so there's no coverage-to-target ratio yet.
+- No quota or target data in Salesforce, so coverage is against usual bookings rather than target. A quota
+  object (or a sheet of targets) would turn it into true attainment and coverage-to-target.
+- Movement uses the deal's current ARR and owner, not the values at the time of the change.
 - HiBob hides people in the Hired state from this connection, so signed-but-not-started joiners
   and open requisitions aren't visible. Both need an ATS connector or wider HiBob access.
 - LeanData vacation schedules live in a long-text JSON field; out-of-office isn't shown.
@@ -114,6 +132,7 @@ dashboard/
   build_datasets.py   # every live query (SOQL / HiBob / Granola call) -> datasets.json
   datasets.json       # generated
   index.html          # page markup (all fixed text lives here)
+  os.css              # the look: tokens, header, tabs, hero, tables, panel
   os-core.js          # loaders (Salesforce, HiBob, Granola), helpers, app shell, person panel, copy
   os-calcs.js         # dash.calc derivations (visible to readers in Sources)
   os-draw.js          # charts, stats, tables, lists, badges, person panel
