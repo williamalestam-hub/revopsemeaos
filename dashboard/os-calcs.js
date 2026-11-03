@@ -334,14 +334,13 @@ dash.calc('rr_kpi', {
 });
 
 // ===================== HIRING =====================
-dash.calc('people', {
-  title: 'EMEA GTM people and routing',
-  description: 'HiBob people matched to a Salesforce user by work email (an active user, any role), or failing that by normalised name against the EMEA roster, with their LeanData pools, days since start and a routing status. Routed roles: AE, SMB, BDR, EM. Someone whose HiBob title is a selling one (GTM Manager, Associate or Team Lead, BDR, Engagement Manager) but whose Salesforce user has no role or a role outside EMEA sales gets that as their status; other roles show as not routed. Also flags when HiBob and Salesforce name a different manager.',
-  inputs: ['hb_people', 'roster', 'rr_members', 'users_all'],
-  fn: (hb_people, roster, rr_members, users_all) => {
+dash.calc('people_core', {
+  title: 'People (HiBob), matched to Salesforce',
+  description: 'HiBob people matched to a Salesforce user by work email (an active user, any role), or failing that by normalised name against the EMEA roster, with days since start and a status. Routed roles (AE, SMB, BDR, EM) get "In a routed role" here; people adds their LeanData pools and the pool status. Someone whose HiBob title is a selling one (GTM Manager, Associate or Team Lead, BDR, Engagement Manager) but whose Salesforce user has no role or a role outside EMEA sales gets that as their status; other roles show as not routed. Also flags when HiBob and Salesforce name a different manager. Needs no LeanData, so the person panel and HiBob checks work without it.',
+  inputs: ['hb_people', 'roster', 'users_all'],
+  fn: (hb_people, roster, users_all) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const kindOfRole = (role) => /^AE-EMEA-/.test(role || '') ? 'AE' : role === 'SMB-EMEA' ? 'SMB' : role === 'BDR-EMEA' ? 'BDR' : /^EM-EMEA/.test(role || '') ? 'EM' : null;
-    const kindOfPool = (p) => /^RR BDR/i.test(p) ? 'BDR' : /^RR SMB/i.test(p) ? 'SMB' : /^EM/i.test(p) ? 'EM' : /^RR(:| Gov)/i.test(p) ? 'AE' : 'Other';
     const SELLER = /(^|\s)(GTM (Manager|Associate|Team Lead)|Business Development Representative|Engagement Manager|Account (Executive|Manager))\b/i;
     const toks = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
     const sameName = (a, b) => {
@@ -365,12 +364,6 @@ dash.calc('people', {
       full.set(t.join(' '), u);
       firstLast.set(t[0] + ' ' + t[t.length - 1], u);
     }
-    const pools = new Map();
-    for (const m of rr_members) {
-      const k = String(m.userId).slice(0, 15);
-      if (!pools.has(k)) pools.set(k, new Set());
-      pools.get(k).add(m.poolName);
-    }
     const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
     return hb_people.map((p) => {
       const t = toks(p.name);
@@ -383,22 +376,39 @@ dash.calc('people', {
       const emea = !!(sf && TEAM[sf.role]);
       const seller = SELLER.test(String(p.title || ''));
       const kind = emea ? kindOfRole(sf.role) : null;
-      const mine = kind ? [...(pools.get(String(sf.userId).slice(0, 15)) || [])].filter((x) => kindOfPool(x) === kind) : [];
       const status = daysIn != null && daysIn < 0 ? 'Not started'
         : !sf ? (daysIn != null && daysIn < 7 ? 'Week 1, no Salesforce user yet' : 'No Salesforce user')
         : !emea && seller ? (sf.role ? 'Role outside EMEA sales' : 'No Salesforce role')
         : !kind ? 'Not routed'
-        : mine.length ? 'In routing'
-        : daysIn != null && daysIn < 7 ? 'Add in week 2'
-        : 'Overdue: add to pool';
+        : 'In a routed role';
       const sfManager = sf ? sf.manager || null : null;
       const mgrDiffers = !!(sf && p.manager && (sfManager ? !sameName(p.manager, sfManager) : true));
       return {
         id: p.id, name: p.name, title: p.title, department: p.department, team: p.team || p.department, site: p.site, manager: p.manager,
         startDate: start, daysIn, sfName: sf ? sf.name : null, sfUserId: sf ? sf.userId : null, sfRole: sf ? sf.role || null : null, sfManager,
         matchedBy: viaEmail ? 'email' : viaName ? 'name' : null, sellerTitle: seller, mgrDiffers,
-        region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', pools: mine.length, status,
+        region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', kind, pools: null, status,
       };
+    });
+  },
+});
+
+dash.calc('people', {
+  title: 'People (HiBob) and their routing pools',
+  description: 'people_core plus, for people in a routed role, the EMEA LeanData pools of their kind (AE, SMB, BDR, EM) and the routing status: in routing, add in week 2 (started under 7 days ago), or overdue for a pool. The Hiring screen falls back to people_core when LeanData can\'t be read.',
+  inputs: ['people_core', 'rr_members'],
+  fn: (people_core, rr_members) => {
+    const kindOfPool = (p) => /^RR BDR/i.test(p) ? 'BDR' : /^RR SMB/i.test(p) ? 'SMB' : /^EM/i.test(p) ? 'EM' : /^RR(:| Gov)/i.test(p) ? 'AE' : 'Other';
+    const pools = new Map();
+    for (const m of rr_members) {
+      const k = String(m.userId).slice(0, 15);
+      if (!pools.has(k)) pools.set(k, new Set());
+      pools.get(k).add(m.poolName);
+    }
+    return people_core.map((p) => {
+      if (p.status !== 'In a routed role') return { ...p, pools: 0 };
+      const mine = [...(pools.get(String(p.sfUserId).slice(0, 15)) || [])].filter((x) => kindOfPool(x) === p.kind);
+      return { ...p, pools: mine.length, status: mine.length ? 'In routing' : p.daysIn != null && p.daysIn < 7 ? 'Add in week 2' : 'Overdue: add to pool' };
     });
   },
 });
@@ -419,6 +429,28 @@ dash.calc('hire_kpi', {
         joined30: ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn < 30).length,
         joined90: recent.length,
         overdue: recent.filter((p) => p.status === 'Overdue: add to pool').length,
+        noSf: recent.filter((p) => p.status === 'No Salesforce user').length,
+      };
+    });
+  },
+});
+
+dash.calc('hire_kpi_basic', {
+  title: 'Hiring headline, without pools',
+  description: 'The hiring headline from people_core, for a viewer who can\'t read LeanData: people on headcount, joined in 30 and 90 days, and joiners with no Salesforce user. Overdue for a pool is unknown here.',
+  inputs: ['people_core'],
+  fn: (people) => {
+    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+    const managers = [...new Set(people.map((p) => p.sfManager).filter(Boolean))];
+    return regions.concat(managers.map((m) => 'M|' + m)).map((region) => {
+      const ps = people.filter((p) => (region.startsWith('M|') ? p.sfManager === region.slice(2) : region === 'All' || p.region === region));
+      const recent = ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn < 90);
+      return {
+        region,
+        headcount: ps.length,
+        joined30: ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn < 30).length,
+        joined90: recent.length,
+        overdue: null,
         noSf: recent.filter((p) => p.status === 'No Salesforce user').length,
       };
     });
@@ -450,7 +482,7 @@ dash.calc('hire_months', {
 dash.calc('hire_teams', {
   title: 'Headcount by team',
   description: 'People on headcount per HiBob team, and how many joined in the last 90 days.',
-  inputs: ['people'],
+  inputs: ['people_core'],
   fn: (people) => {
     const m = new Map();
     for (const p of people) {
@@ -622,13 +654,13 @@ dash.calc('book_pool', {
 // ===================== PERSON =====================
 dash.calc('person', {
   title: 'Person view',
-  description: 'One row per Salesforce person (by name) joining their roster entry, pipeline, created opps, account book and routing. Bookings are in their own calc, so the panel still opens when closed deals cannot be read.',
-  inputs: ['roster', 'pipe_reps', 'cr_leader', 'books_owner', 'rr_people'],
-  fn: (roster, pipe_reps, cr_leader, books_owner, rr_people) => {
+  description: 'One row per Salesforce person (by name) joining their roster entry, pipeline, created opps and account book. Bookings and routing (rr_people) are their own calcs, so the panel still opens when closed deals or LeanData cannot be read.',
+  inputs: ['roster', 'pipe_reps', 'cr_leader', 'books_owner'],
+  fn: (roster, pipe_reps, cr_leader, books_owner) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const m = new Map();
     const get = (name) => {
-      if (!m.has(name)) m.set(name, { name, userId: null, role: null, region: null, manager: null, isActive: null, title: null, createdDate: null, startDate: null, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crNb: 0, crUp: 0, crOpps: 0, crArr: 0, crBdr: 0, accounts: 0, activeAccts: 0, customers: 0, custArr: 0, emCustomers: 0, openPipe: 0, openRenewals: 0, pools: 0, poolNames: '', assignments: 0, routing: null, inRoster: false });
+      if (!m.has(name)) m.set(name, { name, userId: null, role: null, region: null, manager: null, isActive: null, title: null, createdDate: null, startDate: null, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crNb: 0, crUp: 0, crOpps: 0, crArr: 0, crBdr: 0, accounts: 0, activeAccts: 0, customers: 0, custArr: 0, emCustomers: 0, openPipe: 0, openRenewals: 0, inRoster: false });
       return m.get(name);
     };
     for (const u of roster.slice().sort((a, b) => (a.isActive === b.isActive ? 0 : a.isActive ? 1 : -1))) {
@@ -645,7 +677,6 @@ dash.calc('person', {
       Object.assign(o, { accounts: r.accounts, activeAccts: r.active, customers: r.customers, custArr: r.arr, emCustomers: r.emCustomers, openPipe: r.openPipe, openRenewals: r.openRenewals });
       if (!o.role) { o.role = r.role; o.region = r.region; o.manager = r.manager; }
     }
-    for (const r of rr_people) Object.assign(get(r.name), { pools: r.pools, poolNames: r.poolNames, assignments: r.assignments, routing: r.status });
     return [...m.values()].map((o) => ({ ...o, region: o.region || 'Other' }));
   },
 });
@@ -660,11 +691,11 @@ dash.calc('person_bk', {
 dash.calc('person_hb', {
   title: 'Person view, HiBob',
   description: 'HiBob details per person, keyed by their matched Salesforce name (or HiBob name when there is no match): title, team, site, manager, start date, hiring status, how they were matched (email or name), their Salesforce role and manager, and whether the two managers differ.',
-  inputs: ['people'],
+  inputs: ['people_core'],
   fn: (people) => {
     const m = new Map();
     for (const p of people) {
-      m.set(p.sfName || p.name, { name: p.sfName || p.name, hbName: p.name, title: p.title, team: p.team, site: p.site, manager: p.manager, startDate: p.startDate, daysIn: p.daysIn, hiring: p.status, sfMatched: !!p.sfName, matchedBy: p.matchedBy, sfRole: p.sfRole, sfManager: p.sfManager, mgrDiffers: p.mgrDiffers });
+      m.set(p.sfName || p.name, { name: p.sfName || p.name, hbName: p.name, title: p.title, team: p.team, site: p.site, manager: p.manager, startDate: p.startDate, daysIn: p.daysIn, hiring: p.status === 'In a routed role' ? null : p.status, sfMatched: !!p.sfName, matchedBy: p.matchedBy, sfRole: p.sfRole, sfManager: p.sfManager, mgrDiffers: p.mgrDiffers });
     }
     return [...m.values()];
   },
@@ -844,13 +875,12 @@ dash.calc('gr_kpi', {
 });
 
 // ===================== DATA CHECKS =====================
-dash.calc('checks', {
-  title: 'Data checks',
-  description: 'Problems to act on in Salesforce and LeanData: reps missing from routing or due next week, inactive users in pools, reps with past-due opps, orphan accounts by reason, split books, reps whose Salesforce manager is no longer active, and people who left who still own open deals or renewals.',
-  inputs: ['rr_people', 'rr_pools', 'pipe_reps', 'orphans', 'books', 'roster', 'lv_opps'],
-  fn: (rr_people, rr_pools, pipe_reps, orphans, books, roster, lv_opps) => {
+dash.calc('checks_rr', {
+  title: 'Data checks, routing',
+  description: 'LeanData routing problems to act on: reps missing from the pool for their role or due to be added next week, inactive users still in a pool, and pools whose member got no assignment in 90 days. Kept apart from the other checks, so a viewer who can\'t read LeanData still sees the rest.',
+  inputs: ['rr_people', 'rr_pools'],
+  fn: (rr_people, rr_pools) => {
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
-    const money = (v) => { const a = Math.abs(+v || 0); const s = a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 1e3 ? Math.round(a / 1e3) + 'K' : String(Math.round(a)); return (v < 0 ? '−$' : '$') + s; };
     const out = [];
     for (const p of rr_people) {
       const since = p.daysIn != null && p.daysIn >= 0 && p.daysIn < 60 ? 'Started ' + plural(p.daysIn, 'day', 'days') + ' ago' : '';
@@ -863,6 +893,19 @@ dash.calc('checks', {
       if (pool.inactiveMembers) out.push({ id: 'pool:' + pool.pool, area: 'Routing', severity: 'high', title: pool.pool, person: null, region: 'All', manager: null, what: plural(pool.inactiveMembers, 'inactive user', 'inactive users') + ' still in the pool', meta: '', screen: 'routing' });
       if (pool.starved) out.push({ id: 'starved:' + pool.pool, area: 'Routing', severity: 'low', title: pool.pool, person: null, region: 'All', manager: null, what: 'No assignments in 90 days for ' + pool.starved, meta: plural(pool.assignments, 'assignment', 'assignments') + ' went to the others', screen: 'routing' });
     }
+    const rank = { high: 0, medium: 1, low: 2 };
+    return out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.title).localeCompare(String(b.title)));
+  },
+});
+
+dash.calc('checks', {
+  title: 'Data checks',
+  description: 'Problems to act on in Salesforce: reps with past-due opps, orphan accounts by reason, split books, reps whose Salesforce manager is no longer active, and people who left who still own open deals or renewals. Routing, HiBob, leavers\' leads and lead checks are their own calcs (checks_rr, checks_hb, checks_lv, checks_ld), merged on screen.',
+  inputs: ['pipe_reps', 'orphans', 'books', 'roster', 'lv_opps'],
+  fn: (pipe_reps, orphans, books, roster, lv_opps) => {
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const money = (v) => { const a = Math.abs(+v || 0); const s = a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 1e3 ? Math.round(a / 1e3) + 'K' : String(Math.round(a)); return (v < 0 ? '−$' : '$') + s; };
+    const out = [];
     for (const r of pipe_reps) {
       if (r.pastDue > 0) out.push({ id: 'pd:' + r.owner, area: 'Pipeline', severity: r.pastDue >= 3 ? 'high' : 'medium', title: r.owner, person: r.owner, region: r.region, manager: r.manager, what: plural(r.pastDue, 'open opp', 'open opps') + ' past the close date', meta: '', screen: 'pipeline' });
     }
@@ -929,17 +972,17 @@ dash.calc('checks_lv', {
   },
 });
 
-dash.calc('leavers', {
-  title: 'People who left',
-  description: 'Salesforce users with an EMEA role who are no longer active but still hold something: open New Business and Upsell deals and their ARR, open renewals and their contract ARR, the next close date, open leads (neither converted nor disqualified) by status, active accounts (customer, pipeline, engaging), customers and their ARR, customers where they are Engagement Manager, and the EMEA LeanData pools they are still in. People who hold nothing are left out.',
-  inputs: ['roster', 'lv_opps', 'lv_leads', 'books_owner', 'rr_members'],
-  fn: (roster, lv_opps, lv_leads, books_owner, rr_members) => {
+dash.calc('leavers_core', {
+  title: 'People who left: deals, renewals and accounts',
+  description: 'Every Salesforce user with an EMEA role who is no longer active, with what they still hold that needs only Opportunity and Account access: open New Business and Upsell deals and their ARR, open renewals and their contract ARR, the next close date, active accounts (customer, pipeline, engaging), customers and their ARR, and customers where they are Engagement Manager. Leads and LeanData pool seats are added in leavers.',
+  inputs: ['roster', 'lv_opps', 'books_owner'],
+  fn: (roster, lv_opps, books_owner) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const id15 = (x) => String(x || '').slice(0, 15);
     const m = new Map();
     for (const u of roster) {
       if (u.isActive !== false) continue;
-      m.set(id15(u.userId), { userId: u.userId, name: u.name, role: u.role || null, region: TEAM[u.role] || 'Other', manager: u.manager || '(no manager)', deals: 0, dealArr: 0, renewals: 0, renewalArr: 0, nextClose: null, leads: 0, ready: 0, fresh: 0, accounts: 0, customers: 0, customerArr: 0, emCustomers: 0, pools: 0, poolNames: '' });
+      m.set(id15(u.userId), { key: id15(u.userId), userId: u.userId, name: u.name, role: u.role || null, region: TEAM[u.role] || 'Other', manager: u.manager || '(no manager)', deals: 0, dealArr: 0, renewals: 0, renewalArr: 0, nextClose: null, accounts: 0, customers: 0, customerArr: 0, emCustomers: 0 });
     }
     const byName = new Map([...m.values()].map((o) => [o.name, o]));
     for (const r of lv_opps) {
@@ -949,6 +992,22 @@ dash.calc('leavers', {
       else { o.deals += +r.opps || 0; o.dealArr += +r.arrUsd || 0; }
       if (r.nextClose && (!o.nextClose || r.nextClose < o.nextClose)) o.nextClose = r.nextClose;
     }
+    for (const b of books_owner) {
+      const o = byName.get(b.owner);
+      if (!o || b.ownerActive !== false) continue;
+      o.accounts += +b.active || 0; o.customers += +b.customers || 0; o.customerArr += +b.arr || 0; o.emCustomers += +b.emCustomers || 0;
+    }
+    return [...m.values()];
+  },
+});
+
+dash.calc('leavers', {
+  title: 'People who left',
+  description: 'Salesforce users with an EMEA role who are no longer active but still hold something: open deals and renewals, active accounts, customers and Engagement Manager customers (from leavers_core), plus open leads (neither converted nor disqualified) by status and the EMEA LeanData pools they are still in, with what to do first. People who hold nothing are left out. When the leads or LeanData can\'t be read, the screen falls back to leavers_basic.',
+  inputs: ['leavers_core', 'lv_leads', 'rr_members'],
+  fn: (leavers_core, lv_leads, rr_members) => {
+    const id15 = (x) => String(x || '').slice(0, 15);
+    const m = new Map(leavers_core.map((o) => [o.key, { ...o, leads: 0, ready: 0, fresh: 0, pools: 0, poolNames: '' }]));
     for (const r of lv_leads) {
       const o = m.get(id15(r.ownerId));
       if (!o) continue;
@@ -956,11 +1015,6 @@ dash.calc('leavers', {
       o.leads += n;
       if (r.status === 'Ready') o.ready += n;
       else if (r.status === 'New') o.fresh += n;
-    }
-    for (const b of books_owner) {
-      const o = byName.get(b.owner);
-      if (!o || b.ownerActive !== false) continue;
-      o.accounts += +b.active || 0; o.customers += +b.customers || 0; o.customerArr += +b.arr || 0; o.emCustomers += +b.emCustomers || 0;
     }
     const pools = new Map();
     for (const r of rr_members) {
@@ -977,14 +1031,24 @@ dash.calc('leavers', {
   },
 });
 
+dash.calc('leavers_basic', {
+  title: 'People who left, without leads or pools',
+  description: 'The same list as leavers from deals, renewals, accounts, customers and Engagement Manager customers only, for a viewer who can\'t read leads or LeanData. Leads and pool seats show as unknown.',
+  inputs: ['leavers_core'],
+  fn: (leavers_core) => leavers_core
+    .filter((o) => o.deals || o.renewals || o.accounts || o.customers || o.emCustomers)
+    .map((o) => ({ ...o, leads: null, ready: null, fresh: null, pools: null, poolNames: '', status: o.renewals || o.deals || o.customers || o.emCustomers ? 'Hand over revenue' : 'Reassign accounts' }))
+    .sort((a, b) => (b.renewalArr + b.dealArr + b.customerArr) - (a.renewalArr + a.dealArr + a.customerArr) || String(a.name).localeCompare(String(b.name))),
+});
+
 dash.calc('leavers_kpi', {
   title: 'People who left, headline',
-  description: 'People who left who still hold something and what they hold (open deals and renewals with ARR, open and Ready leads, active accounts and customer ARR, pool seats), per team, per manager ("M|<manager>") and for all EMEA.',
+  description: 'People who left who still hold something and what they hold (open deals and renewals with ARR, open and Ready leads, active accounts and customer ARR, Engagement Manager customers, pool seats), per team, per manager ("M|<manager>") and for all EMEA.',
   inputs: ['leavers'],
   fn: (leavers) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
     const managers = [...new Set(leavers.map((r) => r.manager).filter((x) => x && x !== '(no manager)'))];
-    const F = ['deals', 'dealArr', 'renewals', 'renewalArr', 'leads', 'ready', 'accounts', 'customers', 'customerArr', 'pools'];
+    const F = ['deals', 'dealArr', 'renewals', 'renewalArr', 'leads', 'ready', 'accounts', 'customers', 'customerArr', 'emCustomers', 'pools'];
     return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
       const rs = leavers.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
       const o = { region, people: rs.length };
@@ -994,10 +1058,27 @@ dash.calc('leavers_kpi', {
   },
 });
 
+dash.calc('leavers_kpi_basic', {
+  title: 'People who left, headline without leads or pools',
+  description: 'The leavers headline from leavers_basic (deals, renewals, accounts, customers, Engagement Manager customers), per team, per manager and for all EMEA, for a viewer who can\'t read leads or LeanData.',
+  inputs: ['leavers_basic'],
+  fn: (leavers_basic) => {
+    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+    const managers = [...new Set(leavers_basic.map((r) => r.manager).filter((x) => x && x !== '(no manager)'))];
+    const F = ['deals', 'dealArr', 'renewals', 'renewalArr', 'accounts', 'customers', 'customerArr', 'emCustomers'];
+    return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
+      const rs = leavers_basic.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
+      const o = { region, people: rs.length, leads: null, ready: null, pools: null };
+      for (const f of F) o[f] = rs.reduce((s, r) => s + (+r[f] || 0), 0);
+      return o;
+    });
+  },
+});
+
 dash.calc('checks_hb', {
   title: 'Data checks, HiBob',
   description: 'HiBob against Salesforce: people who joined in the last 90 days (past their first week) with no Salesforce user; people with a selling title whose Salesforce user has no role or a role outside EMEA sales, so their pipeline, book and routing are not counted here; and people whose manager in HiBob differs from their manager in Salesforce.',
-  inputs: ['people'],
+  inputs: ['people_core'],
   fn: (people) => {
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
     const out = [];
@@ -1015,20 +1096,6 @@ dash.calc('checks_hb', {
     }
     const rank = { high: 0, medium: 1, low: 2 };
     return out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.title).localeCompare(String(b.title)));
-  },
-});
-
-dash.calc('checks_kpi', {
-  title: 'Data checks headline',
-  description: 'Number of Salesforce and LeanData data checks and urgent ones, per team and for all EMEA.',
-  inputs: ['checks'],
-  fn: (checks) => {
-    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    const managers = [...new Set(checks.map((c) => c.manager).filter((m) => m && m !== '(no manager)'))];
-    return regions.concat(managers.map((m) => 'M|' + m)).map((region) => {
-      const cs = checks.filter((c) => (region.startsWith('M|') ? c.manager === region.slice(2) : region === 'All' || c.region === region));
-      return { region, total: cs.length, high: cs.filter((c) => c.severity === 'high').length };
-    });
   },
 });
 
@@ -1166,7 +1233,7 @@ dash.calc('renewal_list', {
 // ===================== REP RISK =====================
 dash.calc('rep_risk', {
   title: 'Deal risk per rep',
-  description: 'Per rep, for open New Business and Upsell: pipeline this quarter, deals pushed out of this quarter or pulled in (latest close-date change in the last 30 days), close-date edits in 30 days, early-stage deals (stage 0–1) closing this quarter, deals closing this quarter with no contact role, past-due and stale deals, and deals closing this or next quarter with an overdue or missing next-step date. Stuck deals have sat in their stage longer than about twice the usual time. Risk score = 3 per past-due deal + 2 per deal pushed out + 1 per early-stage, no-contact or stuck deal + 0.5 per stale deal.',
+  description: 'Per rep, for open New Business and Upsell: pipeline this quarter, deals pushed out of this quarter or pulled in (latest close-date change in the last 30 days), close-date edits in 30 days, early-stage deals (stage 0–1) closing this quarter, deals closing this quarter with no contact role, past-due and stale deals, and deals closing this or next quarter with an overdue next-step date or no next step at all (neither a note nor a date). Stuck deals have sat in their stage longer than about twice the usual time. Risk score = 3 per past-due deal + 2 per deal pushed out + 1 per early-stage, no-contact or stuck deal + 0.5 per stale deal.',
   inputs: ['pipe_reps', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'pipe_nextstep', 'age_stuck'],
   fn: (pipe_reps, pipe_slips, pipe_edits, pipe_early, pipe_nocontact, pipe_nextstep, age_stuck) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -1314,7 +1381,7 @@ dash.calc('lost_reasons', {
 dash.calc('ramp', {
   title: 'New joiner ramp',
   description: 'People who started in the last 180 days (HiBob start date, matched to Salesforce): opportunities they created from their start month (owner scope, Flow renewals excluded), the date of their first one, open pipeline this quarter, and for BDRs the opps they sourced this quarter and last. Not ramping: 45+ days in a selling role with no opportunity yet.',
-  inputs: ['people', 'cr_owner_m', 'pipe_reps', 'cr_bdrs'],
+  inputs: ['people_core', 'cr_owner_m', 'pipe_reps', 'cr_bdrs'],
   fn: (people, cr_owner_m, pipe_reps, cr_bdrs) => {
     const sell = (role) => /^(AE-EMEA-|SMB-EMEA|EM-EMEA)/.test(role || '');
     const pipe = new Map(pipe_reps.map((r) => [r.owner, r.thisPipe]));
@@ -1343,9 +1410,9 @@ dash.calc('ramp', {
 // ===================== 1:1s AND TEAMS =====================
 dash.calc('team_tree', {
   title: 'Teams and leaders',
-  description: 'Every active Salesforce user with an EMEA sales role or EMEA people below them, with their direct reports and whole team (everyone below them in the Salesforce manager chain) and the team\'s EMEA numbers added up, their own included: pipeline this and next quarter, past-due and stale opps, opps created this quarter, won this quarter and win rate, people missing from routing, reps with a risk score of 5 or more, and other data checks about people in the team (routing and past-due checks are already their own columns). Won and win rate come from Bookings (by the date actually closed). People who left stay in the chain, so their reps still roll up, and the deals they still own count for their team; they are not counted as people. The top EMEA leader is the deepest leader whose team still holds at least 90% of EMEA people.',
-  inputs: ['users_all', 'roster', 'person', 'bookings', 'rr_people', 'rep_risk', 'checks'],
-  fn: (users_all, roster, person, bookings, rr_people, rep_risk, checks) => {
+  description: 'Every active Salesforce user with an EMEA sales role or EMEA people below them, with their direct reports and whole team (everyone below them in the Salesforce manager chain) and the team\'s EMEA numbers added up, their own included: pipeline this and next quarter, past-due and stale opps, opps created this quarter, won this quarter and win rate, reps with a risk score of 5 or more, and other data checks about people in the team (routing and past-due checks are their own columns). Won and win rate come from Bookings (by the date actually closed). People missing from routing are added per team by team_rr, so the scorecard still works when LeanData can\'t be read. People who left stay in the chain, so their reps still roll up, and the deals they still own count for their team; they are not counted as people, but keep a row (with no email) while they still hold pipeline, deals or checks, so the team adds up. The top EMEA leader is the deepest leader whose team still holds at least 90% of EMEA people.',
+  inputs: ['users_all', 'roster', 'person', 'bookings', 'rep_risk', 'checks'],
+  fn: (users_all, roster, person, bookings, rep_risk, checks) => {
     const users = new Map();
     for (const u of users_all) if (u.name && !users.has(u.name)) users.set(u.name, { ...u, active: true });
     // people who left stay in the chain (their reps still report to them in Salesforce) but are not counted as people
@@ -1357,14 +1424,13 @@ dash.calc('team_tree', {
       kids.get(u.manager).push(u.name);
     }
     const own = new Map();
-    const blank = () => ({ emea: 0, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crOpps: 0, crArr: 0, wonThisArr: 0, wonThis: 0, lostThis: 0, routingGaps: 0, riskReps: 0, checks: 0 });
+    const blank = () => ({ emea: 0, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crOpps: 0, crArr: 0, wonThisArr: 0, wonThis: 0, lostThis: 0, riskReps: 0, checks: 0 });
     const get = (n) => { if (!own.has(n)) own.set(n, blank()); return own.get(n); };
     for (const p of person) {
       if (!p.inRoster) continue;
       Object.assign(get(p.name), { emea: p.isActive === false ? 0 : 1, thisPipe: +p.thisPipe || 0, thisOpps: +p.thisOpps || 0, nextPipe: +p.nextPipe || 0, pastDue: +p.pastDue || 0, stale: +p.stale || 0, crOpps: +p.crOpps || 0, crArr: +p.crArr || 0 });
     }
     for (const b of bookings) if (own.has(b.owner)) Object.assign(own.get(b.owner), { wonThisArr: +b.wonThisArr || 0, wonThis: +b.wonThis || 0, lostThis: +b.lostThis || 0 });
-    for (const r of rr_people) if (r.status === 'Missing' || r.status === 'New joiner: overdue') get(r.name).routingGaps += 1;
     for (const r of rep_risk) if (r.score >= 5) get(r.owner).riskReps += 1;
     for (const c of checks) if (c.person && c.area !== 'Routing' && c.area !== 'Pipeline') get(c.person).checks += 1;
     const KEYS = Object.keys(blank());
@@ -1395,22 +1461,41 @@ dash.calc('team_tree', {
     }
     const out = [];
     for (const [n, t] of team) {
-      if (!t.emea) continue;
       const u = users.get(n) || {};
+      // someone who left and still holds pipeline, deals or checks keeps a row, so the team's rows add up to its total
+      const holds = u.active === false && !!(t.thisPipe || t.nextPipe || t.pastDue || t.stale || t.checks || t.riskReps || t.wonThis || t.lostThis);
+      if (!t.emea && !holds) continue;
       const p = person.find((x) => x.name === n) || {};
       const directs = (kids.get(n) || []).filter((k) => (team.get(k) || {}).emea > 0).length;
       const directsAll = (kids.get(n) || []).filter((k) => (users.get(k) || {}).active !== false).length;
-      if (u.active === false && !directs) continue;
+      if (u.active === false && !directs && !holds) continue;
       out.push({
         name: n, userId: u.userId || p.userId || null, email: String(u.email || '').toLowerCase() || null, role: u.role || p.role || null,
         region: p.region || (u.role ? 'Other' : null), manager: u.manager || p.manager || null, inEmea: !!(own.get(n) || {}).emea,
         isLeader: directs > 0, directs, directsAll, active: u.active !== false, teamSize: t.size, people: t.size + (u.active === false ? 0 : 1), emeaPeople: t.emea, isTop: n === top,
         thisPipe: t.thisPipe, thisOpps: t.thisOpps, nextPipe: t.nextPipe, pastDue: t.pastDue, stale: t.stale, crOpps: t.crOpps, crArr: t.crArr,
         wonThisArr: t.wonThisArr, wonThis: t.wonThis, lostThis: t.lostThis, winRate: t.wonThis + t.lostThis ? t.wonThis / (t.wonThis + t.lostThis) : null,
-        routingGaps: t.routingGaps, riskReps: t.riskReps, checks: t.checks,
+        riskReps: t.riskReps, checks: t.checks,
       });
     }
     return out.sort((a, b) => b.emeaPeople - a.emeaPeople || a.name.localeCompare(b.name));
+  },
+});
+
+dash.calc('team_rr', {
+  title: 'Routing gaps per team',
+  description: 'For each person in team_tree, how many people in their team (everyone below them, themselves included) are missing from the LeanData pool for their role, or overdue as new joiners. Its own calc, so the team scorecard still works when LeanData can\'t be read.',
+  inputs: ['team_tree', 'rr_people'],
+  fn: (team_tree, rr_people) => {
+    const kids = new Map();
+    for (const t of team_tree) if (t.manager) { if (!kids.has(t.manager)) kids.set(t.manager, []); kids.get(t.manager).push(t.name); }
+    const gap = new Set(rr_people.filter((r) => r.status === 'Missing' || r.status === 'New joiner: overdue').map((r) => r.name));
+    return team_tree.map((t) => {
+      const s = new Set([t.name]); const q = [t.name];
+      while (q.length) for (const k of kids.get(q.shift()) || []) if (!s.has(k)) { s.add(k); q.push(k); }
+      let n = 0; for (const x of s) if (gap.has(x)) n += 1;
+      return { name: t.name, routingGaps: n };
+    });
   },
 });
 
@@ -1444,7 +1529,7 @@ dash.calc('oo_upcoming', {
 
 dash.calc('oo_followups', {
   title: 'Follow-ups per colleague',
-  description: 'Open action items from your Granola notes for each colleague: items from meetings of up to three people they attended, and items they own from any meeting (by full name, or by first name when they were one of the meeting\'s listed attendees). Also the latest meeting of two or three people with them, as "last time".',
+  description: 'Open action items from your Granola notes for each colleague: items from meetings of up to three people they attended, and items they own from any meeting (by full name, or by first name when they were one of the meeting\'s listed attendees), marked when they come from your private notes. Also the latest meeting of two or three people with them, as "last time".',
   inputs: ['gr_actions', 'gr_notes', 'users_all'],
   fn: (gr_actions, gr_notes, users_all) => {
     const toks = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
@@ -1481,7 +1566,7 @@ dash.calc('oo_followups', {
         }
         if (e && e !== a.me) who.add(e);
       }
-      for (const email of who) out.push({ key: email + '|' + a.id, email, kind: 'item', id: a.id, item: a.item, owner: a.owner, bucket: a.bucket, due: a.due, dueStatus: a.dueStatus, meeting: a.meeting, meetingId: a.meetingId, date: a.date, url: a.url });
+      for (const email of who) out.push({ key: email + '|' + a.id, email, kind: 'item', id: a.id, item: a.item, owner: a.owner, bucket: a.bucket, due: a.due, dueStatus: a.dueStatus, meeting: a.meeting, meetingId: a.meetingId, date: a.date, url: a.url, priv: a.source === 'private' });
     }
     return out;
   },
@@ -1490,8 +1575,8 @@ dash.calc('oo_followups', {
 dash.calc('oo_points', {
   title: '1:1 numbers and talking points',
   description: 'For each EMEA person and leader, the numbers and talking points a 1:1 agenda opens with: for a leader the whole team (everyone below them), otherwise their own. Numbers: pipeline this and next quarter, created this quarter, won this quarter and win rate. Talking points, most urgent first: past-due opps, deals pushed out of the quarter, early-stage deals closing this quarter, overdue or missing next steps, deals stuck in their stage, no contact role, stale opps, the riskiest large deals, renewals rated High, downselling or past due, people missing from routing, book balance, untouched accounts, customers without an Engagement Manager, and data checks. A BDR\'s numbers are what they sourced.',
-  inputs: ['team_tree', 'rep_risk', 'deal_list', 'renewal_list', 'rr_people', 'books_owner', 'checks', 'cr_bdrs', 'engagement'],
-  fn: (team_tree, rep_risk, deal_list, renewal_list, rr_people, books_owner, checks, cr_bdrs, engagement) => {
+  inputs: ['team_tree', 'rep_risk', 'deal_list', 'renewal_list', 'books_owner', 'checks', 'cr_bdrs', 'engagement'],
+  fn: (team_tree, rep_risk, deal_list, renewal_list, books_owner, checks, cr_bdrs, engagement) => {
     const usd = (v) => {
       const n = +v || 0, a = Math.abs(n);
       if (a < 0.5) return '$0';
@@ -1548,11 +1633,7 @@ dash.calc('oo_points', {
         if (/Past due/.test(r.flags || '')) bits.push('past its close date');
         push('talk', r.rating === 'High' || /Past due/.test(r.flags || '') ? 'high' : 'medium', 'Renewal: ' + r.opp + ' (' + usd(r.renewingArrUsd) + ', closes ' + day(r.closeDate) + (lead ? ', ' + r.owner : '') + ') ' + bits.join(' and ') + '.', { screen: 'pipeline', view: 'renewals', oppId: r.oppId });
       }
-      // routing
-      const gaps = rr_people.filter((r) => inT.has(r.name) && (r.status === 'Missing' || r.status === 'New joiner: overdue'));
-      if (gaps.length) push('talk', 'high', lead ? plural(gaps.length, 'person is', 'people are') + ' missing from routing: ' + gaps.slice(0, 4).map((g) => g.name).join(', ') + (gaps.length > 4 ? ' and ' + (gaps.length - 4) + ' more' : '') + '.' : 'Not in a routing pool for their role' + (gaps[0].suggested ? ': peers are in ' + gaps[0].suggested : '') + '.', { screen: 'routing', view: 'people' });
-      const soon = rr_people.filter((r) => inT.has(r.name) && r.status === 'New: add next week');
-      if (soon.length) push('talk', 'low', lead ? plural(soon.length, 'new joiner', 'new joiners') + ' to add to routing next week: ' + soon.slice(0, 4).map((g) => g.name).join(', ') + '.' : 'Due to be added to routing next week (week 2).', { screen: 'routing', view: 'people' });
+      // routing points come from oo_points_rr, so agendas still build when LeanData can't be read
       // books
       const bk = books_owner.filter((b) => inT.has(b.owner) && (b.balance === 'Heavy' || b.balance === 'Light'));
       if (bk.length && lead) push('talk', 'low', 'Books out of balance: ' + bk.slice(0, 4).map((b) => b.owner + ' ' + b.balance.toLowerCase() + ' (' + b.active + ' active, ' + (b.vsMedian != null ? b.vsMedian.toFixed(1) + '× median' : '') + ')').join(', ') + '.', { screen: 'books', view: 'reps' });
@@ -1573,6 +1654,30 @@ dash.calc('oo_points', {
 
 
 // ===================== TERRITORY PLANNING =====================
+dash.calc('oo_points_rr', {
+  title: '1:1 talking points, routing',
+  description: 'The routing talking points of each 1:1 agenda (for a leader, their whole team): people missing from the LeanData pool for their role, and new joiners to add next week. Its own calc, so agendas still build when LeanData can\'t be read; the agenda merges them in by severity.',
+  inputs: ['team_tree', 'rr_people'],
+  fn: (team_tree, rr_people) => {
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const kids = new Map();
+    for (const t of team_tree) if (t.manager) { if (!kids.has(t.manager)) kids.set(t.manager, []); kids.get(t.manager).push(t.name); }
+    const subtree = (n) => { const s = new Set([n]); const q = [n]; while (q.length) { for (const k of kids.get(q.shift()) || []) if (!s.has(k)) { s.add(k); q.push(k); } } return s; };
+    const out = [];
+    for (const t of team_tree) {
+      if (!t.email) continue;
+      const lead = t.isLeader;
+      const inT = lead ? subtree(t.name) : new Set([t.name]);
+      const push = (sev, text, extra) => out.push({ key: t.email + '|talk|rr|' + out.length, email: t.email, name: t.name, section: 'talk', sev, order: 1000 + out.length, text, ...(extra || {}) });
+      const gaps = rr_people.filter((r) => inT.has(r.name) && (r.status === 'Missing' || r.status === 'New joiner: overdue'));
+      if (gaps.length) push('high', lead ? plural(gaps.length, 'person is', 'people are') + ' missing from routing: ' + gaps.slice(0, 4).map((g) => g.name).join(', ') + (gaps.length > 4 ? ' and ' + (gaps.length - 4) + ' more' : '') + '.' : 'Not in a routing pool for their role' + (gaps[0].suggested ? ': peers are in ' + gaps[0].suggested : '') + '.', { screen: 'routing', view: 'people' });
+      const soon = rr_people.filter((r) => inT.has(r.name) && r.status === 'New: add next week');
+      if (soon.length) push('low', lead ? plural(soon.length, 'new joiner', 'new joiners') + ' to add to routing next week: ' + soon.slice(0, 4).map((g) => g.name).join(', ') + '.' : 'Due to be added to routing next week (week 2).', { screen: 'routing', view: 'people' });
+    }
+    return out;
+  },
+});
+
 dash.calc('book_moves', {
   title: 'Suggested book moves',
   description: 'A starting point for territory planning: within each AE team and SMB, active accounts (customer, pipeline, engaging) to move from Heavy books (2x the team median or more) to Light ones (half the median or less), largest gaps first, each move taking both reps toward the median. Active reps who own no accounts yet count as Light. A receiver who joined in the last 90 days (Salesforce user created or Legora start date) is marked as a new joiner; what a Heavy book has left over when no Light book remains is listed without a receiver. Each move starts with the giver\'s accounts that nobody has touched in 90 days.',

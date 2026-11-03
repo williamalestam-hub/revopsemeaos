@@ -152,8 +152,8 @@
           <p class="hero-sub">Here's what needs you across EMEA pipeline, people, routing and territory.</p>
           <div class="hero-pills">
             <button class="hpill" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="forYou" data-row="0">—</b> next steps for you</button>
-            <button class="hpill" type="button" data-nav="oneonone"><b data-draw="kpi-oo" data-source="oo_kpi" data-field="today" data-row="0">—</b> 1:1s left today</button>
-            <button class="hpill warn" type="button" data-nav="actions" data-nav-view="checks"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent data checks</button>
+            <button class="hpill" type="button" data-nav="oneonone" data-nav-view="upcoming"><b data-draw="kpi-oo" data-source="oo_kpi" data-field="today" data-row="0">—</b> 1:1s left today</button>
+            <button class="hpill warn" type="button" data-nav="actions" data-nav-view="checks"><b data-draw="kpi-checks" data-source="checks" data-field="high">—</b> urgent data checks</button>
             <button class="hpill" type="button" data-nav="leads" data-nav-view="ready"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoOverdue" data-where="region=All" data-fetchpriority="low">—</b> demo requests waiting 2+ days</button>
           </div>
           <div class="hero-acts">
@@ -185,19 +185,19 @@
         <button class="home-card" type="button" data-nav="created" id="card-created">
           <span class="card-top"><span>Created this week <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg></span>
           <span class="card-value"><b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="thisWeekOpps" data-row="0" data-fetchpriority="high">—</b></span>
-          <span class="stat-sub">Last week <b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="lastWeekOpps" data-row="0">—</b> · pace <b data-draw="kpi-pace" data-source="cr_pace" data-field="deltaOpps" data-row="0">—</b></span>
+          <span class="stat-sub">Last week <b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="lastWeekOpps" data-row="0">—</b> · pace vs last quarter <b data-draw="kpi-pace" data-source="cr_pace" data-field="deltaOpps" data-row="0">—</b></span>
         </button>
         <button class="home-card" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou" id="card-actions">
           <span class="card-top">Action items for you<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg></span>
           <span class="card-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="forYou" data-row="0">—</b></span>
           <span class="stat-sub"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="meetings" data-row="0">—</b> meetings with next steps</span>
         </button>
-        <button class="home-card" type="button" data-nav="routing" id="card-routing">
+        <button class="home-card" type="button" data-nav="routing" data-nav-view="people" id="card-routing">
           <span class="card-top">Reps missing from routing<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/></svg></span>
           <span class="card-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="missing" data-where="region=All">—</b></span>
           <span class="stat-sub"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="weekOne" data-where="region=All">—</b> joiners to add next week</span>
         </button>
-        <button class="home-card" type="button" data-nav="books" id="card-books">
+        <button class="home-card" type="button" data-nav="books" data-nav-view="orphans" id="card-books">
           <span class="card-top"><span>Orphan accounts <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5.5A2.5 2.5 0 0 1 12 7.5V20a2 2 0 0 0-2-2H4zM20 5h-5.5A2.5 2.5 0 0 0 12 7.5V20a2 2 0 0 1 2-2h6z"/></svg></span>
           <span class="card-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="accounts" data-row="0">—</b></span>
           <span class="stat-sub"><b data-draw="kpi-orph-usd" data-source="orphan_kpi" data-field="arr" data-row="0">—</b> ARR on them</span>
@@ -238,7 +238,7 @@
               </div>
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
-            <ul class="ilist" data-draw="home-checks" data-source="checks checks_hb checks_lv checks_ld"></ul>
+            <ul class="ilist" data-draw="home-checks" data-source="checks checks_rr checks_hb checks_lv checks_ld"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-checks"></span>
               <p class="os-empty" data-msg-for="home-checks" data-msg="empty" hidden>No problems found.</p>
               <p class="os-empty" data-msg-for="home-checks" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
@@ -282,7 +282,7 @@
           <div class="pane" id="home-weeks">
             <div class="pane-head">
               <div>
-                <h2 class="pane-title">Created per week</h2>
+                <h2 class="pane-title">Created per week <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2>
                 <p class="pane-note">Opps created on EMEA-owned deals, last 13 weeks.</p>
               </div>
             </div>
@@ -319,7 +319,7 @@
         <div class="stat" id="stat-gr-unassigned"><span class="stat-label">Unassigned</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="unassigned" data-row="0">—</b></span><span class="stat-sub">no owner in the note</span></div>
         <div class="stat" id="stat-gr-others"><span class="stat-label">With others</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="others" data-row="0">—</b></span><span class="stat-sub">someone else owns it</span></div>
         <div class="stat" id="stat-gr-due"><span class="stat-label">Yours overdue</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="overdue" data-row="0">—</b></span><span class="stat-sub"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="dueSoon" data-row="0">—</b> due in 3 days</span></div>
-        <div class="stat" id="stat-checks"><span class="stat-label">Data checks</span><span class="stat-value"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="total" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent · <b data-draw="kpi-checks-hb" data-source="checks_hb_kpi" data-field="total" data-where="region=All">—</b> more from HiBob</span></div>
+        <div class="stat" id="stat-checks"><span class="stat-label">Data checks</span><span class="stat-value"><b data-draw="kpi-checks" data-source="checks" data-field="total">—</b></span><span class="stat-sub"><b data-draw="kpi-checks" data-source="checks" data-field="high">—</b> urgent · <b data-draw="kpi-checks-hb" data-source="checks_hb_kpi" data-field="total" data-where="region=All">—</b> of them from HiBob</span></div>
       </div>
       <div class="vtabs" role="tablist" aria-label="Action item views">
         <button class="vtab" role="tab" type="button" data-view-tab="actions:meetings" aria-selected="true">From meetings</button>
@@ -375,10 +375,11 @@
               <button class="btn" type="button" data-copy-checks><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
           </div>
-          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb checks_lv checks_ld"></ul>
+          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_rr checks_hb checks_lv checks_ld"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="check-list"></span>
               <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
               <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="check-list" data-msg="error" hidden>Couldn't load these checks. Routing checks need read access to LeanData and lead checks to the lead routing fields; ask RevOps if it keeps failing.</p>
             </div></div>
         </div>
       </div>
@@ -420,7 +421,7 @@
           <div class="pane" id="oo-agenda">
             <div class="pane-head">
               <div><h2 class="pane-title" data-draw="oo-who" data-source="team_tree oo_upcoming">—</h2><p class="pane-note"><span data-draw="oo-when" data-source="oo_upcoming">—</span><span data-oo-note="nobooking" hidden>No 1:1 with them in the next 14 days.</span></p></div>
-              <div class="tools"><button class="btn btn-primary" type="button" data-ask-agenda><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>Send to Claude</button><span data-draw="oo-mail" data-source="oo_points oo_followups"></span>
+              <div class="tools"><button class="btn btn-primary" type="button" data-ask-agenda hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>Send to Claude</button><span data-draw="oo-mail" data-source="oo_points oo_followups"></span>
               <button class="ibtn" type="button" data-copy-agenda aria-label="Copy agenda" title="Copy the agenda for the invite, your notes or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
             </div>
             <div class="pane-body ag">
@@ -429,6 +430,7 @@
                 <h3>Follow-ups from your notes</h3>
                 <p class="ag-last" data-oo-note="last" hidden><span>Last time:</span> <span data-draw="oo-last" data-source="oo_followups">—</span></p>
                 <ul class="ilist ag-list" data-draw="oo-follow" data-source="oo_followups"></ul>
+                <p class="pd-note" data-oo-note="private" hidden>Follow-ups marked Private note come from your private Granola notes. They show here for you only and are left out of the agenda you copy, email or send.</p>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-follow"></span>
                   <p class="os-empty" data-msg-for="oo-follow" data-msg="empty" hidden>No open follow-ups with them in your Granola notes from this window.</p>
                   <p class="os-empty" data-msg-for="oo-follow" data-msg="connect" hidden>Connect Granola in your claude.ai connectors to see follow-ups from your meetings.</p>
@@ -444,7 +446,7 @@
               </section>
               <section class="ag-sec">
                 <h3>Talking points</h3>
-                <ul class="ag-bullets ag-talk" data-draw="oo-talk" data-source="oo_points"></ul>
+                <ul class="ag-bullets ag-talk" data-draw="oo-talk" data-source="oo_points oo_points_rr"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-talk"></span>
                   <p class="os-empty" data-msg-for="oo-talk" data-msg="empty" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance or data checks.</p>
                 </div>
@@ -471,10 +473,10 @@
             <div class="stat"><span class="stat-label">Created this quarter</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="crOpps">—</b></span><span class="stat-sub"><b data-draw="kpi-team" data-source="team_tree" data-field="crArr" data-fmt="usd">—</b> ARR</span></div>
             <div class="stat"><span class="stat-label">Won this quarter</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="wonThisArr" data-fmt="usd">—</b></span><span class="stat-sub">win rate <b data-draw="kpi-team" data-source="team_tree" data-field="winRate" data-fmt="pct">—</b></span></div>
             <div class="stat"><span class="stat-label">Past due</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="pastDue">—</b></span><span class="stat-sub">opps past their close date</span></div>
-            <div class="stat"><span class="stat-label">Routing gaps</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="routingGaps">—</b></span><span class="stat-sub"><b data-draw="kpi-team" data-source="team_tree" data-field="checks">—</b> data checks</span></div>
+            <div class="stat"><span class="stat-label">Routing gaps</span><span class="stat-value"><b data-draw="kpi-team-rr" data-source="team_rr" data-field="routingGaps">—</b></span><span class="stat-sub"><b data-draw="kpi-team" data-source="team_tree" data-field="checks">—</b> data checks</span></div>
           </div>
           <div class="pane-scroll">
-            <table class="tbl" data-source="team_tree" data-row-key="name">
+            <table class="tbl" data-source="team_tree team_rr" data-row-key="name">
               <thead><tr>
                 <th data-field="name">Name</th>
                 <th data-field="region">Team</th>
@@ -608,7 +610,7 @@
           <div class="pane" id="bk-lost">
             <div class="pane-head"><div><h2 class="pane-title">Why deals were lost</h2><p class="pane-note">Lost New Business and Upsell this quarter by lost reason. Admin merges are marked and left out of win rates.</p></div></div>
             <div class="pane-body"><div class="os-chart" data-draw="lost-chart" data-source="lost_reasons"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="lost-chart"></span>
-              <p class="os-empty" data-msg-for="lost-chart" data-msg="empty" hidden>No lost deals for this team this quarter or last.</p>
+              <p class="os-empty" data-msg-for="lost-chart" data-msg="empty" hidden>No lost deals for this team this quarter yet.</p>
               <p class="os-empty" data-msg-for="lost-chart" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
             </div></div>
           </div>
@@ -779,7 +781,7 @@
               <p class="os-empty" data-msg-for="renew-table" data-msg="empty" hidden>No large open renewals for this team, quarter and flag.</p>
               <p class="os-empty" data-msg-for="renew-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
               <p class="os-empty" data-msg-for="renew-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
-              <p class="os-empty" data-msg-for="renew-table" data-msg="limit" hidden>Showing the 100 largest. Search or pick a flag to narrow it down.</p>
+              <p class="os-empty" data-msg-for="renew-table" data-msg="limit" hidden>Showing the first 100 in this order. Search or pick a flag to narrow it down.</p>
             </div>
           </div>
           <div class="pane-foot"><p class="pane-note">The 300 largest open renewals closing this or next quarter (pick the quarter above), by renewing contract ARR. Risk rating is read from "Renewal Risk Rating" in Next step. Net change is the incremental ARR on the renewal.</p></div>
@@ -901,7 +903,7 @@
               <p class="os-empty" data-msg-for="deal-table" data-msg="empty" hidden>No large open deals for this team, quarter and flag.</p>
               <p class="os-empty" data-msg-for="deal-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
               <p class="os-empty" data-msg-for="deal-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
-              <p class="os-empty" data-msg-for="deal-table" data-msg="limit" hidden>Showing the 100 largest. Search or pick a flag to narrow it down.</p>
+              <p class="os-empty" data-msg-for="deal-table" data-msg="limit" hidden>Showing the first 100 in this order. Search or pick a flag to narrow it down.</p>
             </div>
           </div>
           <div class="pane-foot"><p class="pane-note">The 300 largest open New Business and Upsell deals closing this or next quarter (pick the quarter above). Risk adds 3 for past due or Commit at stage 0–2, 2 for early stage closing this quarter, no activity in 30 days or stuck in stage, 1 for no next step or an overdue one.</p></div>
@@ -1064,7 +1066,7 @@
             <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="hire-search" data-search="hire-table" placeholder="Search people, teams or managers" aria-label="Search new joiners"></label>
           <button class="ibtn" type="button" data-copy-table="hire-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
-            <table class="tbl" data-source="people" data-row-key="id">
+            <table class="tbl" data-source="people people_core" data-row-key="id">
               <thead><tr>
                 <th data-field="name">Name</th>
                 <th data-field="title">Title</th>
@@ -1160,9 +1162,9 @@
           <div class="stat"><span class="stat-label">Active accounts</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="accounts">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="customerArr" data-fmt="usd">—</b> customer ARR</span></div>
         </div>
         <div class="pane" id="hire-leavers">
-          <div class="pane-head"><div><h2 class="pane-title">People who left</h2><p class="pane-note">Salesforce users with an EMEA role who are no longer active but still own deals, renewals, leads or accounts, or keep a seat in a LeanData pool. The sparkle asks your Claude for a hand-over plan; it proposes new owners and waits for your OK before changing anything.</p></div><button class="ibtn" type="button" data-copy-table="lv-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          <div class="pane-head"><div><h2 class="pane-title">People who left</h2><p class="pane-note">Salesforce users with an EMEA role who are no longer active but still own deals, renewals, leads or accounts, are Engagement Manager on customers, or keep a seat in a LeanData pool. Leads and pools show — when your access can't read them. The sparkle asks your Claude for a hand-over plan; it proposes new owners and waits for your OK before changing anything.</p></div><button class="ibtn" type="button" data-copy-table="lv-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
-            <table class="tbl" data-source="leavers" data-row-key="userId">
+            <table class="tbl" data-source="leavers leavers_basic" data-row-key="userId">
               <thead><tr>
                 <th data-field="name">Name</th>
                 <th data-field="region">Team</th>
@@ -1176,6 +1178,7 @@
                 <th class="num" data-field="ready">Ready</th>
                 <th class="num" data-field="accounts">Accounts</th>
                 <th class="num" data-field="customerArr">Customer ARR</th>
+                <th class="num" data-field="emCustomers">EM customers</th>
                 <th class="num" data-field="pools">Pools</th>
                 <th data-field="status">To do</th>
               </tr></thead>
@@ -1285,8 +1288,8 @@
       <div class="statbar">
         <div class="stat" id="stat-bk-accts"><span class="stat-label">Accounts in EMEA books</span><span class="stat-value"><b data-draw="kpi-bk" data-source="books_kpi" data-field="accounts" data-where="region=All" data-fetchpriority="high">—</b></span><span class="stat-sub"><b data-draw="kpi-bk" data-source="books_kpi" data-field="customers" data-where="region=All">—</b> customers</span></div>
         <div class="stat" id="stat-bk-arr"><span class="stat-label">Customer ARR</span><span class="stat-value"><b data-draw="kpi-bk-usd" data-source="books_kpi" data-field="arr" data-where="region=All">—</b></span><span class="stat-sub">owned by EMEA reps</span></div>
-        <div class="stat" id="stat-bk-orphans"><span class="stat-label">Orphan active accounts</span><span class="stat-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="accounts" data-row="0">—</b></span><span class="stat-sub"><b data-draw="kpi-orph-usd" data-source="orphan_kpi" data-field="arr" data-row="0">—</b> ARR, strategic and partners not counted</span></div>
-        <div class="stat" id="stat-bk-split"><span class="stat-label">Split books</span><span class="stat-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="splitBooks" data-row="0">—</b></span><span class="stat-sub">main owner holds under 80%</span></div>
+        <div class="stat" id="stat-bk-orphans"><span class="stat-label">Orphan active accounts <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><span class="stat-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="accounts" data-row="0">—</b></span><span class="stat-sub"><b data-draw="kpi-orph-usd" data-source="orphan_kpi" data-field="arr" data-row="0">—</b> ARR, strategic and partners not counted</span></div>
+        <div class="stat" id="stat-bk-split"><span class="stat-label">Split books <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><span class="stat-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="splitBooks" data-row="0">—</b></span><span class="stat-sub">main owner holds under 80%</span></div>
       </div>
       <div class="vtabs" role="tablist" aria-label="Account book views">
         <button class="vtab" role="tab" type="button" data-view-tab="books:reps" aria-selected="true">Reps</button>
@@ -1334,7 +1337,7 @@
 
       <div class="view" id="books-coverage" data-view-panel="books:coverage" hidden>
         <div class="pane" id="bk-coverage">
-          <div class="pane-head"><div><h2 class="pane-title">Territory coverage</h2><p class="pane-note">Active accounts in each EMEA sales region by who owns them. Unassigned is System User or a user with no role. Strategic is the global strategic team.</p></div><button class="ibtn" type="button" data-copy-table="bk-cov-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          <div class="pane-head"><div><h2 class="pane-title">Territory coverage <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">Active accounts in each EMEA sales region by who owns them. Unassigned is System User or a user with no role. Strategic is the global strategic team.</p></div><button class="ibtn" type="button" data-copy-table="bk-cov-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
             <table class="tbl" data-source="coverage" data-row-key="salesRegion">
               <thead><tr>
@@ -1396,7 +1399,7 @@
               <p class="os-empty" data-msg-for="bk-orphan-table" data-msg="limit" hidden>Showing the first 300. Search to narrow it down.</p>
             </div>
           </div>
-          <div class="pane-foot"><p class="pane-note">Active accounts in an EMEA region whose owner is inactive, has no role, is RevOps or sits outside EMEA. Strategic and partnership owners may be intended, so they're marked review.</p></div>
+          <div class="pane-foot"><p class="pane-note"><span class="scope-tag" data-scope-tag hidden>All EMEA</span> Active accounts in an EMEA region whose owner is inactive, has no role, is RevOps or sits outside EMEA. Strategic and partnership owners may be intended, so they're marked review.</p></div>
         </div>
       </div>
 
@@ -1743,6 +1746,7 @@
     <p class="toast" data-toast="fail" role="status" hidden>Couldn't copy. Select the text and copy it instead.</p>
     <p class="toast" data-toast="asked" role="status" hidden>Handed to Claude. Check your conversation.</p>
     <p class="toast" data-toast="askfail" role="status" hidden>Couldn't reach Claude. Open the chat beside the dashboard and try again.</p>
+    <p class="toast" data-toast="tickfail" role="status" hidden>Couldn't save that tick. Try again in a moment.</p>
   </main>
 
   <!-- ===================== PERSON PANEL ===================== -->
@@ -1758,7 +1762,7 @@
     <p class="pd-note" data-pd-note="missing" hidden>This person isn't in the EMEA Salesforce roster or HiBob's EMEA departments, so there's nothing more to show.</p>
     <p class="pd-note" data-pd-note="nosf" hidden>No Salesforce user matched this HiBob person by email or name, so only their HiBob details show.</p>
     <p class="pd-note" data-pd-note="outside" hidden>Their Salesforce user is not in an EMEA sales role, so only their HiBob details show.</p>
-    <div class="pd-chips" data-draw="pd-chips" data-source="person person_hb"></div>
+    <div class="pd-chips" data-draw="pd-chips" data-source="person person_hb rr_people"></div>
 
     <section class="pd-sec">
       <h3>Salesforce</h3>
@@ -1825,10 +1829,10 @@
     <section class="pd-sec">
       <h3>Routing</h3>
       <dl class="pd-dl">
-        <div><dt>Pools</dt><dd data-draw="pd-num" data-source="person" data-f="pools">—</dd></div>
-        <div><dt>Assigned, 90 days</dt><dd data-draw="pd-num" data-source="person" data-f="assignments">—</dd></div>
+        <div><dt>Pools</dt><dd data-draw="pd-num" data-source="rr_people" data-f="pools">—</dd></div>
+        <div><dt>Assigned, 90 days</dt><dd data-draw="pd-num" data-source="rr_people" data-f="assignments">—</dd></div>
       </dl>
-      <ul class="pd-pools" data-draw="pd-pools" data-source="person"></ul>
+      <ul class="pd-pools" data-draw="pd-pools" data-source="rr_people"></ul>
     </section>
     <section class="pd-sec" data-pd-leads hidden>
       <h3>Leads</h3>
@@ -1853,7 +1857,7 @@
     <section class="pd-sec" data-pd-team hidden>
       <h3>Team</h3>
       <div class="pd-team">
-        <table class="tbl" data-source="person" data-row-key="name">
+        <table class="tbl" data-source="person rr_people" data-row-key="name">
           <thead><tr>
             <th data-field="name">Name</th>
             <th class="num" data-field="thisPipe">Pipeline</th>
@@ -1869,7 +1873,7 @@
       </div>
     </section>
     <div class="pd-actions">
-      <span class="pd-act" data-draw="pd-act" data-source="person users_all leavers"></span>
+      <span class="pd-act" data-draw="pd-act" data-source="person users_all leavers leavers_basic"></span>
       <button class="btn" type="button" data-prep-oo><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>Prep a 1:1</button>
       <button class="btn" type="button" data-copy-person-id><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy Salesforce user ID</button>
     </div>

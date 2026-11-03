@@ -25,7 +25,10 @@ manager, their team (with a "Prep a 1:1" button).
   and the link follows you (`#pipeline-deals` opens that view).
 - **Tick off next steps**: the circle in front of an action item marks it done; it leaves your lists and
   counts, and "Show ticked off" brings it back to undo. Ticks are yours alone: they are kept in your own
-  private part of the dashboard's database, and nobody else (the owner included) can read them.
+  private part of the dashboard's database, and nobody else (the owner included) can read them. Each tick saves
+  only its own change, so ticking in two tabs or on two devices doesn't undo the other.
+- **Private notes stay private**: follow-ups from your private Granola notes show on the 1:1 screen marked
+  Private note, for you only; they are left out of the agenda you copy, email or send to Claude.
 - **Copy**: every table has a copy button (paste into Sheets or Slack, as shown, sorted and searched);
   Home has *Copy weekly summary*; action items and data checks copy as checklists.
 
@@ -94,7 +97,8 @@ Salesforce role and changing scope never re-runs a query.
 - **Leavers**: a Salesforce user with an EMEA role who is no longer active but still owns open opportunities
   (any type), open leads (neither converted nor disqualified), active accounts, customers as Engagement Manager, or
   a seat in an EMEA LeanData pool. Open deals and renewals are urgent data checks; leads are urgent at 10 or more
-  Ready or New. Lead checks come from their own source, so a viewer without Lead access still sees the rest.
+  Ready or New. Leads and pool seats come from their own sources, so a viewer without Lead or LeanData access still
+  sees the deals, renewals and accounts (leads and pools then show —).
 - **Leads in scope**: leads an EMEA seller owns (any country), plus leads that are EMEA by country (`Region__c`) or
   by LeanData routing region (`Routing_Region__c`), whoever owns them. They count for their current owner's team and
   manager; the Marketing Queue and owners outside EMEA sales show under All EMEA only. By source is always all EMEA.
@@ -138,6 +142,15 @@ Salesforce role and changing scope never re-runs a query.
   3 days is due soon.
 - Ticking an item off in the app doesn't change the note in Granola. "Copy as checklist" still moves
   the open ones into your task tool.
+
+## When a source can't be read
+
+Each optional source is its own calculation, so a viewer whose access can't read one still gets the rest:
+without LeanData, routing pools, routing checks, routing gaps and pool seats show — or "not available", while the
+person panel, data checks, team scorecard, 1:1 agendas and Leavers (deals, renewals, accounts) keep working;
+without Lead access, the Leads screen and leavers' leads are missing; without HiBob, the Hiring screen and HiBob
+checks. A connector that isn't connected says "Connect … in your claude.ai connectors" rather than "Failed to load".
+The weekly summary waits for its sources and says "not available" for one that failed instead of leaving it out.
 
 ## Known gaps
 

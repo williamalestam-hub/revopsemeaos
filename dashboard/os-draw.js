@@ -170,7 +170,14 @@ OS.defTable('cr-rep-table', ['cr_leader'], () => (dash.data('cr_leader').data ||
 
 // ===================== ACTION ITEMS =====================
 dash.draw('kpi-gr', (el) => OS.value(el, ['gr_kpi'], () => OS.num(grCount(el))));
-dash.draw('kpi-checks', (el) => OS.value(el, ['checks_kpi'], () => OS.num(regionRow(el, 'checks_kpi')[keepField(el)] || 0)));
+// counts every check source that has loaded, in the scope picked, exactly as the lists show them
+dash.draw('kpi-checks', (el) => OS.value(el, ['checks'], () => {
+  const f = keepField(el);
+  el.dataset.source = OS.CHECKS.filter((id) => OS.state(id) === 'ok').join(' ') || 'checks';
+  delete el.dataset.field; delete el.dataset.where;
+  const rows = OS.checkRows();
+  return OS.num(f === 'high' ? rows.filter((c) => c.severity === 'high').length : rows.length);
+}));
 dash.draw('kpi-checks-hb', (el) => OS.value(el, ['checks_hb_kpi'], () => OS.num(regionRow(el, 'checks_hb_kpi')[keepField(el)] || 0)));
 
 const ownerChip = (r) => OS.el('span', 'chip' + (r.bucket === 'mine' ? ' info' : r.bucket === 'unassigned' ? ' warn' : ''), r.owner || 'Unassigned');
@@ -304,27 +311,34 @@ const checkItem = (c) => {
   li.append(OS.el('span', 'itm-dot ' + c.severity), main, meta);
   return li;
 };
-// Salesforce and LeanData checks always; HiBob, leaver and lead checks join them once they have loaded
-const allChecks = () => {
-  const rank = { high: 0, medium: 1, low: 2 };
-  const hb = OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [];
-  const lv = OS.state('checks_lv') === 'ok' ? dash.data('checks_lv').data || [] : [];
-  const ld = OS.state('checks_ld') === 'ok' ? dash.data('checks_ld').data || [] : [];
-  return (dash.data('checks').data || []).concat(hb, lv, ld)
-    .filter((c) => (mgrPick() ? c.manager === mgrPick() : OS.region() === 'All' || c.region === OS.region()))
-    .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
-};
-OS.defList('check-list', () => { const a = dash.params().checkArea || 'All'; return a === 'Hiring' ? ['checks_hb'] : a === 'Leads' ? ['checks_ld'] : ['checks']; }, () => {
+// Salesforce checks always; routing, HiBob, leaver and lead checks join them once they have loaded (OS.checkRows)
+const allChecks = () => OS.checkRows();
+// an area whose checks come from one optional source says why it is empty when that source hasn't loaded
+const CHECK_SRC = { Routing: 'checks_rr', Hiring: 'checks_hb', Leads: 'checks_ld' };
+OS.defList('check-list', ['checks'], () => {
   const area = dash.params().checkArea || 'All';
   return allChecks().filter((c) => area === 'All' || c.area === area);
-}, (rows) => rows.map(checkItem));
+}, (rows) => rows.map(checkItem), { msg: () => {
+  const area = dash.params().checkArea || 'All';
+  if (allChecks().some((c) => area === 'All' || c.area === area)) return null;
+  const st = CHECK_SRC[area] ? OS.state(CHECK_SRC[area]) : 'ok';
+  return st === 'ok' ? 'empty' : st;
+} });
 // Home's top 7: at most 2 lead checks, so they don't crowd out the rest
 OS.defList('home-checks', ['checks'], () => { let n = 0; return allChecks().filter((c) => c.area !== 'Leads' || n++ < 2).slice(0, 7); }, (rows) => rows.map(checkItem));
 
 // ===================== HIRING =====================
-dash.draw('kpi-hire', (el) => OS.value(el, ['hire_kpi'], () => OS.num(regionRow(el, 'hire_kpi')[keepField(el)] || 0)));
+// with LeanData the hiring numbers include pool status; without it they fall back to people_core (pools show —)
+const failedId = (id) => ['error', 'connect'].includes(OS.state(id));
+const hireKpi = () => (failedId('hire_kpi') ? 'hire_kpi_basic' : 'hire_kpi');
+const peopleSrc = () => (failedId('people') ? 'people_core' : 'people');
+dash.draw('kpi-hire', (el) => {
+  const id = hireKpi();
+  el.dataset.source = id;
+  OS.value(el, [id], () => { const v = regionRow(el, id)[keepField(el)]; return v === null ? '—' : OS.num(v || 0); });
+});
 
-OS.defTable('hire-table', ['people'], () => (dash.data('people').data || [])
+OS.defTable('hire-table', () => [peopleSrc()], () => (dash.data(peopleSrc()).data || [])
   .filter((p) => p.daysIn != null && p.daysIn <= 90 && (mgrPick() ? p.sfManager === mgrPick() : OS.region() === 'All' || p.region === OS.region()))
   .sort((a, b) => a.daysIn - b.daysIn), [
   { f: 'name', person: (r) => r.sfName || r.name }, { f: 'title' }, { f: 'team' }, { f: 'site' }, { f: 'manager' },
@@ -345,8 +359,14 @@ OS.defTable('hire-team-table', ['hire_teams'], () => dash.data('hire_teams').dat
   { f: 'team' }, { f: 'people', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.people) }, { f: 'joined90', fmt: OS.num, num: true },
 ], { key: 'team' });
 
-// people who left: what they still hold, and a hand-over request for your Claude
-dash.draw('kpi-lv', (el) => OS.value(el, ['leavers_kpi'], () => fmtBy(el, scopeRowOf(el, 'leavers_kpi')[keepField(el)] || 0)));
+// people who left: what they still hold, and a hand-over request for your Claude. With leads and pool seats when the
+// leads and LeanData load; otherwise from deals, renewals and accounts alone (leads and pools then show —).
+const lvSrc = () => (['error', 'connect'].includes(OS.state('leavers')) ? 'leavers_basic' : 'leavers');
+dash.draw('kpi-lv', (el) => {
+  const id = lvSrc() === 'leavers' ? 'leavers_kpi' : 'leavers_kpi_basic';
+  el.dataset.source = id;
+  OS.value(el, [id], () => { const v = scopeRowOf(el, id)[keepField(el)]; return v === null ? '—' : fmtBy(el, v || 0); });
+});
 const lvHeld = (r) => [
   r.deals ? OS.num(r.deals) + ' open deal' + (r.deals === 1 ? '' : 's') + ' (' + OS.usd(r.dealArr) + ' ARR)' : '',
   r.renewals ? OS.num(r.renewals) + ' open renewal' + (r.renewals === 1 ? '' : 's') + ' (' + OS.usd(r.renewalArr) + ' contract ARR)' : '',
@@ -356,7 +376,7 @@ const lvHeld = (r) => [
   r.emCustomers ? 'Engagement Manager on ' + OS.num(r.emCustomers) + ' customer' + (r.emCustomers === 1 ? '' : 's') : '',
   r.pools ? 'a seat in ' + OS.num(r.pools) + ' LeanData pool' + (r.pools === 1 ? '' : 's') + ' (' + r.poolNames + ')' : '',
 ].filter(Boolean).join('; ');
-const lvAsk = (r) => OS.links.ask(OS.ask.data('Hand-over: ' + r.name, 'Plan the hand-over for ' + r.name + ', who has left (their Salesforce user is inactive' + (r.role ? '; role ' + r.role : '') + (r.manager && r.manager !== '(no manager)' ? '; manager ' + r.manager : '') + '). They still own: ' + lvHeld(r) + '. Propose who should take each item (people in their team first, keeping books balanced), list the Salesforce and LeanData changes, and wait for my OK before changing anything.', { kind: 'leaver', userId: r.userId, name: r.name }));
+const lvAsk = (r) => OS.links.ask(OS.ask.data('Hand-over: ' + r.name, 'Plan the hand-over for ' + r.name + ', who has left (their Salesforce user is inactive' + (r.role ? '; role ' + r.role : '') + (r.manager && r.manager !== '(no manager)' ? '; manager ' + r.manager : '') + '). They still own: ' + lvHeld(r) + '.' + (r.leads === null ? ' The dashboard couldn\'t read their leads or LeanData pool seats, so check those too.' : '') + ' Propose who should take each item (people in their team first, keeping books balanced), list the Salesforce and LeanData changes, and wait for my OK before changing anything.', { kind: 'leaver', userId: r.userId, name: r.name }));
 const lvActs = (r) => {
   const box = OS.el('span', 'row-acts');
   const sf = OS.links.sf('User', r.userId);
@@ -365,13 +385,14 @@ const lvActs = (r) => {
   if (ask) box.append(ask);
   return box.children.length ? box : null;
 };
-OS.defTable('lv-table', ['leavers'], () => (dash.data('leavers').data || []).filter(inTeam), [
+OS.defTable('lv-table', () => [lvSrc()], () => (dash.data(lvSrc()).data || []).filter(inTeam), [
   { f: 'name', person: (r) => r.name, after: (r) => lvActs(r) }, { f: 'region' }, { f: 'manager' },
   { f: 'deals', fmt: OS.num, num: true }, { f: 'dealArr', fmt: OS.usd, num: true },
   { f: 'renewals', fmt: OS.num, num: true }, { f: 'renewalArr', fmt: OS.usd, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'nextClose', fmt: (v) => (v ? OS.day(v) : '—') },
   { f: 'leads', fmt: OS.num, num: true }, { f: 'ready', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'accounts', fmt: OS.num, num: true }, { f: 'customerArr', fmt: OS.usd, num: true },
+  { f: 'emCustomers', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'pools', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'status', chip: (v) => (v === 'Hand over revenue' ? 'bad' : 'warn') },
 ], { key: 'userId', also: ['poolNames'] });
@@ -481,16 +502,18 @@ dash.draw('pd-initials', (el) => {
 dash.draw('pd-chips', (el) => {
   const r = rowFor('person');
   const h = rowFor('person_hb');
+  const rr = rowFor('rr_people');
+  const routing = rr ? rr.status : null;
   const chips = [];
   if (r && r.isActive === false) chips.push(['Inactive in Salesforce', 'bad']);
-  if (r && r.routing) chips.push([r.routing, statusCls(r.routing)]);
-  if (h && h.hiring && (!r || h.hiring !== r.routing) && h.hiring !== 'In routing') chips.push([h.hiring, statusCls(h.hiring)]);
+  if (routing) chips.push([routing, statusCls(routing)]);
+  if (h && h.hiring && h.hiring !== routing && h.hiring !== 'In routing') chips.push([h.hiring, statusCls(h.hiring)]);
   if (h && h.mgrDiffers) chips.push([h.sfManager ? 'Manager differs from HiBob' : 'No manager in Salesforce', 'warn']);
   if (r && r.pastDue > 0) chips.push([OS.num(r.pastDue) + ' past due', 'bad']);
   el.replaceChildren(...chips.map(([t, c]) => OS.el('span', 'chip ' + c, t)));
 });
 dash.draw('pd-pools', (el) => {
-  const r = rowFor('person');
+  const r = rowFor('rr_people');
   const names = r && r.poolNames ? r.poolNames.split(', ').filter(Boolean) : [];
   el.replaceChildren(...names.map((n) => { const li = OS.el('li'); li.append(OS.el('span', 'chip', n)); return li; }));
 });
@@ -535,7 +558,8 @@ dash.draw('scope-label', (el) => {
 // ===================== TEAM IN THE PERSON PANEL =====================
 OS.defTable('pd-team-table', ['person'], () => {
   const p = dash.params().person;
-  return p ? (dash.data('person').data || []).filter((r) => r.manager === p && r.isActive !== false && r.inRoster) : [];
+  const rr = OS.state('rr_people') === 'ok' ? new Map((dash.data('rr_people').data || []).map((x) => [x.name, x.status])) : null;
+  return p ? (dash.data('person').data || []).filter((r) => r.manager === p && r.isActive !== false && r.inRoster).map((r) => ({ ...r, routing: rr ? rr.get(r.name) || null : null })) : [];
 }, [
   { f: 'name', person: (r) => r.name },
   { f: 'thisPipe', fmt: OS.usd, num: true },
@@ -638,7 +662,7 @@ OS.defList('pd-deals', ['person_deals'], pdDeals, (rows) => rows.map((x) => {
   if (x.flags) main.append(flags);
   const meta = OS.el('div', 'itm-meta');
   meta.append(OS.el('span', 'itm-arr', OS.usd(x.arrUsd)));
-  const acts = dealActs(x);
+  const acts = dealActs({ ...x, owner: x.owner || dash.params().person }); // the deals query is filtered to the panel's person
   if (acts) meta.append(acts);
   const cp = OS.el('button', 'ibtn');
   cp.type = 'button';
@@ -815,13 +839,14 @@ OS.defList('oo-follow', ['oo_followups'], ooFollow, (rows) => rows.map((r) => {
   main.append(from);
   const meta = OS.el('div', 'itm-meta');
   meta.append(ownerChip(r));
+  if (r.priv) meta.append(OS.el('span', 'chip', 'Private note'));
   if (r.dueStatus) meta.append(OS.el('span', 'chip ' + (r.dueStatus === 'Overdue' ? 'bad' : 'warn'), r.dueStatus + ' · ' + OS.shortDay(r.due)));
   const ask = OS.links.ask(OS.ask.data('Follow-up: ' + r.item, 'Before my 1:1 with ' + OS.oo.nameOf(r.email) + ', help me close out this follow-up: "' + r.item + '"' + (r.owner ? ' (owner ' + r.owner + ')' : '') + ' from "' + r.meeting + '" on ' + r.date + (r.url ? ' (Granola note ' + r.url + ')' : '') + '. Draft what is needed.', { kind: 'follow_up', person: OS.oo.nameOf(r.email) }));
   if (ask) meta.append(ask);
   li.append(doneBtn(r), main, meta);
   return li;
 }), { msg: () => (!OS.oo.who() ? 'nowho' : ooFollow().length ? null : 'empty') });
-const ooPoints = (sec) => () => { const w = OS.oo.who(); return w ? (dash.data('oo_points').data || []).filter((r) => r.email === w && r.section === sec) : []; };
+const ooPoints = (sec) => () => { const w = OS.oo.who(); return w ? OS.oo.points(w).filter((r) => r.section === sec) : []; };
 OS.defList('oo-numbers', ['oo_points'], ooPoints('numbers'), (rows) => rows.map((r) => OS.el('li', null, r.text)),
   { msg: () => (!OS.oo.who() ? 'nowho' : ooPoints('numbers')().length ? null : 'empty') });
 OS.defList('oo-talk', ['oo_points'], ooPoints('talk'), (rows) => rows.map((r) => {
@@ -876,6 +901,13 @@ dash.draw('kpi-team', (el) => OS.value(el, ['team_tree'], () => {
   const fmt = el.dataset.fmt;
   return v == null ? '—' : fmt === 'usd' ? OS.usd(v) : fmt === 'pct' ? OS.pct(v) : OS.num(v);
 }));
+// routing gaps come from LeanData (team_rr), so they are their own mark
+dash.draw('kpi-team-rr', (el) => OS.value(el, ['team_rr'], () => {
+  const root = ooRoot();
+  const r = markRow(el, 'name', root, root ? ooRows('team_rr').find((x) => x.name === root) : null);
+  const v = r[keepField(el)];
+  return v == null ? '—' : OS.num(v);
+}));
 const agendaBtn = (r) => {
   if (!r.email) return null;
   const b = OS.el('button', 'ibtn ibtn-sm');
@@ -888,7 +920,10 @@ const agendaBtn = (r) => {
 };
 OS.defTable('oo-team-table', ['team_tree'], () => {
   const root = ooRoot();
-  return root ? (dash.data('team_tree').data || []).filter((r) => r.manager === root).sort((a, b) => b.emeaPeople - a.emeaPeople || b.thisPipe - a.thisPipe) : [];
+  // routing gaps join from team_rr when LeanData loads; until then (or without it) they show —
+  const rr = OS.state('team_rr') === 'ok' ? new Map((dash.data('team_rr').data || []).map((x) => [x.name, x.routingGaps])) : null;
+  return root ? (dash.data('team_tree').data || []).filter((r) => r.manager === root).map((r) => ({ ...r, routingGaps: rr ? rr.get(r.name) || 0 : null }))
+    .sort((a, b) => b.emeaPeople - a.emeaPeople || b.thisPipe - a.thisPipe) : [];
 }, [
   { f: 'name', person: (r) => r.name, after: agendaBtn },
   { f: 'region' },
@@ -900,7 +935,7 @@ OS.defTable('oo-team-table', ['team_tree'], () => {
   { f: 'winRate', fmt: (v) => (v == null ? '—' : OS.pct(v)), num: true },
   { f: 'pastDue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'riskReps', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
-  { f: 'routingGaps', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'routingGaps', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'checks', fmt: OS.num, num: true },
 ], { key: 'name' });
 
@@ -960,14 +995,17 @@ dash.draw('pd-act', (box) => {
   if (mail) out.push(mail);
   const sf = p && p.userId ? OS.links.sf('User', p.userId) : null;
   if (sf) out.push(sf);
-  const left = n && OS.state('leavers') === 'ok' ? (dash.data('leavers').data || []).find((r) => r.name === n) : null;
+  const lvId = n ? lvSrc() : null;
+  const left = n && OS.state(lvId) === 'ok' ? (dash.data(lvId).data || []).find((r) => r.name === n) : null;
   const ask = left ? lvAsk(left) : n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book and open follow-ups with me, and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
   if (ask) out.push(ask);
   box.replaceChildren(...out);
 });
 dash.draw('oo-mail', (box) => {
   const w = OS.oo.who();
-  const text = w && !w.startsWith('n:') ? OS.oo.text() : '';
+  // no email link until the agenda's sources have loaded: a half-built agenda would go out as if complete
+  const loading = OS.state('oo_points') === 'loading' || OS.state('oo_followups') === 'loading';
+  const text = w && !w.startsWith('n:') && !loading ? OS.oo.text() : '';
   const name = w ? OS.oo.nameOf(w) : '';
   const a = text ? OS.links.mail(w, '1:1 agenda', text) : null;
   box.replaceChildren(...(a ? [a] : []));

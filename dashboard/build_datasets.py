@@ -178,10 +178,10 @@ ds("cr_owner_m", "Created opps per rep per month",
    AND {CREATED_NOT_FLOW} GROUP BY Owner.Name, Owner.UserRole.Name, CALENDAR_YEAR(convertTimezone(CreatedDate)),
    CALENDAR_MONTH(convertTimezone(CreatedDate)), RecordType.Name LIMIT 2000"""))
 ds("pipe_nextstep", "Next-step dates",
-   "Open EMEA New Business and Upsell opportunities closing this or next quarter with no next-step date or an overdue one, per owner and quarter.",
+   "Open EMEA New Business and Upsell opportunities closing this or next quarter with no next step at all (neither a note nor a date) or an overdue next-step date, per owner and quarter.",
    SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, FISCAL_YEAR(CloseDate) fy, FISCAL_QUARTER(CloseDate) fq,
    COUNT(Id) flaggedOpps, COUNT(Next_Steps_Date__c) overdueOpps, SUM(Finance_ARR_USD__c) flaggedArrUsd, MIN(Next_Steps_Date__c) oldestOverdue
-   FROM Opportunity WHERE {OPEN_WINDOW} AND RecordType.Name != 'Renewal' AND (Next_Steps_Date__c = null OR Next_Steps_Date__c < TODAY) AND {OWNER}
+   FROM Opportunity WHERE {OPEN_WINDOW} AND RecordType.Name != 'Renewal' AND (Next_Steps_Date__c < TODAY OR (Next_Steps_Date__c = null AND NextStep = null)) AND {OWNER}
    GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"""))
 
 # ---------- Deal risk per rep ----------

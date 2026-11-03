@@ -2,9 +2,19 @@
 // Fixed text lives in index.html. Outside drawings this file only listens and sets
 // hidden / aria-* / class / style / value / checked / disabled, and defines helpers the drawings use.
 
+// ---------- Calc inputs ----------
+// Kept so state() can tell a calc that failed because a connector isn't connected (show "Connect …") from a real error.
+const CALC_IN = {};
+try {
+  const calc0 = dash.calc.bind(dash);
+  dash.calc = (id, o) => { CALC_IN[id] = (o && Array.isArray(o.inputs)) ? o.inputs.slice() : []; return calc0(id, o); };
+} catch (e) { /* a read-only dash: states fall back to the calc's own status */ }
+
 // ---------- Loaders ----------
-// Salesforce answers {totalSize, done, records:[{attributes, ...}]} become rows.
-const sfRows = ({ answer }) => {
+// Salesforce answers {totalSize, done, records:[{attributes, ...}]} become rows. An answer that fills the query's
+// LIMIT is marked cut: Salesforce reports done for a capped result, so rows past the LIMIT would go missing silently.
+const limitOf = (args) => +((String((args && args.q) || '').match(/\bLIMIT\s+(\d+)\s*$/i) || [])[1] || 0);
+const sfRows = ({ answer, args }, capped = true) => {
   let a = answer;
   if (Array.isArray(a) && a.length && a[0] && a[0].type === 'text') a = a.map((c) => c.text).join('');
   if (typeof a === 'string') {
@@ -20,15 +30,18 @@ const sfRows = ({ answer }) => {
     for (const k of Object.keys(r)) if (k !== 'attributes') o[k] = r[k];
     return o;
   });
-  return { columns: rows.length ? Object.keys(rows[0]) : [], rows, cut: a.done === false };
+  const lim = capped ? limitOf(args) : 0;
+  return { columns: rows.length ? Object.keys(rows[0]) : [], rows, cut: a.done === false || (lim > 0 && rows.length >= lim) };
 };
 ['pipe_stage', 'pipe_rep', 'pipe_pastdue', 'pipe_stale', 'won_q', 'renew_stake',
   'cr_daily', 'cr_monthly', 'cr_source', 'cr_owner_q', 'cr_bdr',
   'rr_members', 'rr_assign', 'roster',
-  'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'top_deals', 'top_renewals', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
+  'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
   'users_all', 'mv_outcomes', 'mv_created', 'mv_close', 'age_stuck', 'cycle_team', 'coverage_base', 'bk_stale', 'bk_em_cover', 'lv_opps', 'lv_leads',
   'ld_ready', 'ld_handoffs', 'ld_inflow', 'ld_open',
-].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped)', fn: sfRows }));
+].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped); marked cut when the answer fills the query\'s LIMIT', fn: (x) => sfRows(x) }));
+// the largest deals and renewals: the LIMIT is the point of the query, not a cut
+['top_deals', 'top_renewals'].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped); the 300 largest by design', fn: (x) => sfRows(x, false) }));
 
 dash.loader('hb_people', {
   description: 'HiBob employees as rows, with the slash-named fields given plain column names',
@@ -59,7 +72,7 @@ dash.loader('hb_people', {
 // Field history comes back as API-named rows with the opportunity nested; this unwraps them.
 dash.loader('mv_fields', {
   description: 'Field history as rows: the opportunity, its owner id and current ARR (unwrapped from the nested opportunity), the field, old and new value, and when',
-  fn: ({ answer }) => {
+  fn: ({ answer, args }) => {
     let a = answer;
     if (Array.isArray(a) && a.length && a[0] && a[0].type === 'text') a = a.map((c) => c.text).join('');
     if (typeof a === 'string') {
@@ -78,7 +91,8 @@ dash.loader('mv_fields', {
       newValue: r.NewValue == null ? null : String(r.NewValue),
       at: r.CreatedDate || null,
     }));
-    return { columns: ['oppId', 'ownerId', 'arrUsd', 'field', 'oldValue', 'newValue', 'at'], rows, cut: a.done === false };
+    const lim = limitOf(args);
+    return { columns: ['oppId', 'ownerId', 'arrUsd', 'field', 'oldValue', 'newValue', 'at'], rows, cut: a.done === false || (lim > 0 && rows.length >= lim) };
   },
 });
 
@@ -277,16 +291,24 @@ window.OS = (() => {
   const tables = {};
   const reg = {};
 
-  // status of several sources: 'ok' | 'loading' | 'connect' | 'error'
+  // status of several sources: 'ok' | 'loading' | 'connect' | 'error'. A calc fails whenever an input fails, so a
+  // failed calc is traced down to its datasets: one that needs connecting makes it 'connect', not 'error'.
+  const needsConnect = (id, seen = new Set()) => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    const ins = CALC_IN[id];
+    if (!ins) { const st = dash.data(id).status; return st === 'connect' || st === 'declined'; }
+    return ins.some((x) => needsConnect(x, seen));
+  };
   const state = (...ids) => {
-    let s = 'ok';
+    let s = 'ok', failed = false;
     for (const id of ids) {
       const st = dash.data(id).status;
       if (st === 'connect' || st === 'declined') return 'connect';
-      if (st === 'error' || st === 'missing') return 'error';
+      if (st === 'error' || st === 'missing') { if (CALC_IN[id] && needsConnect(id)) return 'connect'; failed = true; continue; }
       if (st !== 'ok') s = 'loading';
     }
-    return s;
+    return failed ? 'error' : s;
   };
 
   // a single value element
@@ -341,7 +363,7 @@ window.OS = (() => {
   // cols: [{f, fmt?, num?, bar?: (list)=>max, chip?: (v,row)=>cls, cls?, wrap?, person?: (row)=>name (none: plain text), tip?: (row)=>title, after?: (row)=>node}]
   const tableRows = (name) => {
     const t = tables[name];
-    const s = state(...t.ids);
+    const s = state(...t.ids());
     if (s !== 'ok') return { s, list: [] };
     let list = searchFilter(name, t.rows(), t.cols.map((c) => c.f).concat(t.opts.also || []));
     const st = sorts[name];
@@ -354,9 +376,11 @@ window.OS = (() => {
     }
     return { s, list };
   };
+  // ids: the sources (or a function returning them, for a table that falls back to another source)
   const defTable = (name, ids, rows, cols, opts = {}) => {
-    tables[name] = { ids, rows, cols, opts };
-    reg[name] = { kind: 'table', ids: () => ids, rows, fields: cols.map((c) => c.f).concat(opts.also || []), limit: opts.limit || 400 };
+    const getIds = typeof ids === 'function' ? ids : () => ids;
+    tables[name] = { ids: getIds, rows, cols, opts };
+    reg[name] = { kind: 'table', ids: getIds, rows, fields: cols.map((c) => c.f).concat(opts.also || []), limit: opts.limit || 400 };
     dash.draw(name, (tbody) => {
       const { s, list } = tableRows(name);
       if (s !== 'ok' || !list.length) { tbody.replaceChildren(); return; }
@@ -602,7 +626,11 @@ OS.ask = (() => {
     if (!room || typeof room.canSendToClaudeSession !== 'function') return;
     let m = 'off';
     try { m = await room.canSendToClaudeSession(); } catch (e) { m = 'off'; }
-    if (m !== mode) { mode = m; DRAWS.forEach((n) => dash.draw(n)); }
+    if (m !== mode) {
+      mode = m;
+      DRAWS.forEach((n) => dash.draw(n));
+      document.querySelectorAll('[data-ask-agenda]').forEach((b) => { b.hidden = !(mode === 'available' || mode === 'available_if_summoned'); });
+    }
   };
   (async () => {
     try {
@@ -612,6 +640,7 @@ OS.ask = (() => {
       await refresh();
     } catch (e) { room = null; }
   })();
+  const LIMIT = 3900;
   const RULES = 'Sent from a button on the EMEA RevOps OS dashboard, as the viewer asking for help with this item. Before changing anything in Salesforce, LeanData, Slack, email or calendars, show exactly what you would change or send and wait for their OK; for Salesforce writes use the salesforce-ai-crud skill.';
   const clip = (t, n) => {
     let x = '';
@@ -626,9 +655,20 @@ OS.ask = (() => {
   return {
     can: () => !!room && (mode === 'available' || mode === 'available_if_summoned'),
     refresh,
-    data: (label, ask, extra) => {
-      const d = { label: clip(label, 120), source: 'EMEA RevOps OS', ask: clip(ask, 2600), rules: RULES };
+    // the whole request must stay under the platform's 4 KB: a long ask is cut at a line end, and says so
+    data: (label, ask, extra, more) => {
+      const d = { label: clip(label, 120), source: 'EMEA RevOps OS', ask: clip(ask, 20000), rules: RULES };
       for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '') d[k] = typeof v === 'string' ? clip(v, 300) : v;
+      const size = (o) => new TextEncoder().encode(JSON.stringify(o)).length;
+      if (size(d) > LIMIT) {
+        const full = d.ask, tail = '\n… (' + (more || 'cut to fit; the rest is in the dashboard') + ')';
+        let lo = 0, hi = full.length;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; d.ask = full.slice(0, mid) + tail; if (size(d) <= LIMIT) lo = mid; else hi = mid - 1; }
+        let cut = full.slice(0, lo);
+        const nl = cut.lastIndexOf('\n');
+        if (nl > lo * 0.5) cut = cut.slice(0, nl);
+        d.ask = cut + tail;
+      }
       return d;
     },
     // call straight from the click handler, nothing awaited before it
@@ -648,7 +688,12 @@ OS.links = (() => {
   };
   return {
     sf: (object, id) => (id && /^[A-Za-z0-9]{15,18}$/.test(String(id)) ? a(SF + object + '/' + id + '/view', 'Open in Salesforce', OS.ICON.ext) : null),
-    mail: (email, subject, body) => (email && /^[^\s@]+@[^\s@]+$/.test(email) ? a('mailto:' + encodeURIComponent(email).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(String(body || '').slice(0, 1800)), 'Email ' + email, OS.ICON.mail) : null),
+    mail: (email, subject, body) => {
+      if (!(email && /^[^\s@]+@[^\s@]+$/.test(email))) return null;
+      let b = String(body || '');
+      if (b.length > 1800) { const cut = b.slice(0, 1760); const nl = cut.lastIndexOf('\n'); b = (nl > 900 ? cut.slice(0, nl) : cut) + '\n…'; }
+      return a('mailto:' + encodeURIComponent(email).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(b), 'Email ' + email, OS.ICON.mail);
+    },
     ask: (data) => {
       if (!OS.ask.can()) return null;
       const b = OS.el('button', 'ibtn ask');
@@ -662,19 +707,34 @@ OS.links = (() => {
   };
 })();
 
+// ---------- Data checks ----------
+// Every check source that has loaded, in the scope picked: Salesforce (checks), LeanData routing (checks_rr), HiBob
+// (checks_hb), leavers' leads (checks_lv) and leads (checks_ld). Each is its own calc, so one failing leaves the rest.
+OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld'];
+OS.checkRows = () => {
+  const p = dash.params();
+  const rank = { high: 0, medium: 1, low: 2 };
+  return OS.CHECKS.filter((id) => OS.state(id) === 'ok').flatMap((id) => dash.data(id).data || [])
+    .filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region))
+    .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
+};
+
 // ---------- Completed next steps ----------
 // Each viewer's ticks live in their own private part of this dashboard's database (data/users/<their id>/os-done),
 // keyed by the meeting and the item's wording. Without a database or an id here, nothing can be ticked.
 OS.done = (() => {
-  // what the database last said, plus toggles not yet confirmed by a write; ticking waits for the stored list
+  // what the database last said, plus toggles not yet confirmed by a write; ticking waits for the stored list.
+  // The document holds { done: { key: 'YYYY-MM-DD' | null } }; each write sends only the keys it changes (a merge),
+  // so two tabs or devices ticking at once don't overwrite each other.
   const stored = new Map();
   const pending = new Map();
-  let ref = null, can = false, ready = false, writing = Promise.resolve(), cur = new Map();
+  let ref = null, can = false, ready = false, exists = false, writing = Promise.resolve(), cur = new Map();
   const today = () => new Date().toISOString().slice(0, 10);
   // a stable key that keeps no note text: the meeting, plus a hash of the owner and the item's wording
   const norm = (t) => String(t || '').toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const hash = (t) => { let h = 2166136261 >>> 0; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); };
-  const keyOf = (r) => (r && r.meetingId && r.item ? r.meetingId + '|' + hash(norm(r.owner || '') + '|' + norm(r.item)) : '');
+  const safe = (k) => String(k).replace(/[^A-Za-z0-9_-]/g, '_');
+  const keyOf = (r) => (r && r.meetingId && r.item ? safe(r.meetingId + '|' + hash(norm(r.owner || '') + '|' + norm(r.item))) : '');
   const merged = () => { const m = new Map(stored); for (const [k, on] of pending) { if (on) m.set(k, m.get(k) || today()); else m.delete(k); } return m; };
   const DRAWS = ['act-list', 'home-actions', 'oo-follow', 'kpi-gr', 'nav-badge'];
   const redraw = () => {
@@ -683,6 +743,12 @@ OS.done = (() => {
     dash.draw('msg');
     document.querySelectorAll('[data-gr-done]').forEach((b) => { b.hidden = !(can && ready); });
   };
+  let failTimer = null;
+  const failed = () => {
+    document.querySelectorAll('[data-toast="tickfail"]').forEach((t) => { t.hidden = false; });
+    clearTimeout(failTimer);
+    failTimer = setTimeout(() => document.querySelectorAll('[data-toast="tickfail"]').forEach((t) => { t.hidden = true; }), 3200);
+  };
   (async () => {
     try {
       const c = window.claude;
@@ -690,34 +756,55 @@ OS.done = (() => {
       const [db, user] = await Promise.all([c.use('db'), c.use('user')]);
       const uid = db && user ? await user.id() : null;
       if (!uid) return;
+      // a viewer the platform says can't write data gets no ticks; null means it hasn't said, so keep them
+      let w = null;
+      try { w = typeof user.can === 'function' ? await user.can('data.write') : null; } catch (e) { w = null; }
+      if (w === false) return;
       ref = db.doc('data/users/' + uid + '/os-done');
       can = true;
       ref.onSnapshot((snap) => {
         stored.clear();
         const d = snap && snap.exists ? snap.data() : null;
-        for (const x of (d && Array.isArray(d.items) ? d.items : [])) if (x && typeof x.k === 'string') stored.set(x.k, typeof x.at === 'string' ? x.at : '');
+        exists = !!(snap && snap.exists);
+        // earlier versions kept a list of { k, at }
+        for (const x of (d && Array.isArray(d.items) ? d.items : [])) if (x && typeof x.k === 'string') stored.set(safe(x.k), typeof x.at === 'string' ? x.at : '');
+        const map = d && d.done && typeof d.done === 'object' ? d.done : {};
+        for (const [k, at] of Object.entries(map)) { if (at == null || at === false) stored.delete(k); else stored.set(k, typeof at === 'string' ? at : ''); }
         if (!snap || !snap.metadata || snap.metadata.fromCache !== true) ready = true;
         redraw();
       }, () => { can = false; redraw(); });
     } catch (e) { can = false; ref = null; }
   })();
-  // one write at a time; each builds its list when it is sent, from the stored list and every open toggle
+  const FATAL = ['invalid_argument', 'not_granted', 'capability_disabled', 'capability_removed', 'transform_error', 'revoked', 'quota_exceeded'];
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // one write at a time; each sends the keys toggled since the last one
   const write = () => {
     writing = writing.then(async () => {
       const sent = new Map(pending);
       if (!sent.size) return;
-      const cut = new Date(Date.now() - 200 * 864e5).toISOString().slice(0, 10);
-      const items = [...merged()].filter(([, at]) => !at || at >= cut).map(([k, at]) => ({ k, at }));
-      try {
-        await ref.set({ items });
+      const change = {};
+      for (const [k, on] of sent) change[k] = on ? stored.get(k) || today() : null;
+      const send = () => (exists ? ref.update({ done: change }) : ref.set({ done: Object.fromEntries([...merged()].map(([k, at]) => [k, at || today()])) }));
+      let err = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try { await send(); err = null; break; } catch (e) {
+          err = e;
+          const code = e && e.code;
+          if (FATAL.includes(code)) break;
+          await wait(code === 'resource_exhausted' ? 4000 + Math.random() * 2000 : 800 + Math.random() * 1200);
+        }
+      }
+      if (!err) {
+        exists = true;
         for (const [k, on] of sent) {
           if (on) stored.set(k, stored.get(k) || today()); else stored.delete(k);
           if (pending.get(k) === on) pending.delete(k);
         }
-      } catch (e) {
-        // refused (a view-only viewer, say): undo what was not saved and stop offering ticks
-        for (const k of sent.keys()) pending.delete(k);
-        can = false;
+      } else {
+        // not saved: undo these toggles; stop offering ticks only when writing can't work for this viewer
+        for (const [k, on] of sent) if (pending.get(k) === on) pending.delete(k);
+        if (FATAL.includes(err && err.code)) can = false;
+        failed();
       }
       redraw();
     });
@@ -774,17 +861,22 @@ OS.oo = (() => {
     const dayTxt = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     return dayTxt + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   };
+  // an agenda's numbers and talking points: the core ones plus routing (oo_points_rr) once LeanData has loaded
+  const RANK = { high: 0, medium: 1, low: 2, '': 3 };
+  const points = (email) => rowsOf('oo_points').concat(rowsOf('oo_points_rr')).filter((r) => r.email === email)
+    .sort((a, b) => (a.section === b.section ? 0 : a.section === 'numbers' ? -1 : 1) || (RANK[a.sev] ?? 3) - (RANK[b.sev] ?? 3) || a.order - b.order);
   const text = () => {
     const email = who();
     if (!email || email.startsWith('n:')) return '';
     const next = nextFor(email);
     const lines = ['1:1 with ' + nameOf(email) + (next ? ', ' + when(next) : '')];
-    const fu = rowsOf('oo_followups').filter((r) => r.email === email && r.kind === 'item' && !OS.done.has(r));
+    // follow-ups from the viewer's private Granola notes stay on their screen: the agenda is copied, emailed or sent to the colleague
+    const fu = rowsOf('oo_followups').filter((r) => r.email === email && r.kind === 'item' && !r.priv && !OS.done.has(r));
     if (fu.length) {
       lines.push('', 'Follow-ups');
       for (const r of fu) lines.push(`- [ ] ${r.item}${r.owner ? ' (' + r.owner + ')' : ''}${r.due ? ', due ' + OS.shortDay(r.due) : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`);
     }
-    const pts = rowsOf('oo_points').filter((r) => r.email === email);
+    const pts = points(email);
     const num = pts.filter((r) => r.section === 'numbers');
     const talk = pts.filter((r) => r.section === 'talk');
     if (num.length) { lines.push('', 'Numbers'); for (const r of num) lines.push('- ' + r.text); }
@@ -792,7 +884,7 @@ OS.oo = (() => {
     lines.push('', 'Anything else');
     return lines.join('\n');
   };
-  return { rowsOf, who, nextFor, nameOf, when, text };
+  return { rowsOf, who, nextFor, nameOf, when, text, points };
 })();
 
 // ---------- App shell ----------
@@ -908,6 +1000,9 @@ OS.oo = (() => {
   const closePalette = () => document.querySelectorAll('[data-palette]').forEach((p) => { p.hidden = true; });
   // plain-text summaries for Slack: built from the data already loaded on screen
   const rowOf = (id, pick) => (OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
+  // the sources the weekly summary reads; Home loads them while it is open, and the copy button waits for them
+  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', 'checks', 'leavers_kpi', 'ld_kpi', 'orphan_kpi', 'engagement_kpi'];
+  const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
   const weeklySummary = () => {
     const p = dash.params();
     const scope = p.mgr ? 'M|' + p.mgr : p.region || 'All';
@@ -918,42 +1013,57 @@ OS.oo = (() => {
     const rr = rowOf('rr_kpi', (r) => r.region === scope);
     const orph = rowOf('orphan_kpi', () => true);
     const gr = rowOf('gr_kpi', () => true);
-    const ck = rowOf('checks_kpi', (r) => r.region === scope);
     const cov = rowOf('pipe_cover', (r) => r.key === pipeKey);
     const mv = rowOf('moves_kpi', (r) => r.region === scope);
     const rk = rowOf('risk_kpi', (r) => r.region === scope);
-    const lv = rowOf('leavers_kpi', (r) => r.region === scope);
+    // leavers: with leads and pool seats when those load, else deals, renewals and accounts only
+    const lvFull = !failedSrc('leavers_kpi');
+    const lv = lvFull ? rowOf('leavers_kpi', (r) => r.region === scope) : rowOf('leavers_kpi_basic', (r) => r.region === scope);
     const eng = rowOf('engagement_kpi', (r) => r.region === scope);
     const ld = rowOf('ld_kpi', (r) => r.region === scope);
     const x = (v) => (v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '×');
     const signed = (v) => (v < 0 ? '−' : '+') + OS.usd(Math.abs(v));
     const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
+    const na = (what, id) => (failedSrc(id) ? `• ${what}: not available (couldn't load)` : null);
     const lines = [`RevOps update, ${label}, ${OS.day(new Date().toISOString().slice(0, 10))}`];
-    if (pipe) lines.push(`• Pipeline this quarter: ${OS.usd(pipe.thisPipe)} open (commit ${OS.usd(pipe.thisCommit)}, best case ${OS.usd(pipe.thisBest)}), ${OS.usd(pipe.won)} closed won`);
-    if (cov && cov.avgBookings > 0) lines.push(cov.aheadOfUsual
+    const add = (line) => { if (line) lines.push(line); };
+    if (pipe) add(`• Pipeline this quarter: ${OS.usd(pipe.thisPipe)} open (commit ${OS.usd(pipe.thisCommit)}, best case ${OS.usd(pipe.thisBest)}), ${OS.usd(pipe.won)} closed won`);
+    else add(na('Pipeline', 'pipe_team'));
+    if (cov && cov.avgBookings > 0) add(cov.aheadOfUsual
       ? `• Coverage: past a usual quarter already (${OS.usd(cov.wonSoFar)} won, ${OS.usd(cov.avgBookings)} usual); next quarter ${x(cov.coverageNext)}`
       : `• Coverage: ${OS.usd(cov.openThis)} open against ${OS.usd(cov.toGo)} still to win for a usual quarter (${x(cov.coverageThis)}); next quarter ${x(cov.coverageNext)}${cov.projectedThis != null ? `; expected ${OS.usd(cov.projectedThis)} at a ${OS.pct(cov.winRate)} win rate` : ''}`);
-    if (mv) lines.push(`• Last 7 days: ${OS.num(mv.won)} won (${OS.usd(mv.wonArr)}), ${OS.num(mv.lost)} lost (${OS.usd(mv.lostArr)}); ${n(mv.pushed, 'deal', 'deals')} (${OS.usd(mv.pushedArr)}) pushed out of this quarter, ${OS.num(mv.pulled)} pulled in; Commit ${signed(mv.netCommitArr)} net`);
-    if (cr) lines.push(`• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
-    if (rk && rk.stuck) lines.push(`• Stuck in stage: ${n(rk.stuck, 'deal', 'deals')} (${OS.usd(rk.stuckArr)}) closing this or next quarter, past twice the usual time in their stage`);
-    if (rr) lines.push(`• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
-    if (ck) lines.push(`• Data checks: ${OS.num(ck.total)} open, ${OS.num(ck.high)} urgent`);
-    if (lv && lv.people) lines.push(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${[lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '', lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : ''].filter(Boolean).join(', ') || 'LeanData pool seats'}`);
+    else if (!cov) add(na('Coverage', 'pipe_cover'));
+    if (mv) add(`• Last 7 days: ${OS.num(mv.won)} won (${OS.usd(mv.wonArr)}), ${OS.num(mv.lost)} lost (${OS.usd(mv.lostArr)}); ${n(mv.pushed, 'deal', 'deals')} (${OS.usd(mv.pushedArr)}) pushed out of this quarter, ${OS.num(mv.pulled)} pulled in; Commit ${signed(mv.netCommitArr)} net`);
+    else add(na('Last 7 days', 'moves_kpi'));
+    if (cr) add(`• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
+    else add(na('Created', 'cr_kpi'));
+    if (rk) { if (rk.stuck) add(`• Stuck in stage: ${n(rk.stuck, 'deal', 'deals')} (${OS.usd(rk.stuckArr)}) closing this or next quarter, past twice the usual time in their stage`); }
+    else add(na('Stuck in stage', 'risk_kpi'));
+    if (rr) add(`• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
+    else add(na('Routing', 'rr_kpi'));
+    if (OS.state('checks') === 'ok') { const cs = OS.checkRows(); add(`• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent`); }
+    else add(na('Data checks', 'checks'));
+    if (lv) {
+      const held = [lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '',
+        lvFull && lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : '',
+        lv.emCustomers ? 'Engagement Manager on ' + n(lv.emCustomers, 'customer', 'customers') : '', lvFull && lv.pools ? n(lv.pools, 'LeanData pool seat', 'LeanData pool seats') : ''].filter(Boolean);
+      if (lv.people && held.length) add(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}`);
+    } else add(na('Leavers', 'leavers_kpi_basic'));
     const ldSpeed = !ld ? '' : ld.hRate != null ? `${OS.pct(ld.hRate)} of demo requests worked within 1 business day (${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)}, last 30 days)`
       : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : scope === 'SMB' ? 'SMB speed not timed (automation moves SMB leads out of Ready)' : 'no timed demo requests in the last 30 days';
-    if (ld && (ld.handoffs || ld.readyNow)) lines.push(`• Leads: ${ldSpeed}; ${n(ld.demoOverdue, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.b21)} of them over 20 business days${ld.routingIssues ? `; ${n(ld.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`);
-    if (orph && !p.mgr && (!p.region || p.region === 'All')) lines.push(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
-    if (eng && eng.untouched) lines.push(`• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`);
+    if (ld) { if (ld.handoffs || ld.readyNow) add(`• Leads: ${ldSpeed}; ${n(ld.demoOverdue, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.b21)} of them over 20 business days${ld.routingIssues ? `; ${n(ld.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
+    else add(na('Leads', 'ld_kpi'));
+    if (orph && !p.mgr && (!p.region || p.region === 'All')) add(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
+    if (eng) { if (eng.untouched) add(`• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`); }
+    else add(na('Engagement', 'engagement_kpi'));
     const mine = OS.state('gr_actions') === 'ok' ? (dash.data('gr_actions').data || []).filter((r) => r.forYou && !r.done && !OS.done.has(r)) : null;
-    if (mine) lines.push(`• My action items: ${OS.num(mine.length)} for me from ${OS.num(new Set(mine.map((r) => r.meetingId)).size)} meetings`);
-    else if (gr) lines.push(`• My action items: ${OS.num(gr.forYou)} for me`);
+    if (mine) add(`• My action items: ${OS.num(mine.length)} for me from ${OS.num(new Set(mine.map((r) => r.meetingId)).size)} meetings`);
+    else if (gr) add(`• My action items: ${OS.num(gr.forYou)} for me`);
     return lines.length > 1 ? lines.join('\n') : '';
   };
   const checksChecklist = () => {
-    const p = dash.params();
-    const area = p.checkArea || 'All';
-    const all = (OS.state('checks') === 'ok' ? dash.data('checks').data || [] : []).concat(OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [], OS.state('checks_lv') === 'ok' ? dash.data('checks_lv').data || [] : [], OS.state('checks_ld') === 'ok' ? dash.data('checks_ld').data || [] : []);
-    return all.filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region) && (area === 'All' || c.area === area))
+    const area = dash.params().checkArea || 'All';
+    return OS.checkRows().filter((c) => area === 'All' || c.area === area)
       .map((c) => `- [ ] ${c.title}: ${c.what}${c.meta ? ' (' + c.meta + ')' : ''}`).join('\n');
   };
   const scopeOpen = (open) => {
@@ -978,7 +1088,7 @@ OS.oo = (() => {
       const text = OS.oo.text();
       if (!text) { toast(false, t); return; }
       const who = OS.oo.who();
-      OS.ask.send(OS.ask.data('1:1 agenda for ' + OS.oo.nameOf(who), 'Here is my agenda for the 1:1 with ' + OS.oo.nameOf(who) + '. Offer to add it to the calendar invite or to send it to them on Slack, and ask me which before doing either.\n\n' + text, { person: OS.oo.nameOf(who), email: who }))
+      OS.ask.send(OS.ask.data('1:1 agenda for ' + OS.oo.nameOf(who), 'Here is my agenda for the 1:1 with ' + OS.oo.nameOf(who) + '. Offer to add it to the calendar invite or to send it to them on Slack, and ask me which before doing either.\n\n' + text, { person: OS.oo.nameOf(who), email: who }, 'cut to fit; Copy agenda in the dashboard has the full list'))
         .then(() => toast('asked', t), () => toast('askfail', t));
       return;
     }
@@ -1122,11 +1232,14 @@ OS.oo = (() => {
       const ready = OS.state('oo_upcoming') !== 'loading';
       const booked = who && !who.startsWith('n:') ? OS.oo.nextFor(who) : null;
       const hasLast = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last');
+      const hasPriv = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'item' && r.priv && !OS.done.has(r));
       document.querySelectorAll('[data-oo-note]').forEach((n) => {
         const k = n.dataset.ooNote;
-        n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast));
+        n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast) || (k === 'private' && hasPriv));
       });
-      document.querySelectorAll('[data-copy-agenda], [data-ask-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:'); });
+      // the agenda is built from what has loaded, so copying and sending wait for its sources
+      const agendaLoading = OS.state('oo_points') === 'loading' || OS.state('oo_followups') === 'loading';
+      document.querySelectorAll('[data-copy-agenda], [data-ask-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:') || agendaLoading; });
     }
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
     document.querySelectorAll('[data-scope-tag]').forEach((n) => { n.hidden = !(p.mgr || (p.region && p.region !== 'All')); });
@@ -1145,6 +1258,12 @@ OS.oo = (() => {
     const part = hr < 12 ? 'morning' : hr < 18 ? 'afternoon' : 'evening';
     document.querySelectorAll('[data-hello]').forEach((h) => { h.hidden = h.dataset.hello !== part; });
     OS.ask.refresh();
+    document.querySelectorAll('[data-ask-agenda]').forEach((b) => { b.hidden = !OS.ask.can(); });
+    // Home loads what the weekly summary reads, and the copy button waits until it has loaded
+    if (screen === 'home') {
+      const busy = SUMMARY.some((id) => OS.state(id) === 'loading');
+      document.querySelectorAll('[data-copy-summary]').forEach((b) => { b.disabled = busy; });
+    }
     if (screen === 'actions') syncCopyList();
     // person panel notes and copy button, only while the panel is open
     if (p.person) {

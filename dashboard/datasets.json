@@ -311,13 +311,13 @@
  },
  "pipe_nextstep": {
   "title": "Next-step dates",
-  "description": "Open EMEA New Business and Upsell opportunities closing this or next quarter with no next-step date or an overdue one, per owner and quarter.",
+  "description": "Open EMEA New Business and Upsell opportunities closing this or next quarter with no next step at all (neither a note nor a date) or an overdue next-step date, per owner and quarter.",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, FISCAL_YEAR(CloseDate) fy, FISCAL_QUARTER(CloseDate) fq, COUNT(Id) flaggedOpps, COUNT(Next_Steps_Date__c) overdueOpps, SUM(Finance_ARR_USD__c) flaggedArrUsd, MIN(Next_Steps_Date__c) oldestOverdue FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND RecordType.Name != 'Renewal' AND (Next_Steps_Date__c = null OR Next_Steps_Date__c < TODAY) AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, FISCAL_YEAR(CloseDate) fy, FISCAL_QUARTER(CloseDate) fq, COUNT(Id) flaggedOpps, COUNT(Next_Steps_Date__c) overdueOpps, SUM(Finance_ARR_USD__c) flaggedArrUsd, MIN(Next_Steps_Date__c) oldestOverdue FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND RecordType.Name != 'Renewal' AND (Next_Steps_Date__c < TODAY OR (Next_Steps_Date__c = null AND NextStep = null)) AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"
    }
   }
  },
