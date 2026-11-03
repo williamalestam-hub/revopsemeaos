@@ -111,16 +111,18 @@ dash.loader('gr_notes', {
         let h = line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
         if (!h && indent === 0) h = line.match(/^()\*\*([^*]{2,80})\*\*:?$/) || line.match(/^()(\p{Lu}[^.!?:]{1,40}):$/u);
         if (h) {
-          const lv = h[1] ? h[1].length : 7;
+          const top = stack[stack.length - 1];
+          const lv = h[1] ? h[1].length : top && top.lv >= 7 ? (top.has ? top.lv : top.lv + 1) : 7;
           const text = h[2].replace(/[*_`#]/g, '').replace(/:\s*$/, '').trim();
           while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop();
           parentSection = stack.map((s) => s.text).join(' > ');
-          stack.push({ lv, text });
+          stack.push({ lv, text, has: false });
           section = text;
           gap = false;
           continue;
         }
         const b = line.match(/^( *)(?:[-*+•]|\d+[.)])\s+(.*)$/);
+        if (stack.length) stack[stack.length - 1].has = true;
         rows.push({ id: meta.id + ':' + source[0] + pos, meetingId: meta.id, meeting: meta.meeting, meetingAt: meta.meetingAt, url: meta.url, capturedByMe: meta.capturedByMe, me, myName, source, section, parentSection, pos, kind: b ? 'bullet' : 'text', depth: Math.min(3, Math.floor(indent / 2)), gap, text: (b ? b[2] : line).trim() });
         pos += 1;
         gap = false;
@@ -170,6 +172,7 @@ window.OS = (() => {
   const sorts = {};
   const queries = {};
   const tables = {};
+  const reg = {};
 
   // status of several sources: 'ok' | 'loading' | 'connect' | 'error'
   const state = (...ids) => {
@@ -217,12 +220,6 @@ window.OS = (() => {
     go: ['m9 6 6 6-6 6'],
   };
 
-  // message line inside a list
-  const listMessage = (ul, kind, text) => {
-    const li = el('li', kind === 'loading' ? 'dash-skeleton os-li-skel' : kind === 'error' ? 'os-fail' : 'os-empty', kind === 'error' ? 'Failed to load' : kind === 'loading' ? null : text);
-    ul.replaceChildren(li);
-  };
-
   const searchFilter = (name, list, fields) => {
     const q = (queries[name] || '').trim().toLowerCase();
     return q ? list.filter((r) => fields.some((f) => String(r[f] ?? '').toLowerCase().includes(q))) : list;
@@ -247,6 +244,7 @@ window.OS = (() => {
   };
   const defTable = (name, ids, rows, cols, opts = {}) => {
     tables[name] = { ids, rows, cols, opts };
+    reg[name] = { kind: 'table', ids: () => ids, rows, fields: cols.map((c) => c.f), limit: opts.limit || 400 };
     dash.draw(name, (tbody) => {
       const { s, list } = tableRows(name);
       if (s !== 'ok' || !list.length) { tbody.replaceChildren(); return; }
@@ -282,37 +280,37 @@ window.OS = (() => {
       tbody.replaceChildren(frag);
     });
   };
-  const drawFoot = (tfoot) => {
-    const name = tfoot.dataset.for;
-    const t = tables[name];
-    if (!t) { tfoot.replaceChildren(); return; }
-    const { s, list } = tableRows(name);
-    const max = t.opts.limit || 400;
-    let cls = null, text = null;
-    if (s === 'loading') { cls = 'dash-skeleton os-foot-skel'; text = ''; }
-    else if (s === 'error') { cls = 'os-fail'; text = 'Failed to load'; }
-    else if (s === 'connect') { cls = 'os-empty'; text = t.opts.connect || 'Connect this source to see it.'; }
-    else if (!list.length) { cls = 'os-empty'; text = t.opts.empty || 'Nothing to show for this filter.'; }
-    else if (list.length > max) { cls = 'os-empty'; text = `Showing ${max} of ${list.length}. Search to narrow it down.`; }
-    if (text == null) { tfoot.replaceChildren(); return; }
-    const tr = el('tr');
-    const td = el('td', cls, text);
-    const tbl = tfoot.closest('table');
-    td.colSpan = Math.max(1, tbl ? tbl.querySelectorAll('thead th').length : t.cols.length);
-    tr.appendChild(td);
-    tfoot.replaceChildren(tr);
+  // which fixed sentence (in the HTML, [data-msg-for]) a table, list or chart needs now
+  const msgOf = (name) => {
+    const r = reg[name];
+    if (!r) return null;
+    const s = state(...r.ids());
+    if (s !== 'ok') return s;
+    const all = r.rows();
+    if (!all.length) return 'empty';
+    const vis = r.fields ? searchFilter(name, all, r.fields) : all;
+    if (!vis.length) return 'nomatch';
+    if (r.limit && vis.length > r.limit) return 'limit';
+    return null;
   };
-  const redrawTable = (name) => { dash.draw(name); dash.draw('tbl-foot'); };
+  const drawMsg = (slot) => {
+    const name = slot.dataset.for;
+    let k = msgOf(name);
+    if (reg[name] && reg[name].kind === 'chart' && (k === 'loading' || k === 'error')) k = null;
+    slot.className = 'msg-slot' + (k === 'loading' ? ' dash-skeleton' : k === 'error' ? ' os-fail' : '');
+    slot.textContent = k === 'error' ? 'Failed to load' : '';
+    document.querySelectorAll('[data-msg-for]').forEach((p) => { if (p.dataset.msgFor === name) p.hidden = p.dataset.msg !== k; });
+  };
+  const redraw = (name) => { dash.draw(name); dash.draw('msg'); };
 
-  // list renderer: render(rows) returns an array of <li>
-  const list = (ul, ids, rows, render, opts = {}) => {
-    const s = state(...ids);
-    if (s === 'loading') { listMessage(ul, 'loading'); return; }
-    if (s === 'error') { listMessage(ul, 'error'); return; }
-    if (s === 'connect') { listMessage(ul, 'empty', opts.connect || 'Connect this source to see it.'); return; }
-    const items = rows();
-    if (!items.length) { listMessage(ul, 'empty', opts.empty || 'Nothing here right now.'); return; }
-    ul.replaceChildren(...render(items));
+  // lists: the drawing holds only items; sentences come from the message slot beside it
+  const defList = (name, ids, rows, render, opts = {}) => {
+    reg[name] = { kind: 'list', ids: typeof ids === 'function' ? ids : () => ids, rows, fields: opts.fields || null, limit: 0 };
+    dash.draw(name, (ul) => {
+      if (msgOf(name) !== null && msgOf(name) !== 'limit') { ul.replaceChildren(); return; }
+      const items = opts.fields ? searchFilter(name, rows(), opts.fields) : rows();
+      ul.replaceChildren(...render(items));
+    });
   };
 
   // tooltips are built while drawing; hover only shows, hides and places them
@@ -440,21 +438,22 @@ window.OS = (() => {
     svg.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', top).attr('y2', H - bottom).attr('stroke', 'var(--cds-chart-axis)');
   };
 
-  // chart box state handling
-  const chart = (box, ids, draw, emptyText) => {
-    const s = state(...ids);
-    box.classList.toggle('dash-skeleton', s === 'loading');
-    if (s === 'loading') { box.replaceChildren(); return; }
-    if (s === 'error' || s === 'connect') { box.style.minHeight = ''; box.replaceChildren(el('div', 'os-fail', s === 'connect' ? 'Connect this source to see it' : 'Failed to load')); return; }
-    box.querySelectorAll('.os-fail, .os-empty').forEach((n) => n.remove());
-    if (draw() === false) {
-      d3.select(box).selectAll('svg, .os-tip').remove();
+  // charts: draw(box, rows); an empty or unconnected chart leaves its box empty and the slot beside it speaks
+  const defChart = (name, ids, rows, draw) => {
+    reg[name] = { kind: 'chart', ids: () => ids, rows, fields: null, limit: 0 };
+    dash.draw(name, (box) => {
+      const s = state(...ids);
+      box.classList.toggle('dash-skeleton', s === 'loading');
+      if (s === 'error') { box.style.minHeight = ''; box.replaceChildren(el('div', 'os-fail', 'Failed to load')); return; }
+      box.querySelectorAll('.os-fail').forEach((n) => n.remove());
+      const list = s === 'ok' ? rows() : [];
+      if (!list.length) { d3.select(box).selectAll('svg, .os-tip').remove(); box.style.minHeight = s === 'ok' ? '0' : ''; return; }
       box.style.minHeight = '';
-      box.appendChild(el('div', 'os-empty', emptyText || 'Nothing to chart for this filter.'));
-    }
+      draw(box, list);
+    });
   };
 
-  return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, icon, ICON, defTable, drawFoot, redrawTable, list, chart, vbars, hbars, searchFilter };
+  return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, icon, ICON, defTable, defList, defChart, drawMsg, redraw, vbars, hbars, searchFilter };
 })();
 
 // ---------- App shell ----------
@@ -462,7 +461,7 @@ window.OS = (() => {
   const SCREENS = ['home', 'actions', 'pipeline', 'created', 'hiring', 'routing', 'books'];
   const view = { actions: 'meetings', pipeline: 'teams', created: 'trend', hiring: 'joiners', routing: 'people', books: 'reps' };
   let screen = SCREENS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
-  let lastPersonBtn = null;
+  let lastPerson = null;
 
   const apply = () => {
     const person = dash.params().person || '';
@@ -483,7 +482,7 @@ window.OS = (() => {
     document.querySelectorAll('.app').forEach((a) => a.classList.toggle('has-detail', !!person && !!a.querySelector('[data-detail]')));
   };
 
-  const toTop = () => document.querySelectorAll('.app-main').forEach((m) => { if (m.getBoundingClientRect().top < 0) m.scrollIntoView({ block: 'start' }); });
+  const toTop = () => document.querySelectorAll('.app-main').forEach((m) => { const t = m.getBoundingClientRect().top; if (t < 0 || t > innerHeight / 2) m.scrollIntoView({ block: 'start' }); });
   const go = (s, v) => {
     if (!SCREENS.includes(s)) return;
     screen = s;
@@ -508,14 +507,15 @@ window.OS = (() => {
 
   // copy to clipboard with a short status
   let toastTimer = null;
-  const toast = (ok) => {
-    document.querySelectorAll('[data-toast]').forEach((t) => { t.hidden = t.dataset.toast !== (ok ? 'ok' : 'fail'); });
+  const toast = (ok, from) => {
+    const scope = (from && from.closest('.app-detail')) ? '.app-detail' : '.app-main';
+    document.querySelectorAll('[data-toast]').forEach((t) => { t.hidden = !(t.closest(scope) && t.dataset.toast === (ok ? 'ok' : 'fail')); });
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => document.querySelectorAll('[data-toast]').forEach((t) => { t.hidden = true; }), 2200);
   };
   const copy = (text, btn) => {
     const done = (ok) => {
-      toast(ok);
+      toast(ok, btn);
       if (btn && ok) { btn.classList.add('is-copied'); setTimeout(() => btn.classList.remove('is-copied'), 1500); }
     };
     try {
@@ -542,8 +542,14 @@ window.OS = (() => {
   }));
   const closePanel = () => {
     dash.setParams({ person: '' });
-    if (lastPersonBtn && lastPersonBtn.isConnected) lastPersonBtn.focus();
+    const last = lastPerson;
+    requestAnimationFrame(() => {
+      if (!last) return;
+      const hit = [...document.querySelectorAll('[data-person]')].find((b) => b.dataset.person === last.name && (!last.draw || (b.closest('[data-draw]') || {}).dataset?.draw === last.draw));
+      if (hit) hit.focus();
+    });
   };
+  const syncCopyList = () => document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
 
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-nav], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], th[data-sort]');
@@ -554,7 +560,7 @@ window.OS = (() => {
       return;
     }
     if (t.matches('[data-view-tab]')) { const [s, v] = t.dataset.viewTab.split(':'); view[s] = v; apply(); return; }
-    if (t.matches('[data-person]')) { lastPersonBtn = t; dash.setParams({ person: t.dataset.person }); focusPanel(); return; }
+    if (t.matches('[data-person]')) { lastPerson = { name: t.dataset.person, draw: (t.closest('[data-draw]') || {}).dataset?.draw || null }; dash.setParams({ person: t.dataset.person }); focusPanel(); return; }
     if (t.matches('[data-close-person]')) { closePanel(); return; }
     if (t.matches('[data-copy-text]')) { copy(t.dataset.copyText, t); return; }
     if (t.matches('[data-copy-list]')) { const text = checklist(); if (text) copy(text, t); return; }
@@ -573,7 +579,7 @@ window.OS = (() => {
       OS.sorts[name] = { f: t.dataset.sort, dir };
       tbl.querySelectorAll('th[data-sort]').forEach((h) => h.removeAttribute('aria-sort'));
       t.setAttribute('aria-sort', dir);
-      OS.redrawTable(name);
+      OS.redraw(name);
     }
   });
   document.addEventListener('keydown', (e) => {
@@ -584,8 +590,8 @@ window.OS = (() => {
   document.querySelectorAll('.os-orphan-reason').forEach((s) => s.addEventListener('change', () => dash.setParams({ orphanReason: s.value })));
   document.querySelectorAll('input[data-search]').forEach((inp) => inp.addEventListener('input', () => {
     OS.queries[inp.dataset.search] = inp.value;
-    if (inp.dataset.search === 'act-list') dash.draw('act-list');
-    else OS.redrawTable(inp.dataset.search);
+    OS.redraw(inp.dataset.search);
+    if (inp.dataset.search === 'act-list') syncCopyList();
   }));
   document.querySelectorAll('table[data-sortable]').forEach((tbl) => {
     const init = tbl.querySelector('th[aria-sort]');
@@ -607,7 +613,7 @@ window.OS = (() => {
     document.querySelectorAll('.os-orphan-reason').forEach((s) => { s.value = p.orphanReason || ''; });
     document.querySelectorAll('.os-sw[data-color]').forEach((sw) => { sw.style.background = dash.colors[+sw.dataset.color]; });
     document.querySelectorAll('.app').forEach((a) => a.style.setProperty('--app-accent', dash.colors[0]));
-    document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
+    syncCopyList();
     // person panel notes and copy button, only while the panel is open
     if (p.person) {
       const sf = OS.state('person');
@@ -616,11 +622,14 @@ window.OS = (() => {
       const inHb = hb === 'ok' && (dash.data('person_hb').data || []).some((r) => r.name === p.person);
       document.querySelectorAll('[data-pd-note]').forEach((n) => {
         const k = n.dataset.pdNote;
-        n.hidden = !((k === 'missing' && sf === 'ok' && hb !== 'loading' && !inSf && !inHb) || (k === 'nosf' && sf === 'ok' && !inSf && inHb) || (k === 'nohb' && hb === 'ok' && inSf && !inHb));
+        n.hidden = !((k === 'missing' && sf === 'ok' && hb === 'ok' && !inSf && !inHb)
+          || (k === 'nosf' && sf === 'ok' && !inSf && inHb)
+          || (k === 'nohb' && hb === 'ok' && inSf && !inHb)
+          || (k === 'hbconnect' && (hb === 'connect' || hb === 'error')));
       });
       const row = personRowNow();
       document.querySelectorAll('[data-copy-person-id]').forEach((b) => { b.disabled = !(row && row.userId); });
     }
   });
-  dash.draw('tbl-foot', (tfoot) => OS.drawFoot(tfoot));
+  dash.draw('msg', (slot) => OS.drawMsg(slot));
 })();

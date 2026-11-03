@@ -48,16 +48,8 @@ const pipeBars = (pq) => {
     .filter((r) => r.total > 0)
     .sort((a, b) => b.total - a.total);
 };
-dash.draw('pipe-chart', (box) => OS.chart(box, ['pipe_team'], () => {
-  const rows = pipeBars(dash.params().pq === 'next' ? 'next' : 'this');
-  if (!rows.length) return false;
-  OS.hbars(box, rows, stageKeys(), OS.usd);
-}, 'No open pipeline for this team and quarter.'));
-dash.draw('home-pipe-chart', (box) => OS.chart(box, ['pipe_team'], () => {
-  const rows = pipeBars('this').slice(0, 10);
-  if (!rows.length) return false;
-  OS.hbars(box, rows, stageKeys(), OS.usd);
-}, 'No open pipeline for this team this quarter.'));
+OS.defChart('pipe-chart', ['pipe_team'], () => pipeBars(dash.params().pq === 'next' ? 'next' : 'this'), (box, rows) => OS.hbars(box, rows, stageKeys(), OS.usd));
+OS.defChart('home-pipe-chart', ['pipe_team'], () => pipeBars('this').slice(0, 10), (box, rows) => OS.hbars(box, rows, stageKeys(), OS.usd));
 
 OS.defTable('pipe-mgr-table', ['pipe_team'], () => (dash.data('pipe_team').data || [])
   .filter((r) => r.level === 'team' && inTeam(r))
@@ -89,23 +81,11 @@ const typeKeys = (arr) => [
   { k: arr ? 'rnArr' : 'rn', name: 'Renewal (manual)', color: dash.colors[3] },
 ];
 const weekRows = () => (dash.data('cr_weeks').data || []).map((w) => ({ ...w, key: w.week, label: d3.utcFormat('%b %-d')(new Date(w.week + 'T00:00:00Z')), tip: 'Week of ' + d3.utcFormat('%-d %b %Y')(new Date(w.week + 'T00:00:00Z')) }));
-dash.draw('cr-week-chart', (box) => OS.chart(box, ['cr_weeks'], () => {
-  const arr = dash.params().crm === 'arr';
-  const rows = weekRows();
-  if (!rows.length) return false;
-  OS.vbars(box, rows, typeKeys(arr), arr ? OS.usd : OS.num);
-}));
-dash.draw('home-week-chart', (box) => OS.chart(box, ['cr_weeks'], () => {
-  const rows = weekRows();
-  if (!rows.length) return false;
-  OS.vbars(box, rows, typeKeys(false), OS.num, { height: 180 });
-}));
-dash.draw('cr-month-chart', (box) => OS.chart(box, ['cr_months'], () => {
-  const arr = dash.params().crm === 'arr';
-  const rows = (dash.data('cr_months').data || []).map((m, i) => ({ ...m, key: m.month, label: monthLabel(m.month, i), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) }));
-  if (!rows.length) return false;
-  OS.vbars(box, rows, typeKeys(arr), arr ? OS.usd : OS.num);
-}));
+const isArr = () => dash.params().crm === 'arr';
+OS.defChart('cr-week-chart', ['cr_weeks'], weekRows, (box, rows) => OS.vbars(box, rows, typeKeys(isArr()), isArr() ? OS.usd : OS.num));
+OS.defChart('home-week-chart', ['cr_weeks'], weekRows, (box, rows) => OS.vbars(box, rows, typeKeys(false), OS.num, { height: 180 }));
+OS.defChart('cr-month-chart', ['cr_months'], () => (dash.data('cr_months').data || []).map((m, i) => ({ ...m, key: m.month, label: monthLabel(m.month, i), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) })),
+  (box, rows) => OS.vbars(box, rows, typeKeys(isArr()), isArr() ? OS.usd : OS.num));
 
 OS.defTable('cr-mix-table', ['cr_mix'], () => (dash.data('cr_mix').data || []).map((r) => ({ ...r, _cls: r.source === 'Total' ? 'os-total' : '' })), [
   { f: 'source' }, { f: 'thisOpps', fmt: OS.num, num: true }, { f: 'thisArr', fmt: OS.usd, num: true },
@@ -128,8 +108,8 @@ OS.defTable('cr-rep-table', ['cr_leader'], () => (dash.data('cr_leader').data ||
 // ===================== ACTION ITEMS =====================
 dash.draw('kpi-gr', (el) => OS.value(el, ['gr_kpi'], () => OS.num(firstRow('gr_kpi')[el.dataset.field] || 0)));
 dash.draw('kpi-checks', (el) => OS.value(el, ['checks_kpi'], () => OS.num(regionRow(el, 'checks_kpi')[el.dataset.field] || 0)));
+dash.draw('kpi-checks-hb', (el) => OS.value(el, ['checks_hb_kpi'], () => OS.num(regionRow(el, 'checks_hb_kpi')[el.dataset.field] || 0)));
 
-const GRANOLA_CONNECT = 'Connect Granola in your claude.ai connectors to see the next steps from your meetings.';
 const ownerChip = (r) => OS.el('span', 'chip' + (r.bucket === 'mine' ? ' info' : r.bucket === 'unassigned' ? ' warn' : ''), r.owner || 'Unassigned');
 const actionItem = (r) => {
   const li = OS.el('li', 'itm');
@@ -170,13 +150,11 @@ const groupedActions = (rows) => {
   }
   return out;
 };
-dash.draw('act-list', (ul) => OS.list(ul, ['gr_actions'], () => {
+OS.defList('act-list', ['gr_actions'], () => {
   const own = dash.params().grOwner || 'all';
-  return OS.searchFilter('act-list', (dash.data('gr_actions').data || [])
-    .filter((r) => !r.done && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
-}, groupedActions, { empty: 'No action items for this filter and window.', connect: GRANOLA_CONNECT }));
-dash.draw('home-actions', (ul) => OS.list(ul, ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou).slice(0, 6),
-  groupedActions, { empty: 'Nothing for you in your recent notes.', connect: GRANOLA_CONNECT }));
+  return (dash.data('gr_actions').data || []).filter((r) => !r.done && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own)));
+}, groupedActions, { fields: ['item', 'detail', 'owner', 'meeting'] });
+OS.defList('home-actions', ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou).slice(0, 6), groupedActions);
 
 const checkItem = (c) => {
   const li = OS.el('li', 'itm');
@@ -208,11 +186,11 @@ const allChecks = () => {
     .filter((c) => OS.region() === 'All' || c.region === OS.region())
     .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
 };
-dash.draw('check-list', (ul) => OS.list(ul, ['checks'], () => {
+OS.defList('check-list', () => ((dash.params().checkArea || 'All') === 'Hiring' ? ['checks_hb'] : ['checks']), () => {
   const area = dash.params().checkArea || 'All';
   return allChecks().filter((c) => area === 'All' || c.area === area);
-}, (rows) => rows.map(checkItem), { empty: 'No problems found for this filter.' }));
-dash.draw('home-checks', (ul) => OS.list(ul, ['checks'], () => allChecks().slice(0, 7), (rows) => rows.map(checkItem), { empty: 'No problems found.' }));
+}, (rows) => rows.map(checkItem));
+OS.defList('home-checks', ['checks'], () => allChecks().slice(0, 7), (rows) => rows.map(checkItem));
 
 // ===================== HIRING =====================
 dash.draw('kpi-hire', (el) => OS.value(el, ['hire_kpi'], () => OS.num(regionRow(el, 'hire_kpi')[el.dataset.field] || 0)));
@@ -224,21 +202,19 @@ OS.defTable('hire-table', ['people'], () => (dash.data('people').data || [])
   { f: 'startDate', fmt: OS.day }, { f: 'daysIn', fmt: OS.num, num: true },
   { f: 'sfRole' }, { f: 'pools', fmt: OS.num, num: true },
   { f: 'status', chip: statusCls },
-], { key: 'id', empty: 'Nobody joined in the last 90 days for this team.', connect: 'Connect HiBob in your claude.ai connectors to see new joiners.' });
+], { key: 'id' });
 
-dash.draw('hire-month-chart', (box) => OS.chart(box, ['hire_months'], () => {
-  const rows = (dash.data('hire_months').data || []).map((m, i) => ({ ...m, key: m.month, label: monthLabel(m.month, i), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) }));
-  if (!rows.length) return false;
-  OS.vbars(box, rows, [
-    { k: 'gtm', name: 'GTM EMEA', color: dash.colors[0] },
-    { k: 'eng', name: 'Engagement EMEA', color: dash.colors[1] },
-    { k: 'growth', name: 'Growth EMEA', color: dash.colors[2] },
-  ], OS.num);
-}));
+OS.defChart('hire-month-chart', ['hire_months'], () => (dash.data('hire_months').data || []).filter((m) => m.total > 0).length
+  ? (dash.data('hire_months').data || []).map((m, i) => ({ ...m, key: m.month, label: monthLabel(m.month, i), tip: d3.utcFormat('%B %Y')(new Date(m.month + '-01T00:00:00Z')) }))
+  : [], (box, rows) => OS.vbars(box, rows, [
+  { k: 'gtm', name: 'GTM EMEA', color: dash.colors[0] },
+  { k: 'eng', name: 'Engagement EMEA', color: dash.colors[1] },
+  { k: 'growth', name: 'Growth EMEA', color: dash.colors[2] },
+], OS.num));
 
 OS.defTable('hire-team-table', ['hire_teams'], () => dash.data('hire_teams').data || [], [
   { f: 'team' }, { f: 'people', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.people) }, { f: 'joined90', fmt: OS.num, num: true },
-], { key: 'team', connect: 'Connect HiBob in your claude.ai connectors to see headcount.' });
+], { key: 'team' });
 
 // ===================== ROUTING =====================
 dash.draw('kpi-rr', (el) => OS.value(el, ['rr_kpi'], () => OS.num(regionRow(el, 'rr_kpi')[el.dataset.field] || 0)));
@@ -253,7 +229,7 @@ OS.defTable('rr-people-table', ['rr_people'], () => {
   { f: 'name', person: (r) => r.name }, { f: 'region' }, { f: 'manager' }, { f: 'createdDate', fmt: OS.day },
   { f: 'pools', fmt: OS.num, num: true }, { f: 'poolNames', wrap: true },
   { f: 'assignments', fmt: OS.num, num: true }, { f: 'status', chip: statusCls },
-], { key: 'userId', empty: 'Everyone in this team is in routing.' });
+], { key: 'userId' });
 
 OS.defTable('rr-pool-table', ['rr_pools'], () => {
   const region = OS.region();
@@ -312,7 +288,7 @@ OS.defTable('bk-pool-table', ['book_pool'], () => (dash.data('book_pool').data |
   .sort((a, b) => String(a.flag).localeCompare(String(b.flag)) || String(a.name).localeCompare(String(b.name))), [
   { f: 'name', person: (r) => r.name }, { f: 'region' }, { f: 'bookList', wrap: true }, { f: 'pools', fmt: OS.num, num: true },
   { f: 'flag', chip: (v) => (v === 'Book, no pool' ? 'bad' : 'warn') },
-], { key: 'userId', empty: 'Every AE and SMB rep in this team has both a book and a pool.' });
+], { key: 'userId' });
 
 // ===================== PERSON PANEL =====================
 // Salesforce values come from `person`, HiBob values from `person_hb`; each is marked against its own source.

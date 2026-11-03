@@ -84,17 +84,13 @@ dash.calc('pipe_reps', {
 // ===================== CREATED =====================
 dash.calc('cr_weeks', {
   title: 'Created opps per week',
-  description: 'Daily created opps summed into Monday-start weeks up to this week, with empty weeks as zero.',
+  description: 'Daily created opps summed into the last 13 Monday-start weeks up to this one, with empty weeks as zero.',
   inputs: ['cr_daily'],
   fn: (cr_daily) => {
     const DAY = 864e5;
     const monday = (s) => { const d = new Date(s + 'T00:00:00Z'); return new Date(d.getTime() - ((d.getUTCDay() + 6) % 7) * DAY); };
-    if (!cr_daily.length) return [];
-    const days = cr_daily.map((r) => String(r.day).slice(0, 10)).sort();
-    const first = new Date(days[0] + 'T00:00:00Z');
-    let start = monday(days[0]);
-    if (start < first) start = new Date(start.getTime() + 7 * DAY);
     const end = monday(new Date().toISOString().slice(0, 10));
+    const start = new Date(end.getTime() - 12 * 7 * DAY);
     const weeks = new Map();
     for (let t = start.getTime(); t <= end.getTime(); t += 7 * DAY) {
       const k = new Date(t).toISOString().slice(0, 10);
@@ -666,7 +662,8 @@ dash.calc('gr_actions', {
       const item = clean(sp.item);
       const owner = sp.owner ? clean(sp.owner) : ownerDefault ? clean(ownerDefault) : null;
       if (!item || PLACEHOLDER.test(item) || /:$/.test(item)) return null;
-      const bucket = !owner ? 'unassigned' : isMe(owner) ? 'mine' : 'others';
+      const self = /^(me|myself|i)$/i.test(owner || '') && r.capturedByMe !== false;
+      const bucket = !owner ? 'unassigned' : (self || isMe(owner)) ? 'mine' : 'others';
       const date = String(r.meetingAt || '').slice(0, 10) || null;
       const o = {
         id: r.id, meetingId: r.meetingId, meeting: clean(r.meeting) || 'Untitled meeting', date, meetingAt: r.meetingAt, url: r.url,
@@ -780,14 +777,23 @@ dash.calc('checks_hb', {
 
 dash.calc('checks_kpi', {
   title: 'Data checks headline',
-  description: 'Number of data checks and urgent ones, per team and for all EMEA, across Salesforce, LeanData and HiBob checks.',
-  inputs: ['checks', 'checks_hb'],
-  fn: (checks, checks_hb) => {
+  description: 'Number of Salesforce and LeanData data checks and urgent ones, per team and for all EMEA.',
+  inputs: ['checks'],
+  fn: (checks) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    const all = checks.concat(checks_hb);
     return regions.map((region) => {
-      const cs = all.filter((c) => region === 'All' || c.region === region);
+      const cs = checks.filter((c) => region === 'All' || c.region === region);
       return { region, total: cs.length, high: cs.filter((c) => c.severity === 'high').length };
     });
+  },
+});
+
+dash.calc('checks_hb_kpi', {
+  title: 'HiBob checks headline',
+  description: 'Number of HiBob data checks (recent joiners with no Salesforce user), per team and for all EMEA.',
+  inputs: ['checks_hb'],
+  fn: (checks_hb) => {
+    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+    return regions.map((region) => ({ region, total: checks_hb.filter((c) => region === 'All' || c.region === region).length }));
   },
 });

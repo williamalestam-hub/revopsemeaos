@@ -16,7 +16,7 @@ routing pools and HiBob details in one place.
 | Screen | What it answers | Sources |
 |---|---|---|
 | Home | Headline numbers, your next steps from meetings, the most urgent data checks, pipeline by team, created per week | all of the below |
-| Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), plus data checks: routing gaps, joiners with no Salesforce user, past-due opps, orphan accounts, split books | Granola `list_meetings` + `get_meetings`, `get_account_info`; the Salesforce and HiBob sources |
+| Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), plus data checks: routing gaps, joiners with no Salesforce user, past-due opps, orphan accounts, split books | Granola `list_meetings` + `get_meetings`; the Salesforce and HiBob sources |
 | Pipeline | Open NB + Upsell pipeline, commit and best case this/next quarter by team → manager → rep; closed won this quarter; renewals at stake; past-due and stale opps | `Opportunity` |
 | Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards | `Opportunity` |
 | Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to Salesforce user and routing pools | HiBob `commons_searchEmployees`, `User`, LeanData pools |
@@ -52,11 +52,13 @@ and never re-runs a query.
 - The app lists your Granola meetings in the chosen window (7, 30 or 90 days; notes you took or were
   invited to), reads each note ten at a time, and keeps the bullets under a "Next steps", "Action items",
   "Follow-ups" or "To-dos" heading, plus to-dos in your private notes.
-- Owner is the name in brackets after the item (Granola's format, `**Task** (Name)`) or before a colon.
-  It counts as yours when it matches the name in your Granola email. "For you" = yours, or unassigned
-  in notes you took.
+- Owner is the name in brackets after the item (Granola's format, `**Task** (Name)`), before a colon,
+  or the name a group of items sits under. It counts as yours when it matches your Granola name or
+  email (or says "me" in a note you took). A bracket inside the bold title is context, not the owner.
+  "For you" = yours, or unassigned in notes you took. Placeholders like "None" are left out.
 - Each viewer sees **their own** notes: Granola runs with each reader's own connection, and no note
-  content is stored in the dashboard.
+  content is stored in the dashboard. The loader only splits notes into lines; the rules for what
+  counts as an action item are the `gr_actions` calculation, visible in the dashboard's Sources.
 - Items can't be ticked off in the app yet (the dashboard has no storage for that). Use
   "Copy as checklist" to move them into your task tool.
 

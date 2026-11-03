@@ -89,6 +89,7 @@
   .ibtn { display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; border: 0; border-radius: var(--cds-radius); background: transparent; color: var(--color-fg-muted); cursor: pointer; flex: none; position: relative; }
   .ibtn:hover { background: color-mix(in srgb, var(--color-fg) 8%, transparent); color: var(--color-fg); }
   .ibtn.is-copied { color: var(--color-ok); }
+  .btn.is-copied { color: var(--color-ok); border-color: currentColor; }
   .lnk { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--color-fg) 25%, transparent); text-underline-offset: 3px; }
   .lnk:hover { text-decoration-color: currentColor; }
   .more { background: none; border: 0; padding: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
@@ -132,14 +133,21 @@
   .os-fail { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: 4rem; }
   .os-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
   .os-empty { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); padding: var(--cds-pad-lg); text-align: center; }
-  .os-li-skel { height: 3rem; margin: var(--cds-pad-sm) var(--cds-pad-lg); }
+  .msgs { position: sticky; left: 0; box-sizing: border-box; width: 100%; }
+  .pane-scroll .msgs { width: 100cqi; }
+  .pane-scroll { container-type: inline-size; }
+  .msgs .os-empty { margin: 0; }
+  .msg-slot { display: none; }
+  .msg-slot.dash-skeleton { display: block; height: 3rem; margin: var(--cds-pad-sm) var(--cds-pad-lg); }
+  .msg-slot.os-fail { display: flex; }
 
   /* Item lists (action items, checks) */
   .ilist { list-style: none; margin: 0; padding: 0; display: grid; }
   .ilist > li { border-bottom: 1px solid var(--color-border-line); }
   .ilist > li:last-child { border-bottom: 0; }
-  .ilist .grp { display: flex; flex-wrap: wrap; gap: 4px var(--cds-gap-sm); align-items: center; padding: var(--cds-pad-sm) var(--cds-pad-lg); background: color-mix(in srgb, var(--color-fg) 3%, var(--color-panel)); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); position: sticky; top: 0; z-index: 1; }
-  .ilist .grp b { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+  .ilist .grp { display: flex; flex-wrap: nowrap; gap: 4px var(--cds-gap-sm); align-items: center; padding: var(--cds-pad-sm) var(--cds-pad-lg); background: color-mix(in srgb, var(--color-fg) 3%, var(--color-panel)); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); position: sticky; top: 0; z-index: 1; }
+  .ilist .grp > * { flex: none; }
+  .ilist .grp b { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ilist .grp a { color: var(--color-fg-muted); display: inline-grid; place-items: center; }
   .ilist .grp a:hover { color: var(--color-fg); }
   .itm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px var(--cds-gap-md); align-items: start; padding: var(--cds-pad-sm) var(--cds-pad-lg); }
@@ -167,7 +175,7 @@
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
 
   /* Person panel */
-  .app-detail { grid-column: 3; grid-row: 1; position: sticky; top: 0; max-height: 100vh; overflow: auto; box-sizing: border-box; display: grid; gap: var(--cds-gap-md); align-content: start; padding: var(--cds-pad-lg); background: var(--color-panel); border-left: 1px solid var(--color-border-line); min-width: 0; }
+  .app-detail { grid-column: 3; grid-row: 1; position: sticky; top: 0; height: 100vh; max-height: 100vh; overflow: auto; box-sizing: border-box; display: grid; gap: var(--cds-gap-md); align-content: start; padding: var(--cds-pad-lg); background: var(--color-panel); border-left: 1px solid var(--color-border-line); min-width: 0; }
   .pd-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--cds-gap-sm); align-items: center; }
   .pd-avatar { width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 20%, transparent); font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); }
   .pd-id { min-width: 0; }
@@ -192,7 +200,7 @@
 
   @media (max-width: 1180px) {
     .app.has-detail { grid-template-columns: var(--app-side) minmax(0, 1fr); }
-    .app.has-detail .app-detail { grid-column: 2; grid-row: 1; position: static; max-height: none; border-left: 0; border-bottom: 1px solid var(--color-border-line); }
+    .app.has-detail .app-detail { grid-column: 2; grid-row: 1; position: static; height: auto; max-height: none; border-left: 0; border-bottom: 1px solid var(--color-border-line); }
     .app.has-detail .app-main { grid-row: 2; }
   }
   @media (max-width: 760px) {
@@ -298,7 +306,7 @@
           <span class="card-value"><b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="thisWeekOpps" data-row="0" data-fetchpriority="high">—</b></span>
           <span class="stat-sub">Last week <b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="lastWeekOpps" data-row="0">—</b></span>
         </button>
-        <button class="home-card" type="button" data-nav="actions" id="card-actions">
+        <button class="home-card" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou" id="card-actions">
           <span class="card-top">Action items for you<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg></span>
           <span class="card-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="forYou" data-row="0">—</b></span>
           <span class="stat-sub"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="meetings" data-row="0">—</b> meetings with next steps</span>
@@ -326,6 +334,10 @@
               <button class="more" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
             <ul class="ilist" data-draw="home-actions" data-source="gr_actions"></ul>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-actions"></span>
+              <p class="os-empty" data-msg-for="home-actions" data-msg="empty" hidden>Nothing for you in your recent notes.</p>
+              <p class="os-empty" data-msg-for="home-actions" data-msg="connect" hidden>Connect Granola in your claude.ai connectors to see the next steps from your meetings.</p>
+            </div>
           </div>
           <div class="pane" id="home-checks">
             <div class="pane-head">
@@ -336,6 +348,10 @@
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
             <ul class="ilist" data-draw="home-checks" data-source="checks checks_hb"></ul>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-checks"></span>
+              <p class="os-empty" data-msg-for="home-checks" data-msg="empty" hidden>No problems found.</p>
+              <p class="os-empty" data-msg-for="home-checks" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+            </div>
           </div>
         </div>
         <div class="stack">
@@ -348,7 +364,10 @@
             </div>
             <div class="pane-body">
               <div class="legend"><span><i class="os-sw" data-color="0"></i>Late (4–6)</span><span><i class="os-sw" data-color="1"></i>Mid (2–3)</span><span><i class="os-sw" data-color="2"></i>Early (0–1)</span></div>
-              <div class="os-chart small" data-draw="home-pipe-chart" data-source="pipe_team" data-fetchpriority="low"></div>
+              <div class="os-chart small" data-draw="home-pipe-chart" data-source="pipe_team" data-fetchpriority="low"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-pipe-chart"></span>
+  <p class="os-empty" data-msg-for="home-pipe-chart" data-msg="empty" hidden>No open pipeline for this team this quarter.</p>
+  <p class="os-empty" data-msg-for="home-pipe-chart" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+</div>
             </div>
           </div>
           <div class="pane" id="home-weeks">
@@ -360,7 +379,10 @@
             </div>
             <div class="pane-body">
               <div class="legend"><span><i class="os-sw" data-color="0"></i>New Business</span><span><i class="os-sw" data-color="1"></i>Upsell</span><span><i class="os-sw" data-color="3"></i>Renewal (manual)</span></div>
-              <div class="os-chart small" data-draw="home-week-chart" data-source="cr_weeks" data-fetchpriority="low"></div>
+              <div class="os-chart small" data-draw="home-week-chart" data-source="cr_weeks" data-fetchpriority="low"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-week-chart"></span>
+  <p class="os-empty" data-msg-for="home-week-chart" data-msg="empty" hidden>No opportunities created in the last 13 weeks.</p>
+  <p class="os-empty" data-msg-for="home-week-chart" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+</div>
             </div>
           </div>
         </div>
@@ -387,7 +409,7 @@
         <div class="stat" id="stat-gr-mine"><span class="stat-label">Assigned to you</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="mine" data-row="0">—</b></span><span class="stat-sub">named as the owner</span></div>
         <div class="stat" id="stat-gr-unassigned"><span class="stat-label">Unassigned</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="unassigned" data-row="0">—</b></span><span class="stat-sub">no owner in the note</span></div>
         <div class="stat" id="stat-gr-others"><span class="stat-label">With others</span><span class="stat-value"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="others" data-row="0">—</b></span><span class="stat-sub">someone else owns it</span></div>
-        <div class="stat" id="stat-checks"><span class="stat-label">Data checks</span><span class="stat-value"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="total" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent, incl. HiBob</span></div>
+        <div class="stat" id="stat-checks"><span class="stat-label">Data checks</span><span class="stat-value"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="total" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent · <b data-draw="kpi-checks-hb" data-source="checks_hb_kpi" data-field="total" data-where="region=All">—</b> more from HiBob</span></div>
       </div>
       <div class="vtabs" role="tablist" aria-label="Action item views">
         <button class="vtab" role="tab" type="button" data-view-tab="actions:meetings" aria-selected="true">From meetings</button>
@@ -409,7 +431,12 @@
               <button class="btn" type="button" data-copy-list><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
           </div>
-          <div class="pane-scroll"><ul class="ilist" data-draw="act-list" data-source="gr_actions"></ul></div>
+          <div class="pane-scroll"><ul class="ilist" data-draw="act-list" data-source="gr_actions"></ul>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="act-list"></span>
+              <p class="os-empty" data-msg-for="act-list" data-msg="empty" hidden>No action items for this filter and window.</p>
+              <p class="os-empty" data-msg-for="act-list" data-msg="connect" hidden>Connect Granola in your claude.ai connectors to see the next steps from your meetings.</p>
+              <p class="os-empty" data-msg-for="act-list" data-msg="nomatch" hidden>No action items match your search.</p>
+            </div></div>
           <div class="pane-foot"><p class="pane-note">From the "Next steps" of each Granola summary and to-dos in your private notes, for notes you took or were invited to. Owners are as written in the note. Each viewer sees their own notes.</p></div>
         </div>
       </div>
@@ -426,7 +453,11 @@
             </div>
             <p class="pane-note">Click a name to open the person, or the arrow to go to the screen.</p>
           </div>
-          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb"></ul></div>
+          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb"></ul>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="check-list"></span>
+              <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
+              <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
+            </div></div>
         </div>
       </div>
     </section>
@@ -467,7 +498,10 @@
             </div>
             <div class="legend"><span><i class="os-sw" data-color="0"></i>Late (4–6)</span><span><i class="os-sw" data-color="1"></i>Mid (2–3)</span><span><i class="os-sw" data-color="2"></i>Early (0–1)</span></div>
           </div>
-          <div class="pane-body"><div class="os-chart" data-draw="pipe-chart" data-source="pipe_team"></div></div>
+          <div class="pane-body"><div class="os-chart" data-draw="pipe-chart" data-source="pipe_team"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="pipe-chart"></span>
+  <p class="os-empty" data-msg-for="pipe-chart" data-msg="empty" hidden>No open pipeline for this team and quarter.</p>
+  <p class="os-empty" data-msg-for="pipe-chart" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+</div></div>
         </div>
       </div>
 
@@ -492,8 +526,12 @@
                 <th class="num" data-field="renewThis">Renewals at stake</th>
               </tr></thead>
               <tbody data-draw="pipe-mgr-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="pipe-mgr-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="pipe-mgr-table"></span>
+              <p class="os-empty" data-msg-for="pipe-mgr-table" data-msg="empty" hidden>No managers with open pipeline for this team.</p>
+              <p class="os-empty" data-msg-for="pipe-mgr-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="pipe-mgr-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -520,8 +558,13 @@
                 <th class="num" data-field="stale" data-sort="stale"><button type="button" class="th-sort">Stale</button></th>
               </tr></thead>
               <tbody data-draw="pipe-rep-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="pipe-rep-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="pipe-rep-table"></span>
+              <p class="os-empty" data-msg-for="pipe-rep-table" data-msg="empty" hidden>No reps with open pipeline for this team.</p>
+              <p class="os-empty" data-msg-for="pipe-rep-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="pipe-rep-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="pipe-rep-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -560,11 +603,17 @@
         <div class="grid2">
           <div class="pane" id="cr-weekly">
             <div class="pane-head"><div><h2 class="pane-title">By week, last 13 weeks</h2><p class="pane-note">Monday-start weeks; the last bar is the week so far. All EMEA.</p></div></div>
-            <div class="pane-body"><div class="os-chart" data-draw="cr-week-chart" data-source="cr_weeks"></div></div>
+            <div class="pane-body"><div class="os-chart" data-draw="cr-week-chart" data-source="cr_weeks"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="cr-week-chart"></span>
+  <p class="os-empty" data-msg-for="cr-week-chart" data-msg="empty" hidden>No opportunities created in the last 13 weeks.</p>
+  <p class="os-empty" data-msg-for="cr-week-chart" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+</div></div>
           </div>
           <div class="pane" id="cr-monthly">
             <div class="pane-head"><div><h2 class="pane-title">By month, last 12 months</h2><p class="pane-note">The last bar is the month so far. All EMEA.</p></div></div>
-            <div class="pane-body"><div class="os-chart" data-draw="cr-month-chart" data-source="cr_months"></div></div>
+            <div class="pane-body"><div class="os-chart" data-draw="cr-month-chart" data-source="cr_months"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="cr-month-chart"></span>
+  <p class="os-empty" data-msg-for="cr-month-chart" data-msg="empty" hidden>No opportunities created in the last 12 months.</p>
+  <p class="os-empty" data-msg-for="cr-month-chart" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+</div></div>
           </div>
         </div>
       </div>
@@ -582,8 +631,12 @@
                 <th class="num" data-field="lastArr">Last Q ARR</th>
               </tr></thead>
               <tbody data-draw="cr-mix-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="cr-mix-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="cr-mix-table"></span>
+              <p class="os-empty" data-msg-for="cr-mix-table" data-msg="empty" hidden>No opportunities created this quarter or last.</p>
+              <p class="os-empty" data-msg-for="cr-mix-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="cr-mix-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -606,8 +659,13 @@
                 <th class="num" data-field="bdrSourced" data-sort="bdrSourced"><button type="button" class="th-sort">BDR-sourced</button></th>
               </tr></thead>
               <tbody data-draw="cr-rep-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="cr-rep-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="cr-rep-table"></span>
+              <p class="os-empty" data-msg-for="cr-rep-table" data-msg="empty" hidden>No opportunities created this quarter for this team.</p>
+              <p class="os-empty" data-msg-for="cr-rep-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="cr-rep-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="cr-rep-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -625,8 +683,12 @@
                 <th class="num" data-field="lastOpps">Last Q</th>
               </tr></thead>
               <tbody data-draw="cr-bdr-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="cr-bdr-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="cr-bdr-table"></span>
+              <p class="os-empty" data-msg-for="cr-bdr-table" data-msg="empty" hidden>No BDR-sourced opportunities this quarter or last.</p>
+              <p class="os-empty" data-msg-for="cr-bdr-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="cr-bdr-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -674,8 +736,13 @@
                 <th data-field="status">Routing</th>
               </tr></thead>
               <tbody data-draw="hire-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="hire-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="hire-table"></span>
+              <p class="os-empty" data-msg-for="hire-table" data-msg="empty" hidden>Nobody joined in the last 90 days for this team.</p>
+              <p class="os-empty" data-msg-for="hire-table" data-msg="connect" hidden>Connect HiBob in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="hire-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="hire-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -691,8 +758,12 @@
                 <th class="num" data-field="joined90">Joined, 90 days</th>
               </tr></thead>
               <tbody data-draw="hire-team-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="hire-team-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="hire-team-table"></span>
+              <p class="os-empty" data-msg-for="hire-team-table" data-msg="empty" hidden>No people on headcount in these departments.</p>
+              <p class="os-empty" data-msg-for="hire-team-table" data-msg="connect" hidden>Connect HiBob in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="hire-team-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -703,7 +774,10 @@
             <div><h2 class="pane-title">Joiners by month</h2><p class="pane-note">People still on headcount, by start month, last 12 months.</p></div>
             <div class="legend"><span><i class="os-sw" data-color="0"></i>GTM EMEA</span><span><i class="os-sw" data-color="1"></i>Engagement EMEA</span><span><i class="os-sw" data-color="2"></i>Growth EMEA</span></div>
           </div>
-          <div class="pane-body"><div class="os-chart" data-draw="hire-month-chart" data-source="hire_months"></div></div>
+          <div class="pane-body"><div class="os-chart" data-draw="hire-month-chart" data-source="hire_months"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="hire-month-chart"></span>
+  <p class="os-empty" data-msg-for="hire-month-chart" data-msg="empty" hidden>No joiners in the last 12 months.</p>
+  <p class="os-empty" data-msg-for="hire-month-chart" data-msg="connect" hidden>Connect HiBob in your claude.ai connectors to see this.</p>
+</div></div>
         </div>
       </div>
     </section>
@@ -748,8 +822,13 @@
                 <th data-field="status">Status</th>
               </tr></thead>
               <tbody data-draw="rr-people-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="rr-people-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="rr-people-table"></span>
+              <p class="os-empty" data-msg-for="rr-people-table" data-msg="empty" hidden>Nobody to show for this team and filter.</p>
+              <p class="os-empty" data-msg-for="rr-people-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="rr-people-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="rr-people-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
           <div class="pane-foot"><p class="pane-note">Missing: in no pool of their kind 7 or more days after they started (Legora start date in Salesforce, or when their Salesforce user was created). Assignments are LeanData round-robin assignments in the last 90 days across all their pools.</p></div>
         </div>
@@ -773,8 +852,13 @@
                 <th data-field="flag">Check</th>
               </tr></thead>
               <tbody data-draw="rr-pool-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="rr-pool-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="rr-pool-table"></span>
+              <p class="os-empty" data-msg-for="rr-pool-table" data-msg="empty" hidden>No pools with members in this team.</p>
+              <p class="os-empty" data-msg-for="rr-pool-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="rr-pool-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="rr-pool-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -823,8 +907,13 @@
                 <th class="num" data-field="openRenewals" data-sort="openRenewals"><button type="button" class="th-sort">Open renewals</button></th>
               </tr></thead>
               <tbody data-draw="bk-owner-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="bk-owner-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-owner-table"></span>
+              <p class="os-empty" data-msg-for="bk-owner-table" data-msg="empty" hidden>No reps with accounts in this team.</p>
+              <p class="os-empty" data-msg-for="bk-owner-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="bk-owner-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="bk-owner-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -846,8 +935,12 @@
                 <th class="num" data-field="customerArr">Customer ARR</th>
               </tr></thead>
               <tbody data-draw="bk-cov-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="bk-cov-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-cov-table"></span>
+              <p class="os-empty" data-msg-for="bk-cov-table" data-msg="empty" hidden>No accounts in the EMEA sales regions.</p>
+              <p class="os-empty" data-msg-for="bk-cov-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="bk-cov-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -881,8 +974,13 @@
                 <th class="num" data-field="arrUsd">ARR</th>
               </tr></thead>
               <tbody data-draw="bk-orphan-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="bk-orphan-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-orphan-table"></span>
+              <p class="os-empty" data-msg-for="bk-orphan-table" data-msg="empty" hidden>No orphan accounts for this reason.</p>
+              <p class="os-empty" data-msg-for="bk-orphan-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="bk-orphan-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="bk-orphan-table" data-msg="limit" hidden>Showing the first 300. Search to narrow it down.</p>
+            </div>
           </div>
           <div class="pane-foot"><p class="pane-note">Active accounts in an EMEA region whose owner is inactive, has no role, is RevOps or sits outside EMEA. Strategic and partnership owners may be intended, so they're marked review.</p></div>
         </div>
@@ -902,8 +1000,12 @@
                 <th data-field="flag">Check</th>
               </tr></thead>
               <tbody data-draw="bk-book-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="bk-book-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-book-table"></span>
+              <p class="os-empty" data-msg-for="bk-book-table" data-msg="empty" hidden>No account books for this team.</p>
+              <p class="os-empty" data-msg-for="bk-book-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="bk-book-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -921,8 +1023,12 @@
                 <th data-field="flag">Check</th>
               </tr></thead>
               <tbody data-draw="bk-pool-table"></tbody>
-              <tfoot data-draw="tbl-foot" data-for="bk-pool-table"></tfoot>
             </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-pool-table"></span>
+              <p class="os-empty" data-msg-for="bk-pool-table" data-msg="empty" hidden>Every AE and SMB rep in this team has both a book and a pool.</p>
+              <p class="os-empty" data-msg-for="bk-pool-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="bk-pool-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -964,6 +1070,7 @@
         <div><dt>Start date</dt><dd data-draw="pd-day" data-source="person_hb" data-f="startDate">—</dd></div>
       </dl>
       <p class="pd-note" data-pd-note="nohb" hidden>Not on headcount in HiBob's GTM, Engagement or Growth EMEA departments.</p>
+      <p class="pd-note" data-pd-note="hbconnect" hidden>Connect HiBob in your claude.ai connectors to see their HiBob details.</p>
     </section>
     <section class="pd-sec">
       <h3>Pipeline</h3>
@@ -1006,6 +1113,8 @@
     <div class="pd-actions">
       <button class="btn" type="button" data-copy-person-id><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy Salesforce user ID</button>
     </div>
+    <p class="toast" data-toast="ok" role="status" hidden>Copied to clipboard</p>
+    <p class="toast" data-toast="fail" role="status" hidden>Couldn't copy. Select the text and copy it instead.</p>
   </aside>
 </div>
 
