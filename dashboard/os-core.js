@@ -370,6 +370,8 @@ window.OS = (() => {
     if (st) {
       list = list.slice().sort((a, b) => {
         const x = a[st.f], y = b[st.f];
+        const bx = x == null || x === '', by = y == null || y === '';
+        if (bx || by) return bx === by ? 0 : bx ? 1 : -1; // blanks last whichever way
         const r = (typeof x === 'number' || typeof y === 'number') ? (+x || 0) - (+y || 0) : String(x ?? '').localeCompare(String(y ?? ''));
         return st.dir === 'ascending' ? r : -r;
       });
@@ -658,7 +660,7 @@ OS.ask = (() => {
     // the whole request must stay under the platform's 4 KB: a long ask is cut at a line end, and says so
     data: (label, ask, extra, more) => {
       const d = { label: clip(label, 120), source: 'EMEA RevOps OS', ask: clip(ask, 20000), rules: RULES };
-      for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '') d[k] = typeof v === 'string' ? clip(v, 300) : v;
+      for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '' && !['label', 'source', 'ask', 'rules'].includes(k)) d[k] = typeof v === 'string' ? clip(v, 300) : v;
       const size = (o) => new TextEncoder().encode(JSON.stringify(o)).length;
       if (size(d) > LIMIT) {
         const full = d.ask, tail = '\n… (' + (more || 'cut to fit; the rest is in the dashboard') + ')';
@@ -709,8 +711,8 @@ OS.links = (() => {
 
 // ---------- Data checks ----------
 // Every check source that has loaded, in the scope picked: Salesforce (checks), LeanData routing (checks_rr), HiBob
-// (checks_hb), leavers' leads (checks_lv) and leads (checks_ld). Each is its own calc, so one failing leaves the rest.
-OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld'];
+// (checks_hb), leavers' leads (checks_lv) and leads (checks_ld, checks_ld_rt, checks_ld_cap). Each is its own calc, so one failing leaves the rest.
+OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap'];
 OS.checkRows = () => {
   const p = dash.params();
   const rank = { high: 0, medium: 1, low: 2 };
@@ -1001,7 +1003,7 @@ OS.oo = (() => {
   // plain-text summaries for Slack: built from the data already loaded on screen
   const rowOf = (id, pick) => (OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
   // the sources the weekly summary reads; Home loads them while it is open, and the copy button waits for them
-  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', 'checks', 'leavers_kpi', 'ld_kpi', 'orphan_kpi', 'engagement_kpi'];
+  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', 'checks', 'leavers_kpi', 'ld_kpi', 'ld_kpi_rt', 'orphan_kpi', 'engagement_kpi'];
   const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
   const weeklySummary = () => {
     const p = dash.params();
@@ -1021,6 +1023,7 @@ OS.oo = (() => {
     const lv = lvFull ? rowOf('leavers_kpi', (r) => r.region === scope) : rowOf('leavers_kpi_basic', (r) => r.region === scope);
     const eng = rowOf('engagement_kpi', (r) => r.region === scope);
     const ld = rowOf('ld_kpi', (r) => r.region === scope);
+    const ldRt = rowOf('ld_kpi_rt', (r) => r.region === scope);
     const x = (v) => (v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '×');
     const signed = (v) => (v < 0 ? '−' : '+') + OS.usd(Math.abs(v));
     const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
@@ -1050,8 +1053,8 @@ OS.oo = (() => {
       if (lv.people && held.length) add(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}`);
     } else add(na('Leavers', 'leavers_kpi_basic'));
     const ldSpeed = !ld ? '' : ld.hRate != null ? `${OS.pct(ld.hRate)} of demo requests worked within 1 business day (${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)}, last 30 days)`
-      : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : scope === 'SMB' ? 'SMB speed not timed (automation moves SMB leads out of Ready)' : 'no timed demo requests in the last 30 days';
-    if (ld) { if (ld.handoffs || ld.readyNow) add(`• Leads: ${ldSpeed}; ${n(ld.demoOverdue, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.b21)} of them over 20 business days${ld.routingIssues ? `; ${n(ld.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
+      : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : !ld.lEligible && ld.notScored > 0 ? 'speed not timed for SMB-owned leads (automation moves them out of Ready)' : 'no timed demo requests in the last 30 days';
+    if (ld) { if (ld.handoffs || ld.readyNow) add(`• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
     else add(na('Leads', 'ld_kpi'));
     if (orph && !p.mgr && (!p.region || p.region === 'All')) add(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
     if (eng) { if (eng.untouched) add(`• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`); }

@@ -306,14 +306,14 @@ const checkItem = (c) => {
   if (c.view) go.dataset.navView = c.view;
   go.appendChild(OS.icon(OS.ICON.go));
   }
-  const how = c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
+  const how = c.how ? c.how : c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
     : c.area === 'Pipeline' ? ' Pull their past-due opportunities and propose a new close date, stage or closing each one.'
     : c.area === 'Books' ? ' ' + booksHow(c) + ' List the accounts behind it and propose who should own them; if your count differs from the check\'s, stop and tell me.'
     : c.area === 'Hiring' ? ' Compare their HiBob record with their Salesforce user (role, manager, active) and propose the fix.'
     : c.area === 'Leavers' ? ' List what they still own and propose who should take each item (people in their team first, keeping books balanced), with the exact Salesforce and LeanData changes. For leads, report counts and groups only: no lead names, emails or companies in chat.'
-    : c.area === 'Leads' ? ' The dashboard counts leads an EMEA seller owns, plus leads in a queue or with other owners only when ' + LD_SCOPE + '. List the leads behind it from Salesforce with my access the same way (count first; if your count differs from the check\'s, stop and tell me), find the cause in LeanData or Salesforce, and propose the fix: route, reassign, nudge the owner, or work, nurture or disqualify.' + LD_GUARD + ' Wait for my OK before changing or sending anything.' : '';
+    : c.area === 'Leads' ? (c.userId ? ' Their leads: OwnerId = ' + c.userId + '.' : '') + ' The dashboard counts leads an EMEA seller owns, plus leads in a queue or with other owners only when ' + LD_SCOPE + '. List the leads behind it from Salesforce with my access the same way (count first; if your count differs from the check\'s, stop and tell me), find the cause in LeanData or Salesforce, and propose the fix: route, reassign, nudge the owner, or work, nurture or disqualify.' + LD_GUARD + ' Wait for my OK before changing or sending anything.' : '';
   const ask = OS.links.ask(OS.ask.data('Fix: ' + c.title + ' (' + c.what + ')', 'Help me fix this data check from the EMEA RevOps OS. ' + c.area + ': ' + c.title + ': ' + c.what + (c.meta ? ' (' + c.meta + ')' : '') + '.' + how,
-    { kind: 'data_check', area: c.area, severity: c.severity, person: c.person, manager: c.manager }));
+    { kind: 'data_check', area: c.area, severity: c.severity, person: c.person, manager: c.manager, userId: c.userId }));
   if (ask) meta.append(ask);
   if (go) meta.append(go);
   li.append(OS.el('span', 'itm-dot ' + c.severity), main, meta);
@@ -1114,19 +1114,25 @@ const ldActs = (r, ask) => {
   return box.children.length ? box : null;
 };
 
-// headline tiles: the scope's row, or the All EMEA row for tiles marked data-all
-const ldRow = (el) => {
+// headline tiles: the scope's row, or the All EMEA row for tiles marked data-all, of the calc the mark names
+// (ld_kpi speed and backlog, ld_kpi_rt routing, ld_kpi_in inflow, ld_badge demo requests waiting)
+const ldRow = (el, id) => {
   const key = el.hasAttribute('data-all') ? 'All' : scopeKey();
-  return markRow(el, 'region', key, (dash.data('ld_kpi').data || []).find((r) => r.region === key));
+  return markRow(el, 'region', key, (dash.data(id).data || []).find((r) => r.region === key));
 };
-dash.draw('kpi-ld', (el) => OS.value(el, ['ld_kpi'], () => {
-  const r = ldRow(el), f = keepField(el), v = r[f], fmt = el.dataset.fmt;
+const ldDay = (v) => (v && /^\d{4}-\d\d-\d\d/.test(String(v)) ? OS.day(v) : v || '—');
+dash.draw('kpi-ld', (el) => {
+  if (!el.dataset.s0) el.dataset.s0 = el.dataset.source;
+  const id = el.dataset.s0;
+  OS.value(el, [id], () => {
+  const r = ldRow(el, id), f = keepField(el), v = r[f], fmt = el.dataset.fmt;
   if (fmt === 'pct') return ldRate(v);
   if (fmt === 'hours') return ldHours(v, r[f.replace('MedianHours', 'MedianAtLeast')]);
   if (fmt === 'min') return v == null ? '—' : d3.format('.1f')(v) + ' min';
-  if (fmt === 'day') return v ? OS.day(v) : '—';
-  return OS.num(v || 0);
-}));
+  if (fmt === 'day') return ldDay(v);
+  return v === null && el.hasAttribute('data-all') ? '—' : OS.num(v || 0);
+  });
+});
 
 // ----- Speed -----
 const ldTeamAsk = (r) => ldAsk('Explain speed: ' + ldTeamName(r.region), 'Explain lead speed for ' + ldTeamName(r.region) + ' over the last 30 days, from the EMEA RevOps OS. ' + ldOf(r.hWithin, r.hEligible) + ' demo requests were worked within 1 business day'
@@ -1151,11 +1157,16 @@ OS.defTable('ld-team-table', ['ld_kpi'], () => {
   { f: 'demoOverdue', fmt: OS.num, num: true, cls: ldBad },
 ], { key: 'region' });
 
-const ldRepAsk = (r) => ldAsk('Speed review: ' + r.owner, 'Review lead speed for ' + r.owner + ' (' + (r.role || 'no role') + ', ' + r.region + ldMgr(r) + ') from the EMEA RevOps OS. In the last 30 days they were handed '
-  + ldPlural(r.handoffs, 'lead', 'leads') + ': ' + ldOf(r.hWithin, r.hEligible) + ' demo requests were worked within 1 business day' + (r.hMedianHours != null ? ' (median ' + ldHours(r.hMedianHours, r.hMedianAtLeast) + ' business hours)' : '')
-  + ', and ' + ldOf(r.lWithin, r.lEligible) + ' other hand-offs within 5 business days. ' + ldPlural(r.demoOverdue, 'demo request is', 'demo requests are') + ' in Ready for 2+ business days now. With my Salesforce access, list their leads (OwnerId = '
-  + r.ownerId + ') with Ready Since in the last 30 days that left Ready late or are still Ready past due. Group them by source and weekday, oldest first, and show source and age only. Say what is slowing them down and suggest one or two fixes (routing, capacity, a reminder). Read only: change nothing and send nothing.', { person: r.owner, userId: r.ownerId });
-const ldStatusCls = (v) => (v === 'Left' || v === 'Demo waiting' ? 'bad' : v === 'Slow' ? 'warn' : v === 'On time' ? 'ok' : '');
+// SMB leads are moved out of Ready by automation, so an SMB rep gets a backlog review, not a speed review
+const ldRepAsk = (r) => (!r.scored
+  ? ldAsk('Ready review: ' + r.owner, 'Review the Ready leads of ' + r.owner + ' (' + (r.role || 'no role') + ', ' + r.region + ldMgr(r) + ') from the EMEA RevOps OS. Speed isn\'t timed for SMB-owned leads, because automation moves them out of Ready. They hold '
+    + ldPlural(r.readyNow, 'Ready lead', 'Ready leads') + ' now, ' + ldPlural(r.demoOverdue, 'demo request', 'demo requests') + ' waiting 2+ business days. With my Salesforce access, list their Ready leads (OwnerId = ' + r.ownerId
+    + ", Status = 'Ready', IsConverted = false) grouped by source and age, demo requests first, and say which need a person now." + LD_GUARD + ' Read only: change nothing and send nothing.', { person: r.owner, userId: r.ownerId })
+  : ldAsk('Speed review: ' + r.owner, 'Review lead speed for ' + r.owner + ' (' + (r.role || 'no role') + ', ' + r.region + ldMgr(r) + ') from the EMEA RevOps OS. In the last 30 days they were handed '
+    + ldPlural(r.handoffs, 'lead', 'leads') + ': ' + (r.hEligible ? OS.num(r.hWithin) + ' of ' + OS.num(r.hEligible) : 'none of their') + ' demo requests were worked within 1 business day' + (r.hMedianHours != null ? ' (median ' + ldHours(r.hMedianHours, r.hMedianAtLeast) + ' business hours)' : '')
+    + ', and ' + (r.lEligible ? OS.num(r.lWithin) + ' of ' + OS.num(r.lEligible) : 'none of their') + ' other hand-offs within 5 business days. ' + ldPlural(r.demoOverdue, 'demo request is', 'demo requests are') + ' in Ready for 2+ business days now. With my Salesforce access, list their leads (OwnerId = '
+    + r.ownerId + ') with Ready Since in the last 30 days that left Ready late or are still Ready past due. Group them by source and weekday, oldest first, and show source and age only. Say what is slowing them down and suggest one or two fixes (routing, capacity, a reminder).' + LD_GUARD + ' Read only: change nothing and send nothing.', { person: r.owner, userId: r.ownerId }));
+const ldStatusCls = (v) => (v === 'Left' || v === 'Demo waiting' ? 'bad' : v === 'Slow' || v === 'Demo past due' ? 'warn' : v === 'On time' ? 'ok' : '');
 OS.defTable('ld-rep-table', ['ld_reps'], () => (dash.data('ld_reps').data || []).filter((r) => inTeam(r) && (r.handoffs > 0 || r.readyNow > 0))
   .map((r) => ({ ...r, hOf: ldOf(r.hWithin, r.hEligible), lOf: ldOf(r.lWithin, r.lEligible) })), [
   { f: 'owner', person: (r) => r.owner, after: (r) => ldActs(r, ldRepAsk(r)) }, { f: 'region' }, { f: 'manager' },
@@ -1170,7 +1181,7 @@ OS.defTable('ld-rep-table', ['ld_reps'], () => (dash.data('ld_reps').data || [])
 ], { key: 'key', also: ['role'] });
 
 const LD_SEV = { warn: 'medium', bad: 'high', info: 'low' };
-OS.defList('ld-trust-list', ['ld_trust'], () => dash.data('ld_trust').data || [], (rows) => rows.map((t) => {
+OS.defList('ld-trust-list', ['ld_trust'], () => (dash.data('ld_trust').data || []).concat(OS.state('ld_trust_cap') === 'ok' ? dash.data('ld_trust_cap').data || [] : []), (rows) => rows.map((t) => {
   const li = OS.el('li', 'itm');
   li.dataset.key = t.id;
   const main = OS.el('div', 'itm-main');
@@ -1181,8 +1192,8 @@ OS.defList('ld-trust-list', ['ld_trust'], () => dash.data('ld_trust').data || []
 }));
 
 // ----- Ready now -----
-const ldWho = (r) => (r.kind === 'Outside EMEA sales' && r.review ? 'Strategic or partnerships' : r.kind);
-const ldWhoCls = (v) => (v === 'Left (inactive)' ? 'bad' : v === 'Outside EMEA sales' ? 'warn' : v === 'Queue' ? 'info' : '');
+const ldWho = (r) => (r.kind === 'Outside EMEA sales' ? (!r.active ? 'Inactive, outside EMEA sales' : r.review ? 'Strategic or partnerships' : r.kind) : r.kind);
+const ldWhoCls = (v) => (v === 'Left (inactive)' || v === 'Inactive, outside EMEA sales' ? 'bad' : v === 'Outside EMEA sales' ? 'warn' : v === 'Queue' ? 'info' : '');
 const ldTodoCls = (v) => (v === 'Nudge owner' || v === 'Reassign' || v === 'Route to a person' || v === 'Fix routing' ? 'bad' : v ? 'warn' : '');
 const ldOpenTip = (r) => [r.working ? OS.num(r.working) + ' being worked' : '', r.fresh ? OS.num(r.fresh) + ' New' : '', r.nurturing ? OS.num(r.nurturing) + ' Nurturing' : ''].filter(Boolean).join(' · ');
 const ldBacklogAsk = (r) => {
@@ -1194,17 +1205,21 @@ const ldBacklogAsk = (r) => {
   if (r.todo === 'Nudge owner') return ldAsk('Nudge ' + r.owner, 'Nudge ' + who + ' about Ready leads from the EMEA RevOps OS. They hold ' + counts + '. With my Salesforce access, list their Ready leads ' + list + ', demo requests first, then oldest first, with source and age only. Draft a short Slack message to ' + r.owner + (r.manager && r.manager !== '(no manager)' ? ', copying ' + r.manager + ' when a demo request has waited over 3 business days' : '') + '. Show me the message and the recipients, and wait for my OK before sending.', { person: r.owner, userId: r.ownerId, todo: r.todo });
   if (r.todo === 'Clean up Ready') return ldAsk('Clean up Ready: ' + r.owner, 'Plan a clean-up of the Ready leads of ' + who + ' from the EMEA RevOps OS. They hold ' + counts + '. With my Salesforce access, group their Ready leads ' + list + ' by source, routing region and age (no prospect details in chat). Propose one of these per group: work now, move to Nurturing, Disqualify with a Disposed Reason, or reassign to the team of the routing region. Show the record count and the exact field changes per group as a dry run, and change nothing until I say OK.', { person: r.owner, userId: r.ownerId, todo: r.todo });
   if (r.todo === 'Check region') return ldAsk('Check region: ' + r.owner, who + ' holds ' + OS.num(r.elsewhere) + ' Ready leads that LeanData routed outside EMEA (' + (r.regions || 'other regions') + '), out of ' + OS.num(r.ready) + ' Ready. With my Salesforce access, check how they reached an EMEA seller (owner history, LeanData log) and whether they belong to EMEA. Propose who should own the rest (the team of their routing region).' + LD_GUARD + ok, { person: r.owner, userId: r.ownerId, todo: r.todo });
-  if (r.todo === 'Reassign') return ldAsk('Reassign leads: ' + r.owner, r.owner + ' has left (inactive in Salesforce; ' + (r.role || 'no role') + ldMgr(r) + ') but still holds ' + OS.num(r.ready) + ' Ready leads and ' + OS.num(r.open) + ' open leads in all. With my Salesforce access, propose new owners for their open leads ' + openList + ' from the LeanData pool of their kind and team, lightest load first, per group of leads. Also tell me whether they still hold a pool seat.' + ldMatch(r.open) + LD_GUARD + ok, { person: r.owner, userId: r.ownerId, todo: r.todo });
-  if (r.todo === 'Reassign or confirm') return ldAsk('Check owner: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ', outside EMEA sales) holds ' + OS.num(r.ready) + ' Ready EMEA leads ' + list + ' (' + OS.num(r.open) + ' open). With my Salesforce access, check for each one whether it matches an account they own (LeanData account match) or was routed by mistake. Keep the account-matched ones, and propose EMEA owners from the right LeanData pool for the rest.' + ldMatch(r.ready) + LD_GUARD + ok, { userId: r.ownerId, todo: r.todo });
-  if (r.todo === 'Review') return ldAsk('Review leads: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ') holds ' + OS.num(r.ready) + ' Ready EMEA leads ' + list + ' (' + OS.num(r.open) + ' open). Strategic and partnership owners can be right. With my Salesforce access, check whether each lead matches one of their accounts or a partner deal, and say how many should go to EMEA sales.' + ldMatch(r.ready) + LD_GUARD + ' Read only: change nothing.', { userId: r.ownerId, todo: r.todo });
-  if (r.todo === 'Route to a person') return ldAsk('Route: ' + r.owner, OS.num(r.ready) + ' leads are Ready in ' + r.owner + ' with no person' + (r.oldestDay ? ' (oldest Ready since ' + OS.day(r.oldestDay) + ')' : '') + '. With my Salesforce access, list them ' + list + ' and find why LeanData did not route them (segment, country, routing sub-region, flow path). Propose an owner per group of leads from the pool matching its segment and sub-region, keeping the round robin even.' + ldMatch(r.ready) + LD_GUARD + ok, { todo: r.todo });
+  if (r.todo === 'Reassign') return ldAsk('Reassign leads: ' + r.owner, r.owner + (r.kind === 'Outside EMEA sales' ? ' is inactive in Salesforce (' + (r.role || 'no role') + ', outside EMEA sales)' : ' has left (inactive in Salesforce; ' + (r.role || 'no role') + ldMgr(r) + ')') + ' but still holds ' + OS.num(r.ready) + ' Ready EMEA leads' + (r.open != null ? ' and ' + OS.num(r.open) + ' open in all' : '') + '. With my Salesforce access, propose new owners for their open leads ' + openList + (r.kind === 'Outside EMEA sales' ? ' from the EMEA LeanData pool matching each lead\'s segment and routing sub-region' : ' from the LeanData pool of their kind and team') + ', lightest load first, per group of leads. Also tell me whether they still hold a pool seat.' + (r.open != null ? ldMatch(r.open) : ldMatch(r.ready).replace('counts ', 'counts at least ')) + LD_GUARD + ok, { person: r.owner, userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Reassign or confirm') return ldAsk('Check owner: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ', outside EMEA sales) holds ' + OS.num(r.ready) + ' Ready EMEA leads ' + list + (r.open != null ? ' (' + OS.num(r.open) + ' open)' : '') + '. With my Salesforce access, check for each one whether it matches an account they own (LeanData account match) or was routed by mistake. Keep the account-matched ones, and propose EMEA owners from the right LeanData pool for the rest.' + ldMatch(r.ready) + LD_GUARD + ok, { userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Review') return ldAsk('Review leads: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ') holds ' + OS.num(r.ready) + ' Ready EMEA leads ' + list + (r.open != null ? ' (' + OS.num(r.open) + ' open)' : '') + '. Strategic and partnership owners can be right. With my Salesforce access, check whether each lead matches one of their accounts or a partner deal, and say how many should go to EMEA sales.' + ldMatch(r.ready) + LD_GUARD + ' Read only: change nothing.', { userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Route to a person') return ldAsk('Route: ' + r.owner, OS.num(r.ready) + ' leads are Ready in ' + r.owner + ' with no person' + (r.oldest ? ' (oldest Ready since ' + ldDay(r.oldest) + ')' : '') + '. With my Salesforce access, list them ' + list + ' and find why LeanData did not route them (segment, country, routing sub-region, flow path). Propose an owner per group of leads from the pool matching its segment and sub-region, keeping the round robin even.' + ldMatch(r.ready) + LD_GUARD + ok, { todo: r.todo });
   return null;
 };
+// the owner's other open leads join from ld_backlog_open when that query loads (— until then)
+const ldOpenOf = () => (OS.state('ld_backlog_open') === 'ok' ? new Map((dash.data('ld_backlog_open').data || []).map((x) => [x.key, x])) : null);
 OS.defTable('ld-backlog-table', ['ld_backlog'], () => {
   const f = dash.params().ldReady || '';
+  const op = ldOpenOf();
   return (dash.data('ld_backlog').data || []).filter(inTeam)
     .filter((r) => (f === 'demo' ? r.demoOverdue > 0 : f === 'stale' ? r.stale > 0 : f === 'region' ? r.elsewhere > 0 : f === 'notseller' ? r.kind === 'Queue' || r.kind === 'Outside EMEA sales' : true))
-    .map((r) => ({ ...r, who: ldWho(r) }));
+    .map((r) => { const o = op ? op.get(r.key) || { open: r.ready, working: 0, fresh: 0, nurturing: 0 } : null;
+      return { ...r, who: ldWho(r), open: o ? Math.max(o.open, r.ready) : null, working: o ? o.working : null, fresh: o ? o.fresh : null, nurturing: o ? o.nurturing : null, otherOpen: o ? Math.max(0, o.open - r.ready) : null }; });
 }, [
   { f: 'owner', person: (r) => (r.kind === 'EMEA seller' || r.kind === 'Left (inactive)' ? r.owner : null), after: (r) => ldActs(r, ldBacklogAsk(r)) },
   { f: 'who', chip: ldWhoCls }, { f: 'region' }, { f: 'manager' },
@@ -1215,8 +1230,8 @@ OS.defTable('ld-backlog-table', ['ld_backlog'], () => {
   { f: 'b21', fmt: OS.num, num: true, cls: ldWarn },
   { f: 'noDateAll', fmt: OS.num, num: true, tip: (r) => (r.noDateAll ? OS.num(r.noDate) + ' Ready since before 19 May 2026 · ' + OS.num(r.stampGap) + ' created later with no stamp' : '') },
   { f: 'elsewhere', fmt: OS.num, num: true, cls: ldWarn, tip: (r) => r.regions || '' },
-  { f: 'oldestDay', fmt: (v) => (v ? OS.day(v) : '—') },
-  { f: 'otherOpen', fmt: OS.num, num: true, tip: ldOpenTip },
+  { f: 'oldest', fmt: ldDay },
+  { f: 'otherOpen', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: ldOpenTip },
   { f: 'todo', chip: ldTodoCls },
 ], { key: 'key', also: ['role', 'regions'] });
 
@@ -1229,7 +1244,7 @@ const ldProbAsk = (r) => {
   const own = ldOwnerFilter(r);
   const open = "IsConverted = false, Status NOT IN ('Disqualified','Converted'), " + own;
   if (r.action === 'Fix routing') return ldAsk('Fix routing: ' + r.owner, OS.num(r.leads) + ' open leads are ' + (r.kind === 'Routing error' ? 'in LeanData routing error' : 'not processed by LeanData') + (r.ldAction ? ' (' + r.ldAction + ')' : '') + ' with ' + where + ' (' + r.statuses + (r.lastProcessed ? '; LeanData last processed ' + OS.day(r.lastProcessed) : '') + '). With my Salesforce access, find them (' + open + '; ' + (r.kind === 'Routing error' ? "LeanData__Routing_Status__c = 'error' or LeanData__Routing_Action__c starting with 'error'" : "LeanData__Routing_Status__c = 'not processed'") + ') and read the cause in LeanData. Group them by cause and propose the fix per group: re-run routing, fill the missing field, or a named owner from the right pool.' + ldMatch(r.leads) + LD_GUARD + ok, base);
-  if (r.kind === 'Ready in a queue') return ldAsk('Route: ' + r.owner, OS.num(r.leads) + ' leads are Ready in ' + r.owner + ' with no person' + (r.oldestReadyDay ? ' (oldest Ready since ' + OS.day(r.oldestReadyDay) + ')' : '') + '. With my Salesforce access, list them (' + own + ", Status = 'Ready', IsConverted = false) and find why LeanData did not route them (segment, country, routing sub-region, flow path). Propose an owner per group of leads from the pool matching its segment and sub-region, keeping the round robin even." + ldMatch(r.leads) + LD_GUARD + ok, base);
+  if (r.kind === 'Ready in a queue') return ldAsk('Route: ' + r.owner, OS.num(r.leads) + ' leads are Ready in ' + r.owner + ' with no person' + (r.oldestReadyDay ? ' (oldest Ready since ' + ldDay(r.oldestReadyDay) + ')' : '') + '. With my Salesforce access, list them (' + own + ", Status = 'Ready', IsConverted = false) and find why LeanData did not route them (segment, country, routing sub-region, flow path). Propose an owner per group of leads from the pool matching its segment and sub-region, keeping the round robin even." + ldMatch(r.leads) + LD_GUARD + ok, base);
   if (r.kind === 'MQL not handed off') return ldAsk('MQLs in ' + r.owner, OS.num(r.leads) + ' leads in ' + r.owner + ' are MQLs but still New (' + own + ", Status = 'New', Lifecycle_Stage__c = 'MQL'). With my Salesforce access, check why they were not marked Ready and routed, then propose per group either Ready with an owner from the right pool, or nurture." + ldMatch(r.leads) + LD_GUARD + ok, base);
   if (r.kind === 'Worked lead back in the queue') return ldAsk('Worked leads in ' + r.owner, OS.num(r.leads) + ' leads in Pursuing or Engaging sit in ' + r.owner + ' with no person (' + r.statuses + '; ' + own + "). With my Salesforce access, find who last worked them (owner history), and propose who should own them now or whether to nurture them." + ldMatch(r.leads) + LD_GUARD + ok, base);
   if (r.action === 'Reassign') return ldAsk('Reassign leads: ' + r.owner, r.owner + ' is inactive in Salesforce (' + (r.role || 'no role') + ldMgr(r) + ') but still holds ' + OS.num(r.leads) + ' open EMEA leads (' + r.statuses + '; ' + open + '). With my Salesforce access, propose new owners from the right LeanData pool, lightest load first, per group of leads.' + ldMatch(r.leads) + LD_GUARD + ok, base);
@@ -1243,7 +1258,7 @@ OS.defTable('ld-prob-table', ['ld_problems'], () => {
   return (dash.data('ld_problems').data || []).filter(inTeam)
     .filter((r) => (f === 'routing' ? r.routing : f === 'wrong' ? r.kind === 'Owner inactive' || r.kind === 'Owner outside EMEA sales' : f === 'review' ? r.kind === 'Strategic or partnerships owner' : true))
     .map((r) => ({ ...r, sev: ldSevLabel[r.severity] || r.severity,
-      note: [r.kind === 'Ready in a queue' && r.oldestReadyDay ? 'oldest Ready since ' + OS.day(r.oldestReadyDay) : '', r.kind === 'Ready in a queue' && r.demoRequests ? ldPlural(r.demoRequests, 'demo request', 'demo requests') : '', r.neverProcessed ? OS.num(r.neverProcessed) + ' never processed by LeanData' : '', r.leaver ? 'also under Hiring › Leavers' : ''].filter(Boolean).join(' · ') }));
+      note: [r.kind === 'Ready in a queue' && r.oldestReadyDay ? 'oldest Ready since ' + ldDay(r.oldestReadyDay) : '', r.kind === 'Ready in a queue' && r.demoRequests ? ldPlural(r.demoRequests, 'demo request', 'demo requests') : '', r.neverProcessed ? OS.num(r.neverProcessed) + ' never processed by LeanData' : '', r.leaver ? 'also under Hiring › Leavers' : ''].filter(Boolean).join(' · ') }));
 }, [
   { f: 'sev', chip: (v, r) => (r.severity === 'high' ? 'bad' : r.severity === 'medium' ? 'warn' : '') },
   { f: 'kind', chip: ldKindCls },
@@ -1259,7 +1274,7 @@ OS.defTable('ld-prob-table', ['ld_problems'], () => {
 
 const ldSrcAsk = (r) => ldAsk('Source review: ' + r.src + ' › ' + r.detail, 'Review the ' + r.src + ' › ' + r.detail + ' leads in the EMEA RevOps OS (all EMEA): ' + OS.num(r.created) + ' created in 30 days (' + OS.num(r.inQueue) + ' in a queue, ' + OS.num(r.toPerson) + ' routed to a person, '
   + OS.num(r.autoConverted) + ' auto-converted to a contact, ' + OS.num(r.errors) + ' routing errors); ' + OS.num(r.handoffs) + ' handed off in 30 days, ' + ldOf(r.within, r.eligible) + ' worked within ' + r.due + '; ' + OS.num(r.readyNow) + ' in Ready now, '
-  + OS.num(r.over20) + ' of them for over 20 business days. With my Salesforce access, check whether routing and follow-up for this source work (counts only, no prospect details in chat), and suggest what to change (routing rule, SLA, nurture path). Read only: change nothing.', { source: r.src, detail: r.detail });
+  + OS.num(r.over20) + ' of them for over 20 business days or Ready since before 19 May 2026. With my Salesforce access, check whether routing and follow-up for this source work (counts only, no prospect details in chat), and suggest what to change (routing rule, SLA, nurture path). Read only: change nothing.', { leadSource: r.src, leadDetail: r.detail });
 OS.defTable('ld-src-table', ['ld_sources'], () => (dash.data('ld_sources').data || []).map((r) => ({ ...r, inTime: ldOf(r.within, r.eligible) })), [
   { f: 'src' }, { f: 'detail', after: (r) => ldSrcAsk(r) },
   { f: 'created', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.created) },
