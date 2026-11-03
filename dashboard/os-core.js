@@ -168,7 +168,7 @@ dash.loader('gr_notes', {
         if (!myName && me) {
           const end = block.indexOf('</meeting>');
           for (const m of block.slice(0, end < 0 ? block.length : end).matchAll(/([^\n<>()]+?)\s*\(note creator\)[^\n]*?\(([^()\s]+@[^()\s]+)\)/g)) {
-            if (dec(m[2]).toLowerCase() === me) { myName = dec(m[1]).trim(); break; }
+            if (dec(m[2]).toLowerCase() === me) { myName = dec(m[1]).replace(/^[\s,]+/, '').trim(); break; }
           }
         }
       }
