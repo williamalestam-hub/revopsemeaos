@@ -1,0 +1,622 @@
+<meta name="dash-one-writer">
+<style>
+  /* Layout: a header with a team filter and tab bar, then one tab section at a time. Cards in an auto-fit grid. */
+  .os { display: grid; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+  .os-head { display: grid; gap: var(--cds-gap-sm); }
+  .os-head h1 { margin: 0; font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); text-wrap: balance; }
+  .os-head p { margin: 0; color: var(--color-fg-muted); max-width: 70ch; }
+  .os-bar { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm) var(--cds-gap-md); align-items: center; justify-content: space-between; }
+  .os-tabs { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); }
+  .os-tab { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: 999px; border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg-muted); cursor: pointer; }
+  .os-tab[aria-selected="true"] { background: var(--color-fg); color: var(--color-bg); border-color: var(--color-fg); }
+  .os-tab:focus-visible, .os-btn:focus-visible, .os select:focus-visible, .os input:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+  .os-filter { display: flex; gap: var(--cds-gap-xs); align-items: center; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .os select, .os input[type="search"] { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); }
+  .os-tabpage { display: grid; gap: var(--cds-gap-lg); }
+  .os-tabpage h2 { margin: 0; font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
+  .os-lede { margin: 0; color: var(--color-fg-muted); max-width: 75ch; }
+  .os-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--cds-gap-md); }
+  .os-kpi { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-md) var(--cds-pad-lg); display: grid; gap: var(--cds-gap-xs); align-content: start; min-width: 0; }
+  .os-kpi-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .os-kpi-value { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; line-height: 1.15; min-height: 1.15em; }
+  .os-kpi-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; min-height: 1.3em; }
+  .os-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: var(--cds-gap-md); }
+  .os-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); align-content: start; min-width: 0; }
+  .os-card-wide { grid-column: 1 / -1; }
+  .os-card h3 { margin: 0; font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
+  .os-note { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); max-width: 80ch; }
+  .os-card-head { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); justify-content: space-between; align-items: end; }
+  .os-chart { position: relative; min-height: 240px; }
+  .os-chart svg { display: block; overflow: visible; }
+  .os-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+  .os-tip-h { color: var(--cds-text-secondary); margin-bottom: 2px; }
+  .os-tip-row { display: flex; gap: 6px; align-items: center; font-variant-numeric: tabular-nums; }
+  .os-sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+  .os-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-height: 1.3em; }
+  .os-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .os-seg { display: inline-flex; border: 1px solid var(--color-border-line); border-radius: 999px; overflow: hidden; }
+  .os-btn { font: inherit; font-size: var(--cds-font-size-caption); padding: 2px var(--cds-pad-sm); border: 0; background: transparent; color: var(--color-fg-muted); cursor: pointer; }
+  .os-btn[aria-pressed="true"] { background: var(--color-fg); color: var(--color-bg); }
+  .os-tablewrap { overflow: auto; max-height: 34rem; border-top: 1px solid var(--color-border-line); }
+  .os table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+  .os th { position: sticky; top: 0; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; z-index: 1; }
+  .os th.num, .os td.num { text-align: right; }
+  .os th[data-sort] { cursor: pointer; }
+  .os th[aria-sort="descending"]::after { content: " ↓"; }
+  .os th[aria-sort="ascending"]::after { content: " ↑"; }
+  .os td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+  .os td.wrap { white-space: normal; min-width: 14rem; }
+  .os tr.os-sub td { color: var(--color-fg-muted); }
+  .os tr.os-total td { font-weight: var(--cds-font-weight-medium); }
+  .os-bar-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .os-bar-cell i { display: block; height: 6px; border-radius: 3px; background: var(--os-accent, currentColor); opacity: .55; }
+  .os-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--cds-font-size-caption); white-space: nowrap; border: 1px solid currentColor; }
+  .os-chip.ok { color: var(--color-ok); }
+  .os-chip.warn { color: var(--color-warn); }
+  .os-chip.bad { color: var(--color-bad); }
+  .os-chip.mute { color: var(--color-fg-muted); }
+  .os-bad { color: var(--color-bad); }
+  .os-warn { color: var(--color-warn); }
+  .os-ok { color: var(--color-ok); }
+  .os-fail { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: 4rem; }
+  .os-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+  .os-tools { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; }
+  [data-dash-source-state=empty] { color: transparent; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+  .os-kpi-value b, .os b { font-weight: inherit; }
+</style>
+
+<div class="os">
+  <header class="os-head" id="top">
+    <h1>EMEA RevOps OS</h1>
+    <p>Live from Salesforce, LeanData (in Salesforce) and HiBob for the EMEA sales org: AE regions, SMB, engagement managers and BDRs. UK&amp;I is not included. Every number reads with your own access each time the page opens.</p>
+    <div class="os-bar">
+      <div class="os-tabs" role="tablist" aria-label="Sections">
+        <button class="os-tab" role="tab" type="button" data-tab="pipeline" aria-selected="true">Pipeline</button>
+        <button class="os-tab" role="tab" type="button" data-tab="created" aria-selected="false">Created opps</button>
+        <button class="os-tab" role="tab" type="button" data-tab="hiring" aria-selected="false">Hiring &amp; new joiners</button>
+        <button class="os-tab" role="tab" type="button" data-tab="routing" aria-selected="false">Routing pools</button>
+        <button class="os-tab" role="tab" type="button" data-tab="books" aria-selected="false">Account books</button>
+      </div>
+      <label class="os-filter">Team
+        <select class="os-region" id="os-region" aria-label="Team">
+          <option value="All">All EMEA</option>
+          <option value="France">France</option>
+          <option value="DACH">DACH</option>
+          <option value="Southern Europe">Southern Europe</option>
+          <option value="Iberia &amp; LATAM">Iberia &amp; LATAM</option>
+          <option value="Benelux">Benelux</option>
+          <option value="Nordics">Nordics</option>
+          <option value="CEE">CEE</option>
+          <option value="MEA">MEA</option>
+          <option value="SMB">SMB</option>
+          <option value="Engagement">Engagement (EM)</option>
+          <option value="BDR">BDR</option>
+          <option value="Leadership">Leadership</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <!-- ===================== PIPELINE ===================== -->
+  <section class="os-tabpage" id="pipeline" data-page="pipeline">
+    <p class="os-lede">New Business and Upsell pipeline closing this quarter and next, in incremental ARR (USD). Renewals are counted separately as the contract ARR that is up for renewal, because their incremental ARR is close to zero.</p>
+    <div class="os-kpis">
+      <div class="os-kpi" id="kpi-pipe-this">
+        <span class="os-kpi-label">Open pipeline, this quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-pipe" data-source="pipe_team" data-field="thisPipe" data-where="key=All%7CAll" data-fetchpriority="high">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-pipe-sub" data-source="pipe_team" data-field="thisOpps" data-where="key=All%7CAll">—</b> opps</span>
+      </div>
+      <div class="os-kpi" id="kpi-commit">
+        <span class="os-kpi-label">Rep commit, this quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-pipe" data-source="pipe_team" data-field="thisCommit" data-where="key=All%7CAll">—</b></span>
+        <span class="os-kpi-sub">Best case <b data-draw="kpi-pipe" data-source="pipe_team" data-field="thisBest" data-where="key=All%7CAll">—</b></span>
+      </div>
+      <div class="os-kpi" id="kpi-won">
+        <span class="os-kpi-label">Closed won, this quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-pipe" data-source="pipe_team" data-field="won" data-where="key=All%7CAll">—</b></span>
+        <span class="os-kpi-sub">New Business and Upsell</span>
+      </div>
+      <div class="os-kpi" id="kpi-next">
+        <span class="os-kpi-label">Open pipeline, next quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-pipe" data-source="pipe_team" data-field="nextPipe" data-where="key=All%7CAll">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-pipe-sub" data-source="pipe_team" data-field="nextOpps" data-where="key=All%7CAll">—</b> opps</span>
+      </div>
+      <div class="os-kpi" id="kpi-renew">
+        <span class="os-kpi-label">Renewals at stake, this quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-pipe" data-source="pipe_team" data-field="renewThis" data-where="key=All%7CAll">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-pipe-sub" data-source="pipe_team" data-field="renewThisCount" data-where="key=All%7CAll">—</b> renewals, stage 1 or later</span>
+      </div>
+    </div>
+
+    <div class="os-grid">
+      <div class="os-card os-card-wide" id="pipe-by-team">
+        <div class="os-card-head">
+          <div>
+            <h3>Pipeline by team and stage</h3>
+            <p class="os-note">Open New Business and Upsell ARR by stage band. Pick a team above to split it by manager.</p>
+          </div>
+          <div class="os-seg" role="group" aria-label="Quarter">
+            <button class="os-btn" type="button" data-pq="this" aria-pressed="true">This quarter</button>
+            <button class="os-btn" type="button" data-pq="next" aria-pressed="false">Next quarter</button>
+          </div>
+        </div>
+        <div class="os-legend"><span><i class="os-sw" data-color="2"></i>Early (stage 0–1)</span><span><i class="os-sw" data-color="1"></i>Mid (stage 2–3)</span><span><i class="os-sw" data-color="0"></i>Late (stage 4–6)</span></div>
+        <div class="os-chart" data-draw="pipe-chart" data-source="pipe_team"></div>
+      </div>
+
+      <div class="os-card os-card-wide" id="pipe-managers">
+        <h3>Managers</h3>
+        <p class="os-note">One row per team and Salesforce manager of the opportunity owner. Won is closed won this quarter. Renewals at stake count renewals past stage 0.</p>
+        <div class="os-tablewrap">
+          <table data-source="pipe_team" data-row-key="key">
+            <thead><tr>
+              <th data-field="manager">Manager</th>
+              <th data-field="region">Team</th>
+              <th class="num" data-field="thisPipe">Pipeline this Q</th>
+              <th class="num" data-field="thisCommit">Commit</th>
+              <th class="num" data-field="thisBest">Best case</th>
+              <th class="num" data-field="won">Won this Q</th>
+              <th class="num" data-field="nextPipe">Pipeline next Q</th>
+              <th class="num" data-field="renewThis">Renewals at stake</th>
+            </tr></thead>
+            <tbody data-draw="pipe-mgr-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card os-card-wide" id="pipe-reps">
+        <div class="os-card-head">
+          <div>
+            <h3>Reps</h3>
+            <p class="os-note">Past due: open with a close date already gone. Stale: closing this or next quarter with no logged activity in 30 days (activity means logged tasks and events). Click a column to sort.</p>
+          </div>
+          <input type="search" id="pipe-rep-search" class="os-search" data-search="pipe-rep-table" placeholder="Search reps or managers" aria-label="Search reps">
+        </div>
+        <div class="os-tablewrap">
+          <table data-source="pipe_reps" data-row-key="owner" data-sortable="pipe-rep-table">
+            <thead><tr>
+              <th data-field="owner" data-sort="owner">Rep</th>
+              <th data-field="region" data-sort="region">Team</th>
+              <th data-field="manager" data-sort="manager">Manager</th>
+              <th class="num" data-field="thisPipe" data-sort="thisPipe" aria-sort="descending">This Q</th>
+              <th class="num" data-field="thisOpps" data-sort="thisOpps">Opps</th>
+              <th class="num" data-field="nextPipe" data-sort="nextPipe">Next Q</th>
+              <th class="num" data-field="pastDue" data-sort="pastDue">Past due</th>
+              <th class="num" data-field="stale" data-sort="stale">Stale</th>
+            </tr></thead>
+            <tbody data-draw="pipe-rep-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CREATED ===================== -->
+  <section class="os-tabpage" id="created" data-page="created" hidden>
+    <p class="os-lede">Opportunities created on EMEA-owned deals, in incremental ARR (USD). Renewals created automatically by Flow when a deal closes are left out; renewals created by hand are kept.</p>
+    <div class="os-kpis">
+      <div class="os-kpi" id="kpi-cr-week">
+        <span class="os-kpi-label">Created this week</span>
+        <span class="os-kpi-value"><b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="thisWeekOpps" data-row="0" data-fetchpriority="high">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-cr-usd" data-source="cr_kpi" data-field="thisWeekArr" data-row="0">—</b> · last week <b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="lastWeekOpps" data-row="0">—</b></span>
+      </div>
+      <div class="os-kpi" id="kpi-cr-q">
+        <span class="os-kpi-label">Created this quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="thisQOpps" data-row="0">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-cr-usd" data-source="cr_kpi" data-field="thisQArr" data-row="0">—</b> ARR</span>
+      </div>
+      <div class="os-kpi" id="kpi-cr-lq">
+        <span class="os-kpi-label">Created last quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-cr-count" data-source="cr_kpi" data-field="lastQOpps" data-row="0">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-cr-usd" data-source="cr_kpi" data-field="lastQArr" data-row="0">—</b> ARR</span>
+      </div>
+      <div class="os-kpi" id="kpi-cr-bdr">
+        <span class="os-kpi-label">BDR-sourced share, this quarter</span>
+        <span class="os-kpi-value"><b data-draw="kpi-cr-pct" data-source="cr_kpi" data-field="bdrShareThisQ" data-row="0">—</b></span>
+        <span class="os-kpi-sub">of opps created, by count</span>
+      </div>
+    </div>
+
+    <div class="os-grid">
+      <div class="os-card" id="cr-weekly">
+        <div class="os-card-head">
+          <div>
+            <h3>By week, last 13 weeks</h3>
+            <p class="os-note">Monday-start weeks; the last bar is the week so far. All EMEA.</p>
+          </div>
+          <div class="os-seg" role="group" aria-label="Measure">
+            <button class="os-btn" type="button" data-crm="opps" aria-pressed="true">Opps</button>
+            <button class="os-btn" type="button" data-crm="arr" aria-pressed="false">ARR</button>
+          </div>
+        </div>
+        <div class="os-legend"><span><i class="os-sw" data-color="0"></i>New Business</span><span><i class="os-sw" data-color="1"></i>Upsell</span><span><i class="os-sw" data-color="3"></i>Renewal (manual)</span></div>
+        <div class="os-chart" data-draw="cr-week-chart" data-source="cr_weeks"></div>
+      </div>
+      <div class="os-card" id="cr-monthly">
+        <div class="os-card-head">
+          <div>
+            <h3>By month, last 12 months</h3>
+            <p class="os-note">The last bar is the month so far. All EMEA.</p>
+          </div>
+        </div>
+        <div class="os-legend"><span><i class="os-sw" data-color="0"></i>New Business</span><span><i class="os-sw" data-color="1"></i>Upsell</span><span><i class="os-sw" data-color="3"></i>Renewal (manual)</span></div>
+        <div class="os-chart" data-draw="cr-month-chart" data-source="cr_months"></div>
+      </div>
+
+      <div class="os-card" id="cr-source">
+        <h3>By source</h3>
+        <p class="os-note">BDR-sourced: an originating BDR is set or a BDR created it. Inbound: lead source Inbound. Expansion: upsells. Rep-sourced: everything else. All EMEA.</p>
+        <div class="os-tablewrap">
+          <table data-source="cr_mix" data-row-key="source">
+            <thead><tr>
+              <th data-field="source">Source</th>
+              <th class="num" data-field="thisOpps">This Q opps</th>
+              <th class="num" data-field="thisArr">This Q ARR</th>
+              <th class="num" data-field="lastOpps">Last Q opps</th>
+              <th class="num" data-field="lastArr">Last Q ARR</th>
+            </tr></thead>
+            <tbody data-draw="cr-mix-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card" id="cr-bdrs">
+        <h3>BDR leaderboard</h3>
+        <p class="os-note">Opps sourced by EMEA BDRs this quarter and last, whoever owns them (including UK&amp;I and other regions).</p>
+        <div class="os-tablewrap">
+          <table data-source="cr_bdrs" data-row-key="bdr">
+            <thead><tr>
+              <th data-field="bdr">BDR</th>
+              <th data-field="manager">Manager</th>
+              <th class="num" data-field="thisOpps">This Q</th>
+              <th class="num" data-field="thisArr">This Q ARR</th>
+              <th class="num" data-field="lastOpps">Last Q</th>
+            </tr></thead>
+            <tbody data-draw="cr-bdr-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card os-card-wide" id="cr-leaders">
+        <div class="os-card-head">
+          <div>
+            <h3>Rep leaderboard, this quarter</h3>
+            <p class="os-note">Created opps by owner. BDR-sourced is how many of them came from a BDR. Follows the team filter.</p>
+          </div>
+          <input type="search" id="cr-rep-search" class="os-search" data-search="cr-rep-table" placeholder="Search reps or managers" aria-label="Search reps">
+        </div>
+        <div class="os-tablewrap">
+          <table data-source="cr_leader" data-row-key="owner" data-sortable="cr-rep-table">
+            <thead><tr>
+              <th data-field="owner" data-sort="owner">Rep</th>
+              <th data-field="region" data-sort="region">Team</th>
+              <th data-field="manager" data-sort="manager">Manager</th>
+              <th class="num" data-field="nb" data-sort="nb">New Business</th>
+              <th class="num" data-field="up" data-sort="up">Upsell</th>
+              <th class="num" data-field="arr" data-sort="arr" aria-sort="descending">ARR</th>
+              <th class="num" data-field="bdrSourced" data-sort="bdrSourced">BDR-sourced</th>
+            </tr></thead>
+            <tbody data-draw="cr-rep-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HIRING ===================== -->
+  <section class="os-tabpage" id="hiring" data-page="hiring" hidden>
+    <p class="os-lede">People on headcount in HiBob's GTM EMEA, Engagement EMEA and Growth EMEA departments, matched by name to their Salesforce user and LeanData pools. The team filter uses the matched Salesforce role. New joiners are normally added to a routing pool in their second week.</p>
+    <div class="os-kpis">
+      <div class="os-kpi" id="kpi-hc">
+        <span class="os-kpi-label">On headcount</span>
+        <span class="os-kpi-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="headcount" data-where="region=All" data-fetchpriority="high">—</b></span>
+        <span class="os-kpi-sub">GTM, Engagement and Growth EMEA in HiBob</span>
+      </div>
+      <div class="os-kpi" id="kpi-j30">
+        <span class="os-kpi-label">Joined in the last 30 days</span>
+        <span class="os-kpi-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="joined30" data-where="region=All">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="joined90" data-where="region=All">—</b> in the last 90 days</span>
+      </div>
+      <div class="os-kpi" id="kpi-overdue">
+        <span class="os-kpi-label">Overdue for a routing pool</span>
+        <span class="os-kpi-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="overdue" data-where="region=All">—</b></span>
+        <span class="os-kpi-sub">past week 1 in a routed role, in no pool</span>
+      </div>
+      <div class="os-kpi" id="kpi-nosf">
+        <span class="os-kpi-label">No Salesforce user found</span>
+        <span class="os-kpi-value"><b data-draw="kpi-hire" data-source="hire_kpi" data-field="noSf" data-where="region=All">—</b></span>
+        <span class="os-kpi-sub">joined in the last 90 days</span>
+      </div>
+    </div>
+
+    <div class="os-grid">
+      <div class="os-card os-card-wide" id="hire-joiners">
+        <div class="os-card-head">
+          <div>
+            <h3>New joiners, last 90 days</h3>
+            <p class="os-note">Routing status uses the Salesforce role of the matched user. Leaders, partnerships and roles without a routing pool show as not routed.</p>
+          </div>
+          <input type="search" id="hire-search" class="os-search" data-search="hire-table" placeholder="Search people, teams or managers" aria-label="Search new joiners">
+        </div>
+        <div class="os-tablewrap">
+          <table data-source="people" data-row-key="id">
+            <thead><tr>
+              <th data-field="name">Name</th>
+              <th data-field="title">Title</th>
+              <th data-field="team">Team</th>
+              <th data-field="site">Site</th>
+              <th data-field="manager">Manager</th>
+              <th data-field="startDate">Start date</th>
+              <th class="num" data-field="daysIn">Days in</th>
+              <th data-field="sfRole">Salesforce role</th>
+              <th class="num" data-field="pools">Pools</th>
+              <th data-field="status">Routing</th>
+            </tr></thead>
+            <tbody data-draw="hire-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card" id="hire-months">
+        <h3>Joiners by month</h3>
+        <p class="os-note">People still on headcount, by start month, last 12 months.</p>
+        <div class="os-legend"><span><i class="os-sw" data-color="0"></i>GTM EMEA</span><span><i class="os-sw" data-color="1"></i>Engagement EMEA</span><span><i class="os-sw" data-color="2"></i>Growth EMEA</span></div>
+        <div class="os-chart" data-draw="hire-month-chart" data-source="hire_months"></div>
+      </div>
+
+      <div class="os-card" id="hire-teams">
+        <h3>Headcount by team</h3>
+        <p class="os-note">HiBob team field, people on headcount today.</p>
+        <div class="os-tablewrap">
+          <table data-source="hire_teams" data-row-key="team">
+            <thead><tr>
+              <th data-field="team">Team</th>
+              <th class="num" data-field="people">People</th>
+              <th class="num" data-field="joined90">Joined, 90 days</th>
+            </tr></thead>
+            <tbody data-draw="hire-team-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card os-card-wide" id="hire-gaps">
+        <h3>What this tab can't see yet</h3>
+        <p class="os-note">Signed hires who haven't started don't show: HiBob hides people in the Hired state from your connection. Open roles and the recruiting pipeline aren't in HiBob's connector either. Both need an ATS connector or wider HiBob access.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ROUTING ===================== -->
+  <section class="os-tabpage" id="routing" data-page="routing" hidden>
+    <p class="os-lede">LeanData round-robin pools for EMEA, read from LeanData's objects in Salesforce. AEs belong in an "RR:" pool, SMB reps in an "RR SMB" pool, BDRs in an "RR BDR:" pool and engagement managers in an "EM" pool. Leaders are not checked.</p>
+    <div class="os-kpis">
+      <div class="os-kpi" id="kpi-missing">
+        <span class="os-kpi-label">Reps missing from routing</span>
+        <span class="os-kpi-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="missing" data-where="region=All" data-fetchpriority="high">—</b></span>
+        <span class="os-kpi-sub">active, past week 1, in no pool for their role</span>
+      </div>
+      <div class="os-kpi" id="kpi-week2">
+        <span class="os-kpi-label">Joiners to add next week</span>
+        <span class="os-kpi-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="weekOne" data-where="region=All">—</b></span>
+        <span class="os-kpi-sub">Salesforce user created in the last 7 days</span>
+      </div>
+      <div class="os-kpi" id="kpi-inactive">
+        <span class="os-kpi-label">Inactive users still in pools</span>
+        <span class="os-kpi-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="inactiveMembers" data-where="region=All">—</b></span>
+        <span class="os-kpi-sub">deactivated in Salesforce</span>
+      </div>
+      <div class="os-kpi" id="kpi-pools">
+        <span class="os-kpi-label">Pools</span>
+        <span class="os-kpi-value"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="pools" data-where="region=All">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-rr" data-source="rr_kpi" data-field="idlePools" data-where="region=All">—</b> with no assignment in 90 days</span>
+      </div>
+    </div>
+
+    <div class="os-grid">
+      <div class="os-card os-card-wide" id="rr-people">
+        <div class="os-card-head">
+          <div>
+            <h3>Who's in routing</h3>
+            <p class="os-note">Every active EMEA rep whose role routes. Missing: past week 1 and in no pool for their role. Assignments are LeanData round-robin assignments in the last 90 days, across all their pools.</p>
+          </div>
+          <div class="os-tools">
+            <label class="os-filter"><input type="checkbox" id="rr-only-missing" class="os-only-missing"> Only missing or new</label>
+            <input type="search" id="rr-people-search" class="os-search" data-search="rr-people-table" placeholder="Search people or pools" aria-label="Search people in routing">
+          </div>
+        </div>
+        <div class="os-tablewrap">
+          <table data-source="rr_people" data-row-key="userId">
+            <thead><tr>
+              <th data-field="name">Name</th>
+              <th data-field="region">Team</th>
+              <th data-field="manager">Manager</th>
+              <th data-field="createdDate">SF user since</th>
+              <th class="num" data-field="pools">Pools</th>
+              <th data-field="poolNames">Pool names</th>
+              <th class="num" data-field="assignments">Assigned, 90d</th>
+              <th data-field="status">Status</th>
+            </tr></thead>
+            <tbody data-draw="rr-people-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card os-card-wide" id="rr-pools">
+        <div class="os-card-head">
+          <div>
+            <h3>Pools</h3>
+            <p class="os-note">Pools with the same name across lead, contact, meeting and opportunity routing are shown once. Follows the team filter by member.</p>
+          </div>
+          <input type="search" id="rr-pool-search" class="os-search" data-search="rr-pool-table" placeholder="Search pools or members" aria-label="Search pools">
+        </div>
+        <div class="os-tablewrap">
+          <table data-source="rr_pools" data-row-key="pool">
+            <thead><tr>
+              <th data-field="pool">Pool</th>
+              <th data-field="family">Kind</th>
+              <th class="num" data-field="members">Members</th>
+              <th data-field="memberNames">Who's in it</th>
+              <th class="num" data-field="assignments">Assigned, 90d</th>
+              <th data-field="lastAssigned">Last assigned</th>
+              <th data-field="flag">Check</th>
+            </tr></thead>
+            <tbody data-draw="rr-pool-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== BOOKS ===================== -->
+  <section class="os-tabpage" id="books" data-page="books" hidden>
+    <p class="os-lede">Account ownership for EMEA reps and EMEA geography (Sales Region, LATAM included). ARR is the account's won ARR in USD. Active accounts are customers, pipeline and engaging.</p>
+    <div class="os-kpis">
+      <div class="os-kpi" id="kpi-bk-accts">
+        <span class="os-kpi-label">Accounts owned by EMEA reps</span>
+        <span class="os-kpi-value"><b data-draw="kpi-bk" data-source="books_kpi" data-field="accounts" data-where="region=All" data-fetchpriority="high">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-bk" data-source="books_kpi" data-field="customers" data-where="region=All">—</b> customers</span>
+      </div>
+      <div class="os-kpi" id="kpi-bk-arr">
+        <span class="os-kpi-label">Customer ARR in EMEA books</span>
+        <span class="os-kpi-value"><b data-draw="kpi-bk-usd" data-source="books_kpi" data-field="arr" data-where="region=All">—</b></span>
+        <span class="os-kpi-sub">owned by EMEA reps</span>
+      </div>
+      <div class="os-kpi" id="kpi-bk-orphans">
+        <span class="os-kpi-label">Orphan active accounts</span>
+        <span class="os-kpi-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="accounts" data-row="0">—</b></span>
+        <span class="os-kpi-sub"><b data-draw="kpi-orph-usd" data-source="orphan_kpi" data-field="arr" data-row="0">—</b> ARR, strategic and partnerships not counted</span>
+      </div>
+      <div class="os-kpi" id="kpi-bk-split">
+        <span class="os-kpi-label">Books with split ownership</span>
+        <span class="os-kpi-value"><b data-draw="kpi-orph" data-source="orphan_kpi" data-field="splitBooks" data-row="0">—</b></span>
+        <span class="os-kpi-sub">main owner holds under 80%</span>
+      </div>
+    </div>
+
+    <div class="os-grid">
+      <div class="os-card os-card-wide" id="bk-owners">
+        <div class="os-card-head">
+          <div>
+            <h3>Book size per rep</h3>
+            <p class="os-note">Accounts the rep owns. EM book is customer accounts where they are the Engagement Manager. Open pipeline is all open New Business and Upsell, any close date. Click a column to sort.</p>
+          </div>
+          <input type="search" id="bk-owner-search" class="os-search" data-search="bk-owner-table" placeholder="Search reps or managers" aria-label="Search reps">
+        </div>
+        <div class="os-tablewrap">
+          <table data-source="books_owner" data-row-key="owner" data-sortable="bk-owner-table">
+            <thead><tr>
+              <th data-field="owner" data-sort="owner">Rep</th>
+              <th data-field="region" data-sort="region">Team</th>
+              <th data-field="manager" data-sort="manager">Manager</th>
+              <th class="num" data-field="accounts" data-sort="accounts">Accounts</th>
+              <th class="num" data-field="active" data-sort="active">Active</th>
+              <th class="num" data-field="customers" data-sort="customers">Customers</th>
+              <th class="num" data-field="arr" data-sort="arr" aria-sort="descending">Customer ARR</th>
+              <th class="num" data-field="emCustomers" data-sort="emCustomers">EM book</th>
+              <th class="num" data-field="openPipe" data-sort="openPipe">Open pipeline</th>
+              <th class="num" data-field="openRenewals" data-sort="openRenewals">Open renewals</th>
+            </tr></thead>
+            <tbody data-draw="bk-owner-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card os-card-wide" id="bk-coverage">
+        <h3>Territory coverage</h3>
+        <p class="os-note">Active accounts in each EMEA sales region by who owns them. Unassigned is System User or a user with no role. Strategic is the global strategic team.</p>
+        <div class="os-tablewrap">
+          <table data-source="coverage" data-row-key="salesRegion">
+            <thead><tr>
+              <th data-field="salesRegion">Sales region</th>
+              <th class="num" data-field="emea">EMEA team</th>
+              <th class="num" data-field="strategic">Strategic</th>
+              <th class="num" data-field="partners">Partnerships</th>
+              <th class="num" data-field="otherRegion">Other region</th>
+              <th class="num" data-field="revops">RevOps</th>
+              <th class="num" data-field="unassigned">Unassigned</th>
+              <th class="num" data-field="coveredShare">Covered by EMEA</th>
+              <th class="num" data-field="customerArr">Customer ARR</th>
+            </tr></thead>
+            <tbody data-draw="bk-cov-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card os-card-wide" id="bk-orphans">
+        <div class="os-card-head">
+          <div>
+            <h3>Orphan accounts</h3>
+            <p class="os-note">Active accounts in an EMEA region whose owner is inactive, has no role, is RevOps, or sits outside EMEA. Strategic and partnership owners may be intended; they're marked as review.</p>
+          </div>
+          <div class="os-tools">
+            <select id="bk-orphan-reason" class="os-orphan-reason" aria-label="Reason">
+              <option value="">All reasons</option>
+              <option value="Inactive owner">Inactive owner</option>
+              <option value="Unassigned">Unassigned</option>
+              <option value="RevOps holding">RevOps holding</option>
+              <option value="Owner outside EMEA">Owner outside EMEA</option>
+              <option value="Strategic (review)">Strategic (review)</option>
+              <option value="Partnerships (review)">Partnerships (review)</option>
+            </select>
+            <input type="search" id="bk-orphan-search" class="os-search" data-search="bk-orphan-table" placeholder="Search accounts or owners" aria-label="Search orphan accounts">
+          </div>
+        </div>
+        <div class="os-tablewrap">
+          <table data-source="orphans" data-row-key="accountId">
+            <thead><tr>
+              <th data-field="account">Account</th>
+              <th data-field="salesRegion">Region</th>
+              <th data-field="country">Country</th>
+              <th data-field="status">Status</th>
+              <th data-field="owner">Owner</th>
+              <th data-field="ownerRole">Owner role</th>
+              <th data-field="reason">Reason</th>
+              <th class="num" data-field="arrUsd">ARR</th>
+            </tr></thead>
+            <tbody data-draw="bk-orphan-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card" id="bk-books">
+        <h3>Account books</h3>
+        <p class="os-note">Books by Territory ID. Split: the main owner holds under 80% of the book's accounts. Follows the team filter by main owner.</p>
+        <div class="os-tablewrap">
+          <table data-source="books" data-row-key="book">
+            <thead><tr>
+              <th data-field="book">Book</th>
+              <th data-field="mainOwner">Main owner</th>
+              <th class="num" data-field="mainShare">Share</th>
+              <th class="num" data-field="owners">Owners</th>
+              <th class="num" data-field="accounts">Accounts</th>
+              <th data-field="flag">Check</th>
+            </tr></thead>
+            <tbody data-draw="bk-book-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="os-card" id="bk-pool-book">
+        <h3>Routing vs books</h3>
+        <p class="os-note">AE and SMB reps whose book and routing don't line up: a book but no pool, or pools but no book.</p>
+        <div class="os-tablewrap">
+          <table data-source="book_pool" data-row-key="userId">
+            <thead><tr>
+              <th data-field="name">Rep</th>
+              <th data-field="region">Team</th>
+              <th data-field="bookList">Books</th>
+              <th class="num" data-field="pools">Pools</th>
+              <th data-field="flag">Check</th>
+            </tr></thead>
+            <tbody data-draw="bk-pool-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="os-core.js"></script>
+<script src="os-calcs.js"></script>
+<script src="os-draw.js"></script>
