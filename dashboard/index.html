@@ -3,15 +3,17 @@
   /* Layout: an app shell. Header (brand, search, team and manager switchers) | sticky tab strip with live badges |
      screen | person panel on the right. Screens: header, stat bar, view tabs, then panes. One column when narrow. */
   #dash-root { --dash-gutter: 0; }
-  .app { --app-detail: 23rem; --app-tabs-h: 2.75rem; --app-pad-x: clamp(16px, 3vw, 40px); display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-bg); }
+  .app { --app-detail: 23rem; --app-tabs-h: 2.75rem; --app-pad-x: clamp(16px, 3vw, 40px); display: block; font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-bg); }
+  /* the tab strip sticks within .app (a block box as tall as the page); main and the person panel share .app-body's grid */
+  .app-body { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; min-width: 0; }
   .app [hidden] { display: none !important; }
-  .app.has-detail { grid-template-columns: minmax(0, 1fr) var(--app-detail); }
+  .app.has-detail .app-body { grid-template-columns: minmax(0, 1fr) var(--app-detail); }
   .app svg.ic { width: 1rem; height: 1rem; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .app :where(button) { font: inherit; color: inherit; }
   .app :focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
 
   /* Sidebar */
-  .app-head { grid-column: 1 / -1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm) var(--cds-gap-lg); padding: var(--cds-pad-sm) var(--app-pad-x); background: var(--color-panel); min-width: 0; }
+  .app-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm) var(--cds-gap-lg); padding: var(--cds-pad-sm) var(--app-pad-x); background: var(--color-panel); min-width: 0; }
   .app-brand { display: flex; align-items: center; gap: var(--cds-gap-sm); min-width: 0; margin-right: auto; }
   .app-mark { width: 2rem; height: 2rem; border-radius: var(--cds-radius); display: grid; place-items: center; background: var(--color-fg); color: var(--color-bg); flex: none; }
   .app-mark svg.ic { width: 1.1rem; height: 1.1rem; }
@@ -21,7 +23,7 @@
   .app-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm) var(--cds-gap-md); min-width: 0; }
   .app-pick { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-width: 0; }
   .app-pick select { max-width: 15rem; }
-  .app-tabs { grid-column: 1 / -1; grid-row: 2; position: sticky; top: 0; z-index: 6; display: flex; align-items: stretch; gap: 2px; padding: 0 var(--app-pad-x); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; background: var(--color-panel); box-shadow: inset 0 -1px 0 var(--color-border-line); min-width: 0; }
+  .app-tabs { position: sticky; top: 0; z-index: 6; display: flex; align-items: stretch; gap: 2px; padding: 0 var(--app-pad-x); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; background: var(--color-panel); box-shadow: inset 0 -1px 0 var(--color-border-line); min-width: 0; }
   .app-tab { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); flex: none; min-height: var(--app-tabs-h); padding: 0 var(--cds-pad-md); border: 0; border-radius: 0; background: transparent; color: var(--color-fg-muted); white-space: nowrap; cursor: pointer; box-sizing: border-box; }
   .app-tab:hover { color: var(--color-fg); background: color-mix(in srgb, var(--color-fg) 5%, transparent); }
   .app-tab[aria-current="page"] { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); box-shadow: inset 0 -2px 0 var(--app-accent, var(--color-fg)); }
@@ -59,7 +61,7 @@
   .live-dot::before { content: "●"; }
 
   /* Main */
-  .app-main { grid-column: 1; grid-row: 3; min-width: 0; padding: var(--cds-pad-xl) var(--app-pad-x) calc(var(--cds-pad-xl) * 2); container-type: inline-size; container-name: main; scroll-margin-top: calc(var(--app-tabs-h) + 1px); }
+  .app-main { grid-column: 1; grid-row: 1; min-width: 0; padding: var(--cds-pad-xl) var(--app-pad-x) calc(var(--cds-pad-xl) * 2); container-type: inline-size; container-name: main; scroll-margin-top: calc(var(--app-tabs-h) + 1px); }
   .scr { display: grid; gap: var(--cds-gap-lg); min-width: 0; }
   .scr-head { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); justify-content: space-between; align-items: flex-end; }
   .scr-head h1 { margin: 0; font-size: var(--cds-font-size-title); font-weight: var(--cds-font-weight-medium); letter-spacing: -.01em; text-wrap: balance; }
@@ -200,7 +202,7 @@
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
 
   /* Person panel */
-  .app-detail { grid-column: 2; grid-row: 3; position: sticky; top: var(--app-tabs-h); height: calc(100vh - var(--app-tabs-h)); max-height: calc(100vh - var(--app-tabs-h)); overflow: auto; box-sizing: border-box; display: grid; gap: var(--cds-gap-md); align-content: start; padding: var(--cds-pad-lg); background: var(--color-panel); border-left: 1px solid var(--color-border-line); min-width: 0; scroll-margin-top: calc(var(--app-tabs-h) + 1px); }
+  .app-detail { grid-column: 2; grid-row: 1; position: sticky; top: var(--app-tabs-h); height: calc(100vh - var(--app-tabs-h)); max-height: calc(100vh - var(--app-tabs-h)); overflow: auto; box-sizing: border-box; display: grid; gap: var(--cds-gap-md); align-content: start; padding: var(--cds-pad-lg); background: var(--color-panel); border-left: 1px solid var(--color-border-line); min-width: 0; scroll-margin-top: calc(var(--app-tabs-h) + 1px); }
   .pd-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--cds-gap-sm); align-items: center; }
   .pd-avatar { width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 20%, transparent); font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); }
   .pd-id { min-width: 0; }
@@ -257,9 +259,9 @@
   .app .itm-title b, .app .grp b { font-weight: var(--cds-font-weight-medium); }
 
   @media (max-width: 1180px) {
-    .app.has-detail { grid-template-columns: minmax(0, 1fr); }
-    .app.has-detail .app-detail { grid-column: 1; grid-row: 3; position: static; height: auto; max-height: none; border-left: 0; border-bottom: 1px solid var(--color-border-line); }
-    .app.has-detail .app-main { grid-row: 4; }
+    .app.has-detail .app-body { grid-template-columns: minmax(0, 1fr); }
+    .app.has-detail .app-detail { grid-column: 1; grid-row: 1; position: static; height: auto; max-height: none; border-left: 0; border-bottom: 1px solid var(--color-border-line); }
+    .app.has-detail .app-main { grid-row: 2; }
   }
   @media (max-width: 760px) {
     .app-head { padding: var(--cds-pad-sm) 16px; }
@@ -349,6 +351,7 @@
   </nav>
 
   <!-- ===================== MAIN ===================== -->
+  <div class="app-body">
   <main class="app-main">
     <div class="palette" data-palette hidden>
       <div class="palette-box" role="dialog" aria-label="Search">
@@ -1697,6 +1700,7 @@
     <p class="toast" data-toast="ok" role="status" hidden>Copied to clipboard</p>
     <p class="toast" data-toast="fail" role="status" hidden>Couldn't copy. Select the text and copy it instead.</p>
   </aside>
+  </div>
 </div>
 
 <script src="os-core.js"></script>
