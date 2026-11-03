@@ -642,8 +642,8 @@ dash.calc('person', {
       if (!o.role) { o.role = r.role; o.region = r.region; o.manager = r.manager; }
     }
     for (const r of rr_people) Object.assign(get(r.name), { pools: r.pools, poolNames: r.poolNames, assignments: r.assignments, routing: r.status });
-    for (const r of bookings) Object.assign(get(r.owner), { wonThisArr: r.wonThisArr, wonThis: r.wonThis, wonLastArr: r.wonLastArr, winRateThis: r.winRateThis, avgDealThis: r.avgDealThis });
-    return [...m.values()].map((o) => ({ wonThisArr: 0, wonThis: 0, wonLastArr: 0, winRateThis: null, avgDealThis: null, ...o, region: o.region || 'Other' }));
+    for (const r of bookings) Object.assign(get(r.owner), { wonThisArr: r.wonThisArr, wonThis: r.wonThis, lostThis: r.lostThis, wonLastArr: r.wonLastArr, winRateThis: r.winRateThis, avgDealThis: r.avgDealThis });
+    return [...m.values()].map((o) => ({ wonThisArr: 0, wonThis: 0, lostThis: 0, wonLastArr: 0, winRateThis: null, avgDealThis: null, ...o, region: o.region || 'Other' }));
   },
 });
 
@@ -762,7 +762,7 @@ dash.calc('gr_actions', {
       const date = String(r.meetingAt || '').slice(0, 10) || null;
       const o = {
         id: r.id, meetingId: r.meetingId, meeting: clean(r.meeting) || 'Untitled meeting', date, meetingAt: r.meetingAt, url: r.url,
-        shared: r.capturedByMe === false, participants: r.participants ?? null, oneOnOne: r.participants === 2, source: r.source, section: r.section, pos: r.pos, item, detail: '', owner, bucket, done,
+        shared: r.capturedByMe === false, participants: r.participants ?? null, emails: r.emails || '', me: r.me || null, oneOnOne: r.participants === 2, source: r.source, section: r.section, pos: r.pos, item, detail: '', owner, bucket, done,
         forYou: !done && (bucket === 'mine' || (bucket === 'unassigned' && r.capturedByMe !== false)),
         ageDays: date ? Math.max(0, Math.round((today - Date.parse(date + 'T00:00:00Z')) / 864e5)) : null,
       };
@@ -1203,5 +1203,240 @@ dash.calc('ramp', {
       const status = !name ? 'No Salesforce user' : isBdr ? (sourced ? 'Sourcing' : p.daysIn >= 45 ? 'Not ramping' : 'Ramping') : !sell(p.sfRole) ? 'Not a selling role' : opps ? 'Ramping' : p.daysIn >= 45 ? 'Not ramping' : 'Too early';
       return { id: p.id, name: p.name, sfName: name, sfRole: p.sfRole, region: p.region, manager: p.sfManager || p.manager, startDate: p.startDate, daysIn: p.daysIn, opps, arr, perMonth: p.daysIn >= 14 ? opps / Math.max(1, p.daysIn / 30) : null, firstOpp: first, daysToFirst, pipeThisQ: name ? pipe.get(name) || 0 : 0, sourced, status };
     });
+  },
+});
+
+// ===================== 1:1s AND TEAMS =====================
+dash.calc('team_tree', {
+  title: 'Teams and leaders',
+  description: 'Every active Salesforce user with an EMEA sales role or EMEA people below them, with their direct reports and whole team (everyone below them in the Salesforce manager chain) and the team\'s EMEA numbers added up, their own included: pipeline this and next quarter, past-due and stale opps, opps created this quarter, won this quarter and win rate, people missing from routing, reps with a risk score of 5 or more, and data checks about people in the team. The top EMEA leader is the deepest leader whose team still holds at least 90% of EMEA people.',
+  inputs: ['users_all', 'person', 'rr_people', 'rep_risk', 'checks'],
+  fn: (users_all, person, rr_people, rep_risk, checks) => {
+    const users = new Map();
+    for (const u of users_all) if (u.name && !users.has(u.name)) users.set(u.name, u);
+    const kids = new Map();
+    for (const u of users.values()) {
+      if (!u.manager || u.manager === u.name) continue;
+      if (!kids.has(u.manager)) kids.set(u.manager, []);
+      kids.get(u.manager).push(u.name);
+    }
+    const own = new Map();
+    const blank = () => ({ emea: 0, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crOpps: 0, crArr: 0, wonThisArr: 0, wonThis: 0, lostThis: 0, routingGaps: 0, riskReps: 0, checks: 0 });
+    const get = (n) => { if (!own.has(n)) own.set(n, blank()); return own.get(n); };
+    for (const p of person) {
+      if (!p.inRoster || p.isActive === false) continue;
+      Object.assign(get(p.name), { emea: 1, thisPipe: +p.thisPipe || 0, thisOpps: +p.thisOpps || 0, nextPipe: +p.nextPipe || 0, pastDue: +p.pastDue || 0, stale: +p.stale || 0, crOpps: +p.crOpps || 0, crArr: +p.crArr || 0, wonThisArr: +p.wonThisArr || 0, wonThis: +p.wonThis || 0, lostThis: +p.lostThis || 0 });
+    }
+    for (const r of rr_people) if (r.status === 'Missing' || r.status === 'New joiner: overdue') get(r.name).routingGaps += 1;
+    for (const r of rep_risk) if (r.score >= 5) get(r.owner).riskReps += 1;
+    for (const c of checks) if (c.person) get(c.person).checks += 1;
+    const KEYS = Object.keys(blank());
+    const team = new Map();
+    const roll = (n, seen) => {
+      if (team.has(n)) return team.get(n);
+      const t = { ...(own.get(n) || blank()), size: 0 };
+      seen.add(n);
+      for (const k of kids.get(n) || []) {
+        if (seen.has(k)) continue;
+        const c = roll(k, seen);
+        for (const key of KEYS) t[key] += c[key];
+        t.size += c.size + 1;
+      }
+      team.set(n, t);
+      return t;
+    };
+    for (const n of users.keys()) roll(n, new Set());
+    for (const p of person) if (p.inRoster && !users.has(p.name)) roll(p.name, new Set());
+    const totalEmea = [...own.values()].reduce((s, o) => s + o.emea, 0);
+    // top EMEA leader: walk down from the person covering the most EMEA people while one direct report still covers 90%
+    let top = null;
+    for (const [n, t] of team) if (!top || t.emea > team.get(top).emea || (t.emea === team.get(top).emea && t.size < team.get(top).size)) top = n;
+    for (let guard = 0; top && guard < 20; guard++) {
+      const next = (kids.get(top) || []).find((k) => (team.get(k) || {}).emea >= 0.9 * totalEmea && (kids.get(k) || []).length);
+      if (!next) break;
+      top = next;
+    }
+    const out = [];
+    for (const [n, t] of team) {
+      if (!t.emea) continue;
+      const u = users.get(n) || {};
+      const p = person.find((x) => x.name === n) || {};
+      const directs = (kids.get(n) || []).filter((k) => (team.get(k) || {}).emea > 0).length;
+      out.push({
+        name: n, userId: u.userId || p.userId || null, email: String(u.email || '').toLowerCase() || null, role: u.role || p.role || null,
+        region: p.region || (u.role ? 'Other' : null), manager: u.manager || p.manager || null, inEmea: !!(own.get(n) || {}).emea,
+        isLeader: directs > 0, directs, teamSize: t.size, emeaPeople: t.emea, isTop: n === top,
+        thisPipe: t.thisPipe, thisOpps: t.thisOpps, nextPipe: t.nextPipe, pastDue: t.pastDue, stale: t.stale, crOpps: t.crOpps, crArr: t.crArr,
+        wonThisArr: t.wonThisArr, wonThis: t.wonThis, lostThis: t.lostThis, winRate: t.wonThis + t.lostThis ? t.wonThis / (t.wonThis + t.lostThis) : null,
+        routingGaps: t.routingGaps, riskReps: t.riskReps, checks: t.checks,
+      });
+    }
+    return out.sort((a, b) => b.emeaPeople - a.emeaPeople || a.name.localeCompare(b.name));
+  },
+});
+
+dash.calc('oo_upcoming', {
+  title: 'Your upcoming 1:1s',
+  description: 'Events in your calendar from now to 14 days ahead that are a 1:1: you and one colleague with your email domain, not all-day, not cancelled and not declined by you. The colleague is matched to an active Salesforce user by email.',
+  inputs: ['cal_events', 'users_all'],
+  fn: (cal_events, users_all) => {
+    const byEmail = new Map(users_all.map((u) => [String(u.email || '').toLowerCase(), u]));
+    const dom = (x) => String(x || '').split('@')[1] || '';
+    const now = Date.now();
+    const out = [];
+    for (const e of cal_events) {
+      if (e.allDay || e.status === 'cancelled' || e.myResponse === 'declined' || e.people !== 2) continue;
+      const email = String(e.emails || '').split(', ')[0];
+      if (!email || !e.selfEmail || dom(email) !== dom(e.selfEmail)) continue;
+      const end = Date.parse(e.end || e.start || '');
+      if (!Number.isNaN(end) && end < now) continue;
+      const u = byEmail.get(email) || null;
+      const guess = email.split('@')[0].split(/[._-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+      out.push({ key: e.id, start: e.start, end: e.end, at: Date.parse(e.start || '') || null, title: e.title, email, name: u ? u.name : (String(e.names || '').trim() || guess), sfName: u ? u.name : null, role: u ? u.role || null : null, recurring: !!e.recurring, link: e.link });
+    }
+    return out.sort((a, b) => (a.at || 0) - (b.at || 0));
+  },
+});
+
+dash.calc('oo_followups', {
+  title: 'Follow-ups per colleague',
+  description: 'Open action items from your Granola notes for each colleague: items from meetings of up to three people they attended, and items they own (their full name as the owner) from any meeting. Also the latest meeting of two or three people with them, as "last time".',
+  inputs: ['gr_actions', 'gr_notes', 'users_all'],
+  fn: (gr_actions, gr_notes, users_all) => {
+    const toks = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
+    const byName = new Map();
+    for (const u of users_all) {
+      const t = toks(u.name);
+      const e = String(u.email || '').toLowerCase();
+      if (t.length < 2 || !e) continue;
+      if (!byName.has(t.join(' '))) byName.set(t.join(' '), e);
+      if (!byName.has(t[0] + ' ' + t[t.length - 1])) byName.set(t[0] + ' ' + t[t.length - 1], e);
+    }
+    const out = [];
+    const last = new Map();
+    for (const r of gr_notes) {
+      if (!(r.participants >= 2 && r.participants <= 3)) continue;
+      for (const e of String(r.emails || '').split(', ').filter(Boolean)) {
+        if (e === r.me) continue;
+        const prev = last.get(e);
+        if (!prev || String(r.meetingAt) > String(prev.meetingAt)) last.set(e, { meetingId: r.meetingId, meeting: r.meeting, meetingAt: r.meetingAt, url: r.url });
+      }
+    }
+    for (const [email, m] of last) out.push({ key: email + '|last', email, kind: 'last', id: null, item: m.meeting || 'Untitled meeting', owner: null, bucket: null, due: null, dueStatus: null, meeting: m.meeting, meetingId: m.meetingId, date: String(m.meetingAt || '').slice(0, 10) || null, url: m.url });
+    for (const a of gr_actions) {
+      if (a.done) continue;
+      const who = new Set();
+      if (a.participants != null && a.participants <= 3) for (const e of String(a.emails || '').split(', ').filter(Boolean)) if (e !== a.me) who.add(e);
+      if (a.owner) {
+        const t = toks(a.owner);
+        const e = t.length >= 2 ? byName.get(t.join(' ')) || byName.get(t[0] + ' ' + t[t.length - 1]) : null;
+        if (e && e !== a.me) who.add(e);
+      }
+      for (const email of who) out.push({ key: email + '|' + a.id, email, kind: 'item', id: a.id, item: a.item, owner: a.owner, bucket: a.bucket, due: a.due, dueStatus: a.dueStatus, meeting: a.meeting, meetingId: a.meetingId, date: a.date, url: a.url });
+    }
+    return out;
+  },
+});
+
+dash.calc('oo_points', {
+  title: '1:1 numbers and talking points',
+  description: 'For each EMEA person and leader, the numbers and talking points a 1:1 agenda opens with: for a leader the whole team (everyone below them), otherwise their own. Numbers: pipeline this and next quarter, created this quarter, won this quarter and win rate. Talking points, most urgent first: past-due opps, deals pushed out of the quarter, early-stage deals closing this quarter, overdue or missing next steps, no contact role, stale opps, the riskiest large deals, renewals rated HIGH or downselling, people missing from routing, book balance and data checks.',
+  inputs: ['team_tree', 'rep_risk', 'deal_list', 'renewal_list', 'rr_people', 'books_owner', 'checks'],
+  fn: (team_tree, rep_risk, deal_list, renewal_list, rr_people, books_owner, checks) => {
+    const usd = (v) => { const n = +v || 0, a = Math.abs(n); return (n < 0 ? '-$' : '$') + (a >= 1e6 ? (a / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M' : a >= 1e3 ? Math.round(a / 1e3) + 'K' : Math.round(a)); };
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const pct = (v) => Math.round(v * 100) + '%';
+    const day = (d) => { const t = Date.parse(String(d || '').slice(0, 10) + 'T00:00:00Z'); return Number.isNaN(t) ? '' : new Date(t).toUTCString().slice(5, 11).replace(/^0/, ''); };
+    const names = (rows, f) => rows.filter((r) => r[f] > 0).sort((a, b) => b[f] - a[f]).slice(0, 3).map((r) => r.owner + ' ' + r[f]).join(', ');
+    const kids = new Map();
+    for (const t of team_tree) if (t.manager) { if (!kids.has(t.manager)) kids.set(t.manager, []); kids.get(t.manager).push(t.name); }
+    const subtree = (n) => { const s = new Set([n]); const q = [n]; while (q.length) { for (const k of kids.get(q.shift()) || []) if (!s.has(k)) { s.add(k); q.push(k); } } return s; };
+    const out = [];
+    for (const t of team_tree) {
+      if (!t.email) continue;
+      const lead = t.isLeader;
+      const inT = lead ? subtree(t.name) : new Set([t.name]);
+      const push = (section, sev, text, extra) => out.push({ key: t.email + '|' + section + '|' + out.length, email: t.email, name: t.name, section, sev, order: out.length, text, ...(extra || {}) });
+      // numbers
+      if (lead) push('numbers', '', 'Team of ' + plural(t.teamSize + 1, 'person', 'people') + ' (' + plural(t.directs, 'direct report', 'direct reports') + '), ' + plural(t.emeaPeople, 'in EMEA sales', 'in EMEA sales') + '.');
+      push('numbers', '', 'Pipeline this quarter ' + usd(t.thisPipe) + ' across ' + plural(t.thisOpps, 'opp', 'opps') + '; next quarter ' + usd(t.nextPipe) + '.');
+      push('numbers', '', 'Created this quarter: ' + plural(t.crOpps, 'opp', 'opps') + ', ' + usd(t.crArr) + '.');
+      push('numbers', '', 'Won this quarter ' + usd(t.wonThisArr) + ' from ' + plural(t.wonThis, 'deal', 'deals') + (t.winRate != null ? '; win rate ' + pct(t.winRate) + ' (' + t.wonThis + ' won, ' + t.lostThis + ' lost).' : '.'));
+      // talking points from rep risk
+      const rr = rep_risk.filter((r) => inT.has(r.owner));
+      const sum = (f) => rr.reduce((s, r) => s + (+r[f] || 0), 0);
+      const who = (f) => (lead && rr.filter((r) => r[f] > 0).length > 1 ? ' (' + names(rr, f) + ')' : '');
+      if (t.pastDue) push('talk', 'high', plural(t.pastDue, 'opp is', 'opps are') + ' past the close date: update or close' + who('pastDue') + '.', { screen: 'pipeline', view: 'risk' });
+      if (sum('pushedOut')) push('talk', 'high', plural(sum('pushedOut'), 'deal', 'deals') + ' (' + usd(sum('pushedOutArr')) + ') pushed out of this quarter in the last 30 days' + who('pushedOut') + '.', { screen: 'pipeline', view: 'risk' });
+      if (sum('early')) push('talk', 'medium', plural(sum('early'), 'early-stage deal', 'early-stage deals') + ' (stage 0–1, ' + usd(sum('earlyArr')) + ') still closing this quarter' + who('early') + '.', { screen: 'pipeline', view: 'risk' });
+      const ns = sum('nextOverdue') + sum('nextNone');
+      if (ns) push('talk', 'medium', plural(ns, 'deal has', 'deals have') + ' an overdue or missing next step.', { screen: 'pipeline', view: 'risk' });
+      if (sum('noContact')) push('talk', 'low', plural(sum('noContact'), 'deal', 'deals') + ' closing this quarter with no contact role.', { screen: 'pipeline', view: 'risk' });
+      if (t.stale) push('talk', 'low', plural(t.stale, 'opp', 'opps') + ' with no activity in 30 days.', { screen: 'pipeline', view: 'reps' });
+      // the riskiest large deals
+      for (const d of deal_list.filter((x) => inT.has(x.owner) && x.risk >= 3).sort((a, b) => b.arrUsd - a.arrUsd).slice(0, 3)) {
+        push('talk', 'medium', 'Deal: ' + d.opp + ' (' + usd(d.arrUsd) + ', ' + d.stage + ', closes ' + day(d.closeDate) + (lead ? ', ' + d.owner : '') + '): ' + d.flags + '.', { screen: 'pipeline', view: 'deals', oppId: d.oppId });
+      }
+      for (const r of renewal_list.filter((x) => inT.has(x.owner) && (x.rating === 'HIGH' || x.netChangeArrUsd < 0)).sort((a, b) => b.renewingArrUsd - a.renewingArrUsd).slice(0, 2)) {
+        push('talk', r.rating === 'HIGH' ? 'high' : 'medium', 'Renewal: ' + r.opp + ' (' + usd(r.renewingArrUsd) + ', closes ' + day(r.closeDate) + (lead ? ', ' + r.owner : '') + ')' + (r.rating === 'HIGH' ? ' rated HIGH risk' : '') + (r.netChangeArrUsd < 0 ? (r.rating === 'HIGH' ? ' and' : '') + ' downselling ' + usd(r.netChangeArrUsd) : '') + '.', { screen: 'pipeline', view: 'renewals', oppId: r.oppId });
+      }
+      // routing
+      const gaps = rr_people.filter((r) => inT.has(r.name) && (r.status === 'Missing' || r.status === 'New joiner: overdue'));
+      if (gaps.length) push('talk', 'high', lead ? plural(gaps.length, 'person is', 'people are') + ' missing from routing: ' + gaps.slice(0, 4).map((g) => g.name).join(', ') + (gaps.length > 4 ? ' and ' + (gaps.length - 4) + ' more' : '') + '.' : 'Not in a routing pool for their role' + (gaps[0].suggested ? ': peers are in ' + gaps[0].suggested : '') + '.', { screen: 'routing', view: 'people' });
+      const soon = rr_people.filter((r) => inT.has(r.name) && r.status === 'New: add next week');
+      if (soon.length) push('talk', 'low', plural(soon.length, 'new joiner', 'new joiners') + ' to add to routing next week: ' + soon.slice(0, 4).map((g) => g.name).join(', ') + '.', { screen: 'routing', view: 'people' });
+      // books
+      const bk = books_owner.filter((b) => inT.has(b.owner) && (b.balance === 'Heavy' || b.balance === 'Light'));
+      if (bk.length && lead) push('talk', 'low', 'Books out of balance: ' + bk.slice(0, 4).map((b) => b.owner + ' ' + b.balance.toLowerCase() + ' (' + b.active + ' active, ' + (b.vsMedian != null ? b.vsMedian.toFixed(1) + '× median' : '') + ')').join(', ') + '.', { screen: 'books', view: 'reps' });
+      else if (bk.length) push('talk', 'low', 'Book is ' + bk[0].balance.toLowerCase() + ': ' + bk[0].active + ' active accounts, ' + (bk[0].vsMedian != null ? bk[0].vsMedian.toFixed(1) + '× the team median' : 'against the team median') + '.', { screen: 'books', view: 'reps' });
+      // data checks
+      const ck = checks.filter((c) => c.person && c.area !== 'Routing' && inT.has(c.person));
+      if (ck.length) push('talk', ck.some((c) => c.severity === 'high') ? 'medium' : 'low', plural(ck.length, 'data check', 'data checks') + ': ' + ck.slice(0, 3).map((c) => c.title + ' (' + c.what.toLowerCase() + ')').join('; ') + (ck.length > 3 ? '; and ' + (ck.length - 3) + ' more' : '') + '.', { screen: 'actions', view: 'checks' });
+    }
+    const rank = { high: 0, medium: 1, low: 2, '': 3 };
+    return out.sort((a, b) => (a.email < b.email ? -1 : a.email > b.email ? 1 : 0) || (a.section === b.section ? 0 : a.section === 'numbers' ? -1 : 1) || rank[a.sev] - rank[b.sev] || a.order - b.order);
+  },
+});
+
+
+// ===================== TERRITORY PLANNING =====================
+dash.calc('book_moves', {
+  title: 'Suggested book moves',
+  description: 'A starting point for territory planning: within each AE team and SMB, active accounts (customer, pipeline, engaging) to move from Heavy books (2x the team median or more) to Light ones (half the median or less), largest gaps first, each move taking both reps toward the median. A receiver who joined in the last 90 days (Salesforce user created or Legora start date) is marked as a new joiner; what a Heavy book has left over when no Light book remains is listed without a receiver.',
+  inputs: ['books_owner', 'roster'],
+  fn: (books_owner, roster) => {
+    const since = (d) => { const t = Date.parse(String(d || '').slice(0, 10) + 'T00:00:00Z'); return Number.isNaN(t) ? null : Math.floor((Date.now() - t) / 864e5); };
+    const joined = new Map();
+    for (const u of roster) {
+      const days = [since(u.startDate), since(u.createdDate)].filter((x) => x != null);
+      if (days.length) joined.set(u.name, Math.min(...days));
+    }
+    const sellers = books_owner.filter((r) => r.teamMedian != null && r.ownerActive);
+    const out = [];
+    for (const team of [...new Set(sellers.map((r) => r.region))].sort()) {
+      const rs = sellers.filter((r) => r.region === team);
+      const med = rs[0].teamMedian;
+      const give = rs.filter((r) => r.balance === 'Heavy').map((r) => ({ r, left: Math.floor(r.active - med) })).filter((x) => x.left > 0).sort((a, b) => b.left - a.left);
+      const take = rs.filter((r) => r.balance === 'Light').map((r) => ({ r, left: Math.ceil(med - r.active) })).filter((x) => x.left > 0).sort((a, b) => b.left - a.left);
+      const now = new Map(rs.map((r) => [r.owner, r.active]));
+      let i = 0, j = 0;
+      while (i < give.length && j < take.length) {
+        const n = Math.min(give[i].left, take[j].left);
+        const from = give[i].r, to = take[j].r;
+        const fromBefore = now.get(from.owner), toBefore = now.get(to.owner);
+        now.set(from.owner, fromBefore - n); now.set(to.owner, toBefore + n);
+        const d = joined.get(to.owner);
+        out.push({ key: team + '|' + from.owner + '|' + to.owner, region: team, manager: from.manager, toManager: to.manager, from: from.owner, to: to.owner, accounts: n, fromBefore, fromAfter: fromBefore - n, toBefore, toAfter: toBefore + n, teamMedian: med, note: d != null && d <= 90 ? 'To a new joiner' : '' });
+        give[i].left -= n; take[j].left -= n;
+        if (!give[i].left) i++;
+        if (!take[j].left) j++;
+      }
+      for (; i < give.length; i++) {
+        if (give[i].left <= 0) continue;
+        const from = give[i].r, b = now.get(from.owner);
+        out.push({ key: team + '|' + from.owner + '|', region: team, manager: from.manager, toManager: null, from: from.owner, to: null, accounts: give[i].left, fromBefore: b, fromAfter: b - give[i].left, toBefore: null, toAfter: null, teamMedian: med, note: 'No Light book in the team to take them' });
+      }
+    }
+    return out;
   },
 });

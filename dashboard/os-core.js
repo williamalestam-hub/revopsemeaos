@@ -55,11 +55,87 @@ dash.loader('hb_people', {
   },
 });
 
+// Google Calendar: list_events answers a page of events with nextPageToken; up to four pages are read.
+dash.loader('cal_events', {
+  description: 'Calendar events as rows (following next pages, up to four): start, end, title, your response, whether it repeats, and the invited people (meeting rooms left out) as a count and their emails',
+  fn: async ({ answer, call, args }) => {
+    const parse = (a) => {
+      if (Array.isArray(a) && a.length && a[0] && a[0].type === 'text') a = a.map((c) => c.text).join('');
+      if (typeof a === 'string') {
+        try { a = JSON.parse(a); } catch (e) { throw new Error(a.slice(0, 400)); }
+      }
+      if (!a || !Array.isArray(a.events)) throw new Error(String((a && (a.message || (a.error && (a.error.message || a.error)))) || 'Google Calendar answer had no events list'));
+      return a;
+    };
+    const columns = ['id', 'start', 'end', 'allDay', 'title', 'status', 'myResponse', 'organizerSelf', 'recurring', 'link', 'selfEmail', 'people', 'emails', 'names'];
+    const rows = [];
+    let page = parse(answer);
+    let cut = false;
+    for (let n = 0; ; n++) {
+      for (const e of page.events) {
+        const att = Array.isArray(e.attendees) ? e.attendees : [];
+        const humans = att.filter((x) => x && !x.resource && x.email);
+        const self = humans.find((x) => x.self) || null;
+        const others = humans.filter((x) => !x.self);
+        const selfEmail = (self && self.email) || (e.organizer && e.organizer.self && e.organizer.email) || (e.creator && e.creator.self && e.creator.email) || page.summary || '';
+        rows.push({
+          id: String(e.id || ''),
+          start: (e.start && (e.start.dateTime || e.start.date)) || null,
+          end: (e.end && (e.end.dateTime || e.end.date)) || null,
+          allDay: !!(e.start && e.start.date && !e.start.dateTime),
+          title: e.summary || '',
+          status: e.status || null,
+          myResponse: self ? self.responseStatus || null : null,
+          organizerSelf: !!(e.organizer && e.organizer.self),
+          recurring: !!e.recurringEventId,
+          link: e.htmlLink || null,
+          selfEmail: String(selfEmail).toLowerCase() || null,
+          people: humans.length,
+          emails: others.map((x) => String(x.email).toLowerCase()).join(', '),
+          names: others.map((x) => x.displayName || '').join(' | '),
+        });
+      }
+      if (!page.nextPageToken) break;
+      if (n >= 3) { cut = true; break; }
+      page = parse(await call('list_events', { ...args, pageToken: page.nextPageToken }));
+    }
+    return { columns, rows, cut };
+  },
+});
+
+// Salesforce getUserInfo answers {identity, manager: {identity}, userTimeAndLocale}; it becomes one row.
+dash.loader('sf_me', {
+  description: 'Your Salesforce identity as one row: user id, name, email, role, title, manager and time zone',
+  fn: ({ answer }) => {
+    let a = answer;
+    if (Array.isArray(a) && a.length && a[0] && a[0].type === 'text') a = a.map((c) => c.text).join('');
+    if (typeof a === 'string') {
+      try { a = JSON.parse(a); } catch (e) { throw new Error(a.slice(0, 400)); }
+    }
+    const id = a && a.identity;
+    if (!id || !id.userId) throw new Error(String((a && (a.message || a.error)) || 'Salesforce answer had no identity'));
+    const mg = (a.manager && a.manager.identity) || {};
+    return {
+      columns: ['userId', 'name', 'email', 'role', 'title', 'manager', 'managerEmail', 'timeZone'],
+      rows: [{
+        userId: id.userId,
+        name: id.displayName || [id.firstName, id.lastName].filter(Boolean).join(' '),
+        email: String(id.email || '').toLowerCase() || null,
+        role: id.roleName || null,
+        title: id.title || null,
+        manager: mg.displayName || null,
+        managerEmail: String(mg.email || '').toLowerCase() || null,
+        timeZone: (a.userTimeAndLocale && a.userTimeAndLocale.timeZoneIana) || null,
+      }],
+    };
+  },
+});
+
 // Granola: list_meetings gives the meetings in the window (following next pages); get_meetings, ten at a time,
 // gives each note. Every non-empty, non-heading line of a summary or private notes becomes a row, with the headings
 // above it, its indent and whether a blank line came before. The rules for what counts as an action item are in gr_actions.
 dash.loader('gr_notes', {
-  description: 'Your Granola meetings in the window, then each note read ten at a time; every non-empty line of the summary and private notes becomes a row with the headings above it, its indent and whether a blank line came before. Each row also carries your Granola email and name.',
+  description: 'Your Granola meetings in the window, then each note read ten at a time; every non-empty line of the summary and private notes becomes a row with the headings above it, its indent and whether a blank line came before. Each row also carries the meeting\'s attendee emails (up to four) and your Granola email and name.',
   fn: async ({ answer, call, args }) => {
     const txt = (a) => (typeof a === 'string' ? a
       : Array.isArray(a) ? a.map((c) => (c && typeof c.text === 'string' ? c.text : '')).join('')
@@ -68,7 +144,7 @@ dash.loader('gr_notes', {
       .replace(/&#39;|&apos;/g, "'").replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCodePoint(parseInt(h, 16)))
       .replace(/&#(\d+);/g, (m, n) => String.fromCodePoint(+n)).replace(/&amp;/g, '&');
     const attr = (s, k) => { const m = String(s).match(new RegExp('(?:^|\\s)' + k + '="([^"]*)"')); return m ? dec(m[1]) : null; };
-    const columns = ['id', 'meetingId', 'meeting', 'meetingAt', 'url', 'capturedByMe', 'participants', 'me', 'myName', 'source', 'section', 'parentSection', 'pos', 'kind', 'depth', 'gap', 'text'];
+    const columns = ['id', 'meetingId', 'meeting', 'meetingAt', 'url', 'capturedByMe', 'participants', 'emails', 'me', 'myName', 'source', 'section', 'parentSection', 'pos', 'kind', 'depth', 'gap', 'text'];
     let page = txt(answer);
     if (!/<meetings_data[\s>]/.test(page)) {
       if (/no meetings|count="0"/i.test(page)) return { columns, rows: [] };
@@ -85,9 +161,10 @@ dash.loader('gr_notes', {
         const head = ' ' + block.slice(0, block.indexOf('>'));
         const id = attr(head, 'id');
         if (!id) continue;
-        const kp = block.match(/<known_participants(\s[^>]*)?>/);
+        const kp = block.match(/<known_participants(\s[^>]*)?>([\s\S]*?)<\/known_participants>/);
         const total = kp && kp[1] ? attr(kp[1], 'total') : null;
-        meetings.set(id, { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: attr(head, 'captured_by_me') === 'true', participants: total != null ? +total : null });
+        const emails = kp ? [...kp[2].matchAll(/\(([^()\s]+@[^()\s]+)\)/g)].map((m) => dec(m[1]).toLowerCase()) : [];
+        meetings.set(id, { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: attr(head, 'captured_by_me') === 'true', participants: total != null ? +total : emails.length || null, emails: emails.join(', ') });
         if (!myName && me) {
           const end = block.indexOf('</meeting>');
           for (const m of block.slice(0, end < 0 ? block.length : end).matchAll(/([^\n<>()]+?)\s*\(note creator\)[^\n]*?\(([^()\s]+@[^()\s]+)\)/g)) {
@@ -127,7 +204,7 @@ dash.loader('gr_notes', {
         }
         const b = line.match(/^( *)(?:[-*+•]|\d+[.)])\s+(.*)$/);
         if (stack.length) stack[stack.length - 1].has = true;
-        rows.push({ id: meta.id + ':' + source[0] + pos, meetingId: meta.id, meeting: meta.meeting, meetingAt: meta.meetingAt, url: meta.url, capturedByMe: meta.capturedByMe, participants: meta.participants ?? null, me, myName, source, section, parentSection, pos, kind: b ? 'bullet' : 'text', depth: Math.min(3, Math.floor(indent / 2)), gap, text: (b ? b[2] : line).trim() });
+        rows.push({ id: meta.id + ':' + source[0] + pos, meetingId: meta.id, meeting: meta.meeting, meetingAt: meta.meetingAt, url: meta.url, capturedByMe: meta.capturedByMe, participants: meta.participants ?? null, emails: meta.emails || '', me, myName, source, section, parentSection, pos, kind: b ? 'bullet' : 'text', depth: Math.min(3, Math.floor(indent / 2)), gap, text: (b ? b[2] : line).trim() });
         pos += 1;
         gap = false;
       }
@@ -152,7 +229,7 @@ dash.loader('gr_notes', {
         const head = ' ' + block.slice(0, block.indexOf('>'));
         const id = attr(head, 'id');
         if (!id) continue;
-        const meta = meetings.get(id) || { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: null, participants: null };
+        const meta = meetings.get(id) || { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: null, participants: null, emails: '' };
         const sum = (block.match(/<summary>([\s\S]*?)<\/summary>/) || [])[1];
         const priv = (block.match(/<private_notes(?:\s[^>]*)?>([\s\S]*?)<\/private_notes>/) || [])[1];
         if (sum) parse(dec(sum), 'summary', meta);
@@ -222,6 +299,8 @@ window.OS = (() => {
     copy: ['M9 9h11v11H9z', 'M5 15V6a2 2 0 0 1 2-2h9'],
     open: ['M14 4h6v6', 'M20 4l-9 9', 'M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'],
     go: ['m9 6 6 6-6 6'],
+    check: ['m5.5 12.5 4 4 9-9.5'],
+    agenda: ['M9 6h11', 'M9 12h11', 'M9 18h11', 'M4.5 6h.01', 'M4.5 12h.01', 'M4.5 18h.01'],
   };
 
   const searchFilter = (name, list, fields) => {
@@ -280,6 +359,7 @@ window.OS = (() => {
             td.textContent = txt;
             if (c.cls) { const k = c.cls(v, r); if (k) td.classList.add(k); }
           }
+          if (c.after) { const x = c.after(r); if (x) td.appendChild(x); }
           tr.appendChild(td);
         });
         frag.appendChild(tr);
@@ -480,11 +560,123 @@ window.OS = (() => {
   return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, icon, ICON, defTable, defList, defChart, drawMsg, redraw, tableText, vbars, hbars, searchFilter };
 })();
 
+// ---------- Completed next steps ----------
+// Each viewer's ticks live in their own private part of this dashboard's database (data/users/<their id>/os-done),
+// keyed by the meeting and the item's wording. Without a database or an id here, nothing can be ticked.
+OS.done = (() => {
+  const keys = new Map();
+  let ref = null, can = false, ready = false, writing = Promise.resolve();
+  const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 120);
+  const keyOf = (r) => (r && r.meetingId && r.item ? r.meetingId + '|' + norm(r.item) : '');
+  const DRAWS = ['act-list', 'home-actions', 'oo-follow', 'kpi-gr', 'nav-badge'];
+  const redraw = () => { DRAWS.forEach((n) => dash.draw(n)); dash.draw('msg'); };
+  (async () => {
+    try {
+      const c = window.claude;
+      if (!c || typeof c.use !== 'function') return;
+      const [db, user] = await Promise.all([c.use('db'), c.use('user')]);
+      const uid = db && user ? await user.id() : null;
+      if (!uid) return;
+      ref = db.doc('data/users/' + uid + '/os-done');
+      can = true;
+      ref.onSnapshot((snap) => {
+        keys.clear();
+        const d = snap && snap.exists ? snap.data() : null;
+        for (const e of (d && Array.isArray(d.items) ? d.items : [])) if (e && typeof e.k === 'string') keys.set(e.k, typeof e.at === 'string' ? e.at : '');
+        ready = true;
+        redraw();
+      }, () => { can = false; redraw(); });
+      redraw();
+    } catch (e) { can = false; ref = null; }
+  })();
+  const save = () => {
+    const cut = new Date(Date.now() - 200 * 864e5).toISOString().slice(0, 10);
+    const items = [...keys].filter(([, at]) => !at || at >= cut).map(([k, at]) => ({ k, at }));
+    writing = writing.then(() => ref.set({ items })).catch(() => { can = false; redraw(); });
+  };
+  return {
+    keyOf,
+    has: (r) => keys.has(keyOf(r)),
+    can: () => can && !!ref,
+    ready: () => ready,
+    toggle: (k) => {
+      if (!ref || !can || !k) return;
+      if (keys.has(k)) keys.delete(k); else keys.set(k, new Date().toISOString().slice(0, 10));
+      save();
+      redraw();
+    },
+  };
+})();
+
+// ---------- 1:1s ----------
+// The person whose agenda shows: the one picked (an email, or "n:" + a Salesforce name), else the next 1:1.
+// Only drawings and handlers on the 1:1s screen call these, so its datasets load only there.
+OS.oo = (() => {
+  const rowsOf = (id) => (OS.state(id) === 'ok' ? dash.data(id).data || [] : []);
+  const who = () => {
+    const p = String(dash.params().ooWho || '');
+    if (p.startsWith('n:')) {
+      const n = p.slice(2);
+      const t = rowsOf('team_tree').find((r) => r.name === n);
+      if (t && t.email) return t.email;
+      const u = rowsOf('users_all').find((r) => r.name === n);
+      return u && u.email ? String(u.email).toLowerCase() : p;
+    }
+    if (p) return p.toLowerCase();
+    const up = rowsOf('oo_upcoming');
+    return up.length ? up[0].email : '';
+  };
+  const nextFor = (email) => rowsOf('oo_upcoming').find((r) => r.email === email) || null;
+  const nameOf = (email) => {
+    if (!email) return '';
+    if (email.startsWith('n:')) return email.slice(2);
+    const t = rowsOf('team_tree').find((r) => r.email === email);
+    if (t) return t.name;
+    const n = nextFor(email);
+    if (n && n.name) return n.name;
+    const u = rowsOf('users_all').find((r) => String(r.email || '').toLowerCase() === email);
+    if (u) return u.name;
+    return email.split('@')[0].split(/[._-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+  };
+  const when = (r) => {
+    if (!r || !r.start) return '';
+    const d = new Date(r.start);
+    if (Number.isNaN(+d)) return '';
+    const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - day0) / 864e5);
+    const dayTxt = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    return dayTxt + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  };
+  const text = () => {
+    const email = who();
+    if (!email || email.startsWith('n:')) return '';
+    const next = nextFor(email);
+    const lines = ['1:1 with ' + nameOf(email) + (next ? ', ' + when(next) : '')];
+    const fu = rowsOf('oo_followups').filter((r) => r.email === email && r.kind === 'item' && !OS.done.has(r));
+    if (fu.length) {
+      lines.push('', 'Follow-ups');
+      for (const r of fu) lines.push(`- [ ] ${r.item}${r.owner ? ' (' + r.owner + ')' : ''}${r.due ? ', due ' + OS.shortDay(r.due) : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`);
+    }
+    const pts = rowsOf('oo_points').filter((r) => r.email === email);
+    const num = pts.filter((r) => r.section === 'numbers');
+    const talk = pts.filter((r) => r.section === 'talk');
+    if (num.length) { lines.push('', 'Numbers'); for (const r of num) lines.push('- ' + r.text); }
+    if (talk.length) { lines.push('', 'Talking points'); for (const r of talk) lines.push('- ' + r.text); }
+    lines.push('', 'Anything else');
+    return lines.join('\n');
+  };
+  return { rowsOf, who, nextFor, nameOf, when, text };
+})();
+
 // ---------- App shell ----------
 (() => {
-  const SCREENS = ['home', 'actions', 'pipeline', 'created', 'hiring', 'routing', 'books'];
-  const view = { actions: 'meetings', pipeline: 'teams', created: 'trend', hiring: 'joiners', routing: 'people', books: 'reps' };
-  let screen = SCREENS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
+  const SCREENS = ['home', 'actions', 'oneonone', 'pipeline', 'created', 'hiring', 'routing', 'books'];
+  const view = { actions: 'meetings', oneonone: 'upcoming', pipeline: 'teams', created: 'trend', hiring: 'joiners', routing: 'people', books: 'reps' };
+  // a link ends in #screen or #screen-view
+  const [hashScreen, hashView] = location.hash.slice(1).split('-');
+  let screen = SCREENS.includes(hashScreen) ? hashScreen : 'home';
+  if (hashView && view[screen] && document.querySelector('[data-view-panel="' + screen + ':' + hashView + '"]')) view[screen] = hashView;
+  const link = () => dash.setLink(view[screen] ? screen + '-' + view[screen] : screen);
   let lastPerson = null;
 
   const apply = () => {
@@ -512,7 +704,7 @@ window.OS = (() => {
     screen = s;
     if (v && view[s]) view[s] = v;
     apply();
-    dash.setLink(s);
+    link();
     toTop();
   };
 
@@ -526,7 +718,10 @@ window.OS = (() => {
     const p = dash.params();
     const n = [7, 30, 90].includes(+p.grWindow) ? +p.grWindow : 30;
     const want = windowParams(n);
-    if (p.gr_since !== want.gr_since || p.gr_until !== want.gr_until || +p.grWindow !== n) dash.setParams(want);
+    const now = new Date();
+    want.cal_from = isoLocal(now) + 'T00:00:00';
+    want.cal_to = isoLocal(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14)) + 'T00:00:00';
+    if (Object.keys(want).some((k) => String(p[k]) !== String(want[k]))) dash.setParams(want);
   })();
 
   // copy to clipboard with a short status
@@ -552,7 +747,7 @@ window.OS = (() => {
     const one = !!dash.params().gr11;
     const late = !!dash.params().grDue;
     return OS.searchFilter('act-list', (dash.data('gr_actions').data || [])
-      .filter((r) => !r.done && (!one || r.oneOnOne) && (!late || r.dueStatus) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
+      .filter((r) => !r.done && !OS.done.has(r) && (!one || r.oneOnOne) && (!late || r.dueStatus) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
   };
   const checklist = () => actionRows().map((r) => `- [ ] ${r.item}${r.owner ? ' (' + r.owner + ')' : ''}${r.due ? ', due ' + OS.shortDay(r.due) : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`).join('\n');
   const personRowNow = () => {
@@ -614,8 +809,13 @@ window.OS = (() => {
   const syncCopyList = () => document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
+    const t = e.target.closest('[data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
     if (!t) return;
+    if (t.matches('[data-done-key]')) { OS.done.toggle(t.dataset.doneKey); syncCopyList(); return; }
+    if (t.matches('[data-oo-who]')) { dash.setParams({ ooWho: t.dataset.ooWho }); if (screen !== 'oneonone' || view.oneonone !== 'upcoming') go('oneonone', 'upcoming'); return; }
+    if (t.matches('[data-prep-oo]')) { const n = dash.params().person; if (n) { dash.setParams({ ooWho: 'n:' + n, person: '' }); go('oneonone', 'upcoming'); } return; }
+    if (t.matches('[data-copy-agenda]')) { const text = OS.oo.text(); if (text) copy(text, t); else toast(false, t); return; }
+    if (t.matches('[data-gr-done]')) { dash.setParams({ grShowDone: !dash.params().grShowDone }); return; }
     if (t.matches('[data-nav]')) {
       if (t.dataset.grOwner) dash.setParams({ grOwner: t.dataset.grOwner });
       if (t.dataset.fill) {
@@ -633,7 +833,7 @@ window.OS = (() => {
     if (t.matches('[data-gr-group]')) { dash.setParams({ grGroup: t.dataset.grGroup }); return; }
     if (t.matches('[data-gr-11]')) { dash.setParams({ gr11: !dash.params().gr11 }); return; }
     if (t.matches('[data-gr-due]')) { dash.setParams({ grDue: !dash.params().grDue }); return; }
-    if (t.matches('[data-view-tab]')) { const [s, v] = t.dataset.viewTab.split(':'); view[s] = v; apply(); return; }
+    if (t.matches('[data-view-tab]')) { const [s, v] = t.dataset.viewTab.split(':'); view[s] = v; apply(); link(); return; }
     if (t.matches('[data-person]')) { lastPerson = { name: t.dataset.person, draw: (t.closest('[data-draw]') || {}).dataset?.draw || null }; closePalette(); dash.setParams({ person: t.dataset.person }); focusPanel(); return; }
     if (t.matches('[data-close-person]')) { closePanel(); return; }
     if (t.matches('[data-copy-text]')) { copy(t.dataset.copyText, t); return; }
@@ -684,13 +884,15 @@ window.OS = (() => {
         return;
       }
     }
-    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-7]$/.test(e.key)) { go(SCREENS[+e.key - 1]); return; }
+    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-8]$/.test(e.key)) { go(SCREENS[+e.key - 1]); return; }
     if (e.key === 'Escape' && dash.params().person) closePanel();
   });
   document.querySelectorAll('.os-region').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ region: sel.value || 'All', mgr: '' })));
   document.querySelectorAll('.os-mgr').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ mgr: sel.value || '' })));
   document.querySelectorAll('.os-only-missing').forEach((c) => c.addEventListener('change', () => dash.setParams({ onlyMissing: c.checked })));
   document.querySelectorAll('.os-orphan-reason').forEach((s) => s.addEventListener('change', () => dash.setParams({ orphanReason: s.value })));
+  document.querySelectorAll('.os-oo-pick').forEach((s) => s.addEventListener('change', () => { if (s.value) dash.setParams({ ooWho: s.value }); }));
+  document.querySelectorAll('.os-oo-root').forEach((s) => s.addEventListener('change', () => dash.setParams({ ooRoot: s.value || '' })));
   const filterGos = (q) => {
     const words = String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
     document.querySelectorAll('.pal-go').forEach((b) => {
@@ -725,6 +927,19 @@ window.OS = (() => {
     pressed('[data-gr-group]', 'grGroup', p.grGroup || 'meeting');
     document.querySelectorAll('[data-gr-11]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.gr11)));
     document.querySelectorAll('[data-gr-due]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.grDue)));
+    document.querySelectorAll('[data-gr-done]').forEach((b) => { b.setAttribute('aria-pressed', String(!!p.grShowDone)); b.hidden = !OS.done.can(); });
+    // 1:1s: which fixed sentences show, only while that screen is open (reading its data loads it)
+    if (screen === 'oneonone') {
+      const who = OS.oo.who();
+      const ready = OS.state('oo_upcoming') !== 'loading';
+      const booked = who && !who.startsWith('n:') ? OS.oo.nextFor(who) : null;
+      const hasLast = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last');
+      document.querySelectorAll('[data-oo-note]').forEach((n) => {
+        const k = n.dataset.ooNote;
+        n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast));
+      });
+      document.querySelectorAll('[data-copy-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:'); });
+    }
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
     document.querySelectorAll('.os-region').forEach((sel) => { sel.value = p.region || 'All'; });
     document.querySelectorAll('.os-only-missing').forEach((c) => { c.checked = !!p.onlyMissing; });

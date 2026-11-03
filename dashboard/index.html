@@ -1,39 +1,40 @@
 <meta name="dash-one-writer">
 <style>
-  /* Layout: an app shell. Sticky sidebar (brand, team switcher, nav with live badges) | screen | person panel.
-     Screens: header, stat bar, view tabs, then panes. Collapses to one column on narrow widths. */
+  /* Layout: an app shell. Header (brand, search, team and manager switchers) | sticky tab strip with live badges |
+     screen | person panel on the right. Screens: header, stat bar, view tabs, then panes. One column when narrow. */
   #dash-root { --dash-gutter: 0; }
-  .app { --app-side: 15rem; --app-detail: 23rem; display: grid; grid-template-columns: var(--app-side) minmax(0, 1fr); align-items: start; font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); color: var(--color-fg); background: linear-gradient(to right, var(--color-panel) calc(var(--app-side) - 1px), var(--color-border-line) calc(var(--app-side) - 1px) var(--app-side), var(--color-bg) var(--app-side)); }
+  .app { --app-detail: 23rem; --app-tabs-h: 2.75rem; --app-pad-x: clamp(16px, 3vw, 40px); display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-bg); }
   .app [hidden] { display: none !important; }
-  .app.has-detail { grid-template-columns: var(--app-side) minmax(0, 1fr) var(--app-detail); }
+  .app.has-detail { grid-template-columns: minmax(0, 1fr) var(--app-detail); }
   .app svg.ic { width: 1rem; height: 1rem; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .app :where(button) { font: inherit; color: inherit; }
   .app :focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
 
   /* Sidebar */
-  .app-side { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; height: 100vh; max-height: 100vh; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--cds-gap-md); padding: var(--cds-pad-lg) var(--cds-pad-md); box-sizing: border-box; }
-  .app-brand { display: flex; align-items: center; gap: var(--cds-gap-sm); padding: 0 var(--cds-pad-xs); }
+  .app-head { grid-column: 1 / -1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm) var(--cds-gap-lg); padding: var(--cds-pad-sm) var(--app-pad-x); background: var(--color-panel); min-width: 0; }
+  .app-brand { display: flex; align-items: center; gap: var(--cds-gap-sm); min-width: 0; margin-right: auto; }
   .app-mark { width: 2rem; height: 2rem; border-radius: var(--cds-radius); display: grid; place-items: center; background: var(--color-fg); color: var(--color-bg); flex: none; }
   .app-mark svg.ic { width: 1.1rem; height: 1.1rem; }
   .app-brand-name { display: grid; line-height: 1.25; min-width: 0; }
-  .app .app-brand-name b { font-weight: var(--cds-font-weight-medium); }
-  .app-brand-name span { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
-  .app-team { display: grid; gap: 4px; padding: 0 var(--cds-pad-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
-  .app-team select { width: 100%; }
-  .app-nav { display: grid; gap: 2px; }
-  .app-nav-label { padding: var(--cds-pad-sm) var(--cds-pad-sm) 2px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); letter-spacing: .05em; text-transform: uppercase; }
-  .app-nav-item { display: flex; align-items: center; gap: var(--cds-gap-sm); width: 100%; min-height: 2.25rem; padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 0; border-radius: var(--cds-radius); background: transparent; color: var(--color-fg-muted); text-align: left; cursor: pointer; box-sizing: border-box; }
-  .app-nav-item:hover { background: color-mix(in srgb, var(--color-fg) 6%, transparent); color: var(--color-fg); }
-  .app-nav-item[aria-current="page"] { background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 15%, transparent); color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
-  .app-nav-item span.lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .app-badge { min-width: 1.5rem; padding: 0 6px; border-radius: 999px; font-size: var(--cds-font-size-caption); line-height: 1.5rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: var(--cds-font-weight-medium); background: color-mix(in srgb, var(--color-fg) 9%, transparent); color: var(--color-bad); visibility: hidden; box-sizing: border-box; }
-  .app-badge.is-on { visibility: visible; }
+  .app .app-brand-name b { font-weight: var(--cds-font-weight-medium); white-space: nowrap; }
+  .app-brand-name span { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .app-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm) var(--cds-gap-md); min-width: 0; }
+  .app-pick { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-width: 0; }
+  .app-pick select { max-width: 15rem; }
+  .app-tabs { grid-column: 1 / -1; grid-row: 2; position: sticky; top: 0; z-index: 6; display: flex; align-items: stretch; gap: 2px; padding: 0 var(--app-pad-x); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; background: var(--color-panel); box-shadow: inset 0 -1px 0 var(--color-border-line); min-width: 0; }
+  .app-tab { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); flex: none; min-height: var(--app-tabs-h); padding: 0 var(--cds-pad-md); border: 0; border-radius: 0; background: transparent; color: var(--color-fg-muted); white-space: nowrap; cursor: pointer; box-sizing: border-box; }
+  .app-tab:hover { color: var(--color-fg); background: color-mix(in srgb, var(--color-fg) 5%, transparent); }
+  .app-tab[aria-current="page"] { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); box-shadow: inset 0 -2px 0 var(--app-accent, var(--color-fg)); }
+  .app .app-tab:focus-visible { outline-offset: -3px; }
+  .app-tab-sep { flex: none; width: 1px; margin: var(--cds-pad-sm) var(--cds-gap-xs); background: var(--color-border-line); }
+  .app-badge { min-width: 1.4rem; padding: 0 6px; border-radius: 999px; font-size: var(--cds-font-size-caption); line-height: 1.4rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: var(--cds-font-weight-medium); background: color-mix(in srgb, var(--color-fg) 9%, transparent); color: var(--color-bad); box-sizing: border-box; }
+  .app-badge:not(.is-on) { display: none; }
   .app-badge.info { background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 18%, transparent); color: var(--color-fg); }
-  .app-search { display: flex; align-items: center; gap: var(--cds-gap-sm); width: 100%; box-sizing: border-box; padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-bg); color: var(--color-fg-muted); cursor: pointer; text-align: left; }
+  .app-search { display: inline-flex; align-items: center; gap: var(--cds-gap-sm); min-width: 12rem; box-sizing: border-box; padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-bg); color: var(--color-fg-muted); cursor: pointer; text-align: left; }
   .app-search span { flex: 1; }
   .app-search:hover { color: var(--color-fg); }
   .app kbd { font: inherit; font-size: var(--cds-font-size-caption); padding: 0 5px; border: 1px solid var(--color-border-line); border-radius: 4px; color: var(--color-fg-muted); }
-  .palette { position: sticky; top: var(--cds-pad-md); z-index: 5; margin-bottom: var(--cds-gap-lg); }
+  .palette { position: sticky; top: calc(var(--app-tabs-h) + var(--cds-pad-sm)); z-index: 5; margin-bottom: var(--cds-gap-lg); }
   .palette-box { max-width: 40rem; margin: 0 auto; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-sm); display: grid; gap: var(--cds-gap-xs); }
   .pal-search input[type="search"] { width: 100%; }
   .pal-list { list-style: none; margin: 0; padding: 0; display: grid; max-height: 22rem; overflow: auto; }
@@ -53,12 +54,12 @@
   .itm-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
   .itm-arr { font-variant-numeric: tabular-nums; color: var(--color-fg); }
   .tbl td .chip + .chip { margin-left: 4px; }
-  .app-side-foot { margin-top: auto; display: flex; gap: var(--cds-gap-sm); align-items: flex-start; padding: var(--cds-pad-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .app-foot { display: flex; gap: var(--cds-gap-sm); align-items: flex-start; margin: var(--cds-gap-xl) 0 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .live-dot { color: var(--color-ok); font-size: .7em; line-height: 1.9; flex: none; }
   .live-dot::before { content: "●"; }
 
   /* Main */
-  .app-main { grid-column: 2; grid-row: 1; min-width: 0; padding: var(--cds-pad-xl) clamp(16px, 3vw, 40px) calc(var(--cds-pad-xl) * 2); container-type: inline-size; container-name: main; }
+  .app-main { grid-column: 1; grid-row: 3; min-width: 0; padding: var(--cds-pad-xl) var(--app-pad-x) calc(var(--cds-pad-xl) * 2); container-type: inline-size; container-name: main; scroll-margin-top: calc(var(--app-tabs-h) + 1px); }
   .scr { display: grid; gap: var(--cds-gap-lg); min-width: 0; }
   .scr-head { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); justify-content: space-between; align-items: flex-end; }
   .scr-head h1 { margin: 0; font-size: var(--cds-font-size-title); font-weight: var(--cds-font-weight-medium); letter-spacing: -.01em; text-wrap: balance; }
@@ -199,7 +200,7 @@
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
 
   /* Person panel */
-  .app-detail { grid-column: 3; grid-row: 1; position: sticky; top: 0; height: 100vh; max-height: 100vh; overflow: auto; box-sizing: border-box; display: grid; gap: var(--cds-gap-md); align-content: start; padding: var(--cds-pad-lg); background: var(--color-panel); border-left: 1px solid var(--color-border-line); min-width: 0; }
+  .app-detail { grid-column: 2; grid-row: 3; position: sticky; top: var(--app-tabs-h); height: calc(100vh - var(--app-tabs-h)); max-height: calc(100vh - var(--app-tabs-h)); overflow: auto; box-sizing: border-box; display: grid; gap: var(--cds-gap-md); align-content: start; padding: var(--cds-pad-lg); background: var(--color-panel); border-left: 1px solid var(--color-border-line); min-width: 0; scroll-margin-top: calc(var(--app-tabs-h) + 1px); }
   .pd-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--cds-gap-sm); align-items: center; }
   .pd-avatar { width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 20%, transparent); font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); }
   .pd-id { min-width: 0; }
@@ -217,99 +218,135 @@
   .pd-pools { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .pd-actions { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); }
 
+  /* 1:1s */
+  .oo-grid { display: grid; grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.6fr); gap: var(--cds-gap-md); align-items: start; }
+  @container main (max-width: 52rem) { .oo-grid { grid-template-columns: minmax(0, 1fr); } }
+  .oo-itm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--cds-gap-sm); align-items: center; padding: 2px var(--cds-pad-sm); }
+  .oo-btn { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: var(--cds-gap-sm); align-items: start; width: 100%; padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 0; border-radius: var(--cds-radius); background: transparent; text-align: left; cursor: pointer; min-width: 0; }
+  .oo-btn:hover { background: color-mix(in srgb, var(--color-fg) 5%, transparent); }
+  .oo-btn[aria-current="true"] { background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 14%, transparent); }
+  .oo-time { font-variant-numeric: tabular-nums; color: var(--color-fg-muted); }
+  .oo-txt { display: grid; min-width: 0; }
+  .app .oo-name { font-weight: var(--cds-font-weight-medium); }
+  .oo-title { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .oo-other { width: 100%; }
+  .oo-other select { flex: 1; max-width: none; }
+  .ag { display: grid; gap: var(--cds-gap-lg); }
+  .ag-sec { display: grid; gap: var(--cds-gap-xs); }
+  .ag-sec h3 { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-weight: var(--cds-font-weight-medium); letter-spacing: .05em; text-transform: uppercase; }
+  .ag-list { margin: 0 calc(-1 * var(--cds-pad-lg)); }
+  .ag-bullets { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .ag-bullets:not(.ag-talk) > li { padding-left: 1rem; position: relative; }
+  .ag-bullets:not(.ag-talk) > li::before { content: "–"; position: absolute; left: 0; color: var(--color-fg-muted); }
+  .ag-pt { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--cds-gap-sm); align-items: start; }
+  .ag-last { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .ag-last a { color: inherit; display: inline-grid; }
+  .ibtn-sm { width: 1.4rem; height: 1.4rem; vertical-align: middle; margin-left: 4px; }
+  .statbar-in { border-radius: 0; border-width: 0 0 1px; }
+  /* ticking off */
+  .itm-check { display: inline-grid; place-items: center; width: 1.2rem; height: 1.2rem; margin-top: 2px; padding: 0; border: 1.5px solid currentColor; border-radius: 50%; background: transparent; cursor: pointer; font-size: inherit; line-height: 1; }
+  .itm-check::before { content: none; }
+  .app .itm-check svg.ic { width: .8rem; height: .8rem; opacity: 0; }
+  .app .itm-check:hover svg.ic, .app .itm-check:focus-visible svg.ic { opacity: .7; }
+  .itm-check[aria-pressed="true"] { background: currentColor; }
+  .app .itm-check[aria-pressed="true"] svg.ic { opacity: 1; stroke: var(--color-bg); }
+  .itm.is-done .itm-title { text-decoration: line-through; color: var(--color-fg-muted); }
   [data-dash-source-state=empty] { color: transparent; }
   [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
   .app b { font-weight: inherit; }
   .app .itm-title b, .app .grp b { font-weight: var(--cds-font-weight-medium); }
 
   @media (max-width: 1180px) {
-    .app.has-detail { grid-template-columns: var(--app-side) minmax(0, 1fr); }
-    .app.has-detail .app-detail { grid-column: 2; grid-row: 1; position: static; height: auto; max-height: none; border-left: 0; border-bottom: 1px solid var(--color-border-line); }
-    .app.has-detail .app-main { grid-row: 2; }
+    .app.has-detail { grid-template-columns: minmax(0, 1fr); }
+    .app.has-detail .app-detail { grid-column: 1; grid-row: 3; position: static; height: auto; max-height: none; border-left: 0; border-bottom: 1px solid var(--color-border-line); }
+    .app.has-detail .app-main { grid-row: 4; }
   }
   @media (max-width: 760px) {
-    .app, .app.has-detail { grid-template-columns: minmax(0, 1fr); background: var(--color-bg); }
-    .app-side { grid-row: 1; position: static; height: auto; max-height: none; min-height: 0; background: var(--color-panel); border-bottom: 1px solid var(--color-border-line); padding: var(--cds-pad-md) 16px; gap: var(--cds-gap-sm); }
-    .app-nav { display: flex; flex-wrap: wrap; gap: 4px; }
-    .app-nav-label, .app-side-foot { display: none; }
-    .app-nav-item { width: auto; flex: 1 1 auto; min-height: 2rem; }
-    .app-badge:not(.is-on) { display: none; }
-    .app .app-nav-item:focus-visible { outline-offset: -2px; }
-    .app-team { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--cds-gap-sm); }
-    .app-main, .app.has-detail .app-main { grid-column: 1; grid-row: 2; padding: var(--cds-pad-lg) 16px var(--cds-pad-xl); }
-    .app.has-detail .app-detail { grid-column: 1; grid-row: 2; }
-    .app.has-detail .app-main { grid-row: 3; }
+    .app-head { padding: var(--cds-pad-sm) 16px; }
+    .app-brand { margin-right: 0; flex: 1 1 100%; }
+    .app-tools { flex: 1 1 100%; }
+    .app-search { flex: 1 1 100%; min-width: 0; }
+    .app-pick { flex: 1 1 10rem; }
+    .app-pick select { flex: 1; max-width: none; }
+    .app-tabs { padding: 0 8px; }
+    .app-tab { padding: 0 var(--cds-pad-sm); }
+    .app-main { padding: var(--cds-pad-lg) 16px var(--cds-pad-xl); }
     .app-detail { padding: var(--cds-pad-lg) 16px; }
   }
 </style>
 
 <div class="app" id="app">
-  <!-- ===================== SIDEBAR ===================== -->
-  <aside class="app-side" aria-label="Navigation">
+  <!-- ===================== HEADER AND TABS ===================== -->
+  <header class="app-head">
     <div class="app-brand">
       <span class="app-mark" aria-hidden="true"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>
       <span class="app-brand-name"><b>EMEA RevOps OS</b><span>Sales, people, routing, territory</span></span>
     </div>
-    <label class="app-team">Team
-      <select class="os-region" id="os-region" aria-label="Team">
-        <option value="All">All EMEA</option>
-        <option value="France">France</option>
-        <option value="DACH">DACH</option>
-        <option value="Southern Europe">Southern Europe</option>
-        <option value="Iberia &amp; LATAM">Iberia &amp; LATAM</option>
-        <option value="Benelux">Benelux</option>
-        <option value="Nordics">Nordics</option>
-        <option value="CEE">CEE</option>
-        <option value="MEA">MEA</option>
-        <option value="SMB">SMB</option>
-        <option value="Engagement">Engagement (EM)</option>
-        <option value="BDR">BDR</option>
-        <option value="Leadership">Leadership</option>
-      </select>
-    </label>
-    <label class="app-team">Manager
-      <select class="os-mgr" id="os-mgr" aria-label="Manager" data-draw="mgr-picker" data-source="roster"></select>
-    </label>
-    <button class="app-search" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
-    <nav class="app-nav" aria-label="Sections">
-      <button class="app-nav-item" type="button" data-nav="home" data-nav-item id="nav-home" aria-current="page">
+    <div class="app-tools">
+      <button class="app-search" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><span>Search people, pools, books</span><kbd>Ctrl K</kbd></button>
+      <label class="app-pick">Team
+        <select class="os-region" id="os-region" aria-label="Team">
+          <option value="All">All EMEA</option>
+          <option value="France">France</option>
+          <option value="DACH">DACH</option>
+          <option value="Southern Europe">Southern Europe</option>
+          <option value="Iberia &amp; LATAM">Iberia &amp; LATAM</option>
+          <option value="Benelux">Benelux</option>
+          <option value="Nordics">Nordics</option>
+          <option value="CEE">CEE</option>
+          <option value="MEA">MEA</option>
+          <option value="SMB">SMB</option>
+          <option value="Engagement">Engagement (EM)</option>
+          <option value="BDR">BDR</option>
+          <option value="Leadership">Leadership</option>
+        </select>
+      </label>
+      <label class="app-pick">Manager
+        <select class="os-mgr" id="os-mgr" aria-label="Manager" data-draw="mgr-picker" data-source="roster"></select>
+      </label>
+    </div>
+  </header>
+  <nav class="app-tabs" aria-label="Sections">
+      <button class="app-tab" type="button" data-nav="home" data-nav-item id="nav-home" aria-current="page">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg>
-        <span class="lbl">Home</span>
+        <span>Home</span>
       </button>
-      <button class="app-nav-item" type="button" data-nav="actions" data-nav-item id="nav-actions">
+      <button class="app-tab" type="button" data-nav="actions" data-nav-item id="nav-actions">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
-        <span class="lbl">Action items</span>
+        <span>Action items</span>
         <span class="app-badge info" data-draw="nav-badge" data-source="gr_kpi" data-f="forYou" data-row="0" data-fetchpriority="low">—</span>
       </button>
-      <div class="app-nav-label">Sales</div>
-      <button class="app-nav-item" type="button" data-nav="pipeline" data-nav-item id="nav-pipeline">
+      <button class="app-tab" type="button" data-nav="oneonone" data-nav-item id="nav-oneonone">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8.5" r="3"/><circle cx="16" cy="8.5" r="3"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0M10.5 19a5.5 5.5 0 0 1 11 0"/></svg>
+        <span>1:1s</span>
+      </button>
+      <span class="app-tab-sep" aria-hidden="true"></span>
+      <button class="app-tab" type="button" data-nav="pipeline" data-nav-item id="nav-pipeline">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-8M12 20V5M19 20v-5M3 20h18"/></svg>
-        <span class="lbl">Pipeline</span>
+        <span>Pipeline</span>
       </button>
-      <button class="app-nav-item" type="button" data-nav="created" data-nav-item id="nav-created">
+      <button class="app-tab" type="button" data-nav="created" data-nav-item id="nav-created">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg>
-        <span class="lbl">Created opps</span>
+        <span>Created opps</span>
       </button>
-      <div class="app-nav-label">People &amp; routing</div>
-      <button class="app-nav-item" type="button" data-nav="hiring" data-nav-item id="nav-hiring">
+      <span class="app-tab-sep" aria-hidden="true"></span>
+      <button class="app-tab" type="button" data-nav="hiring" data-nav-item id="nav-hiring">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9.5" cy="8" r="3.5"/><path d="M3 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></svg>
-        <span class="lbl">Hiring</span>
+        <span>Hiring</span>
         <span class="app-badge" data-draw="nav-badge" data-source="hire_kpi" data-f="overdue" data-where="region=All" data-by-region data-fetchpriority="low">—</span>
       </button>
-      <button class="app-nav-item" type="button" data-nav="routing" data-nav-item id="nav-routing">
+      <button class="app-tab" type="button" data-nav="routing" data-nav-item id="nav-routing">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/></svg>
-        <span class="lbl">Routing pools</span>
+        <span>Routing pools</span>
         <span class="app-badge" data-draw="nav-badge" data-source="rr_kpi" data-f="missing" data-where="region=All" data-by-region data-fetchpriority="low">—</span>
       </button>
-      <div class="app-nav-label">Territory</div>
-      <button class="app-nav-item" type="button" data-nav="books" data-nav-item id="nav-books">
+      <span class="app-tab-sep" aria-hidden="true"></span>
+      <button class="app-tab" type="button" data-nav="books" data-nav-item id="nav-books">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5.5A2.5 2.5 0 0 1 12 7.5V20a2 2 0 0 0-2-2H4zM20 5h-5.5A2.5 2.5 0 0 0 12 7.5V20a2 2 0 0 1 2-2h6z"/></svg>
-        <span class="lbl">Account books</span>
+        <span>Account books</span>
         <span class="app-badge" data-draw="nav-badge" data-source="orphan_kpi" data-f="accounts" data-row="0" data-fetchpriority="low">—</span>
       </button>
-    </nav>
-    <div class="app-side-foot"><span class="live-dot" aria-hidden="true"></span><span>Live from Salesforce, LeanData, HiBob and Granola. Every number uses your own access.</span></div>
-  </aside>
+  </nav>
 
   <!-- ===================== MAIN ===================== -->
   <main class="app-main">
@@ -321,6 +358,8 @@
           <li><button class="pal-item pal-go" type="button" data-nav="home"><span class="pal-kind">Go to</span><span class="pal-label">Home</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="actions" data-nav-view="meetings"><span class="pal-kind">Go to</span><span class="pal-label">Action items › From meetings</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="actions" data-nav-view="checks"><span class="pal-kind">Go to</span><span class="pal-label">Action items › Data checks</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="oneonone" data-nav-view="upcoming"><span class="pal-kind">Go to</span><span class="pal-label">1:1s › Agendas</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="oneonone" data-nav-view="team"><span class="pal-kind">Go to</span><span class="pal-label">1:1s › Team scorecard</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="pipeline" data-nav-view="teams"><span class="pal-kind">Go to</span><span class="pal-label">Pipeline › By team</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="pipeline" data-nav-view="forecast"><span class="pal-kind">Go to</span><span class="pal-label">Pipeline › Forecast</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="pipeline" data-nav-view="bookings"><span class="pal-kind">Go to</span><span class="pal-label">Pipeline › Bookings and win rate</span><span class="pal-sub"></span></button></li>
@@ -344,6 +383,7 @@
           <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="orphans"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Orphans</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="books"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Books</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="routing"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Routing vs books</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="plan"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Plan moves</span><span class="pal-sub"></span></button></li>
         </ul>
         <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="palette-list"></span>
           <p class="os-empty" data-msg-for="palette-list" data-msg="empty" hidden>Start typing a name, a pool or an account book.</p>
@@ -523,6 +563,7 @@
               <button class="fchip" type="button" data-gr-owner="others" aria-pressed="false">With others</button>
               <button class="fchip" type="button" data-gr-11 aria-pressed="false">1:1s only</button>
               <button class="fchip" type="button" data-gr-due aria-pressed="false">Overdue or due soon</button>
+              <button class="fchip" type="button" data-gr-done aria-pressed="false" hidden>Show ticked off</button>
             </div>
             <div class="tools">
               <div class="seg" role="group" aria-label="Group by">
@@ -563,6 +604,123 @@
               <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
               <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
             </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 1:1s ===== -->
+    <section class="scr" id="oneonone" data-page="oneonone" hidden>
+      <header class="scr-head">
+        <div>
+          <h1>1:1s</h1>
+          <p>An agenda for each 1:1 in the next two weeks: open follow-ups from your Granola notes, then their Salesforce numbers and what to raise. For a leader, the numbers cover everyone below them.</p>
+        </div>
+        <div class="scr-actions">
+          <button class="btn" type="button" data-copy-agenda><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy agenda</button>
+        </div>
+      </header>
+      <div class="vtabs" role="tablist" aria-label="1:1 views">
+        <button class="vtab" role="tab" type="button" data-view-tab="oneonone:upcoming" aria-selected="true">Agendas</button>
+        <button class="vtab" role="tab" type="button" data-view-tab="oneonone:team" aria-selected="false">Team scorecard</button>
+      </div>
+
+      <div class="view" data-view-panel="oneonone:upcoming">
+        <div class="oo-grid">
+          <div class="pane" id="oo-upcoming">
+            <div class="pane-head"><div><h2 class="pane-title">Next 14 days</h2><p class="pane-note">1:1s with a colleague in your Google Calendar. Pick one for its agenda.</p></div></div>
+            <div class="pane-scroll">
+              <ul class="ilist" data-draw="oo-list" data-source="oo_upcoming"></ul>
+              <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-list"></span>
+                <p class="os-empty" data-msg-for="oo-list" data-msg="empty" hidden>No 1:1s with a colleague in the next 14 days.</p>
+                <p class="os-empty" data-msg-for="oo-list" data-msg="connect" hidden>Connect Google Calendar in your claude.ai connectors to see your upcoming 1:1s. You can still prep for anyone below.</p>
+              </div>
+            </div>
+            <div class="pane-foot">
+              <label class="app-pick oo-other">Prep for someone else
+                <select class="os-oo-pick" aria-label="Prep a 1:1 for" data-draw="oo-pick" data-source="team_tree"></select>
+              </label>
+            </div>
+          </div>
+          <div class="pane" id="oo-agenda">
+            <div class="pane-head">
+              <div><h2 class="pane-title" data-draw="oo-who" data-source="team_tree oo_upcoming">—</h2><p class="pane-note"><span data-draw="oo-when" data-source="oo_upcoming">—</span><span data-oo-note="nobooking" hidden>No 1:1 with them in the next 14 days.</span></p></div>
+              <button class="ibtn" type="button" data-copy-agenda aria-label="Copy agenda" title="Copy the agenda for the invite, your notes or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+            </div>
+            <div class="pane-body ag">
+              <p class="pd-note" data-oo-note="pick" hidden>Pick a 1:1 or a person to see their agenda.</p>
+              <section class="ag-sec">
+                <h3>Follow-ups from your notes</h3>
+                <p class="ag-last" data-oo-note="last" hidden><span>Last time:</span> <span data-draw="oo-last" data-source="oo_followups">—</span></p>
+                <ul class="ilist ag-list" data-draw="oo-follow" data-source="oo_followups"></ul>
+                <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-follow"></span>
+                  <p class="os-empty" data-msg-for="oo-follow" data-msg="empty" hidden>No open follow-ups with them in your Granola notes from this window.</p>
+                  <p class="os-empty" data-msg-for="oo-follow" data-msg="connect" hidden>Connect Granola in your claude.ai connectors to see follow-ups from your meetings.</p>
+                </div>
+              </section>
+              <section class="ag-sec">
+                <h3>Numbers</h3>
+                <ul class="ag-bullets" data-draw="oo-numbers" data-source="oo_points"></ul>
+                <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-numbers"></span>
+                  <p class="os-empty" data-msg-for="oo-numbers" data-msg="empty" hidden>They aren't in EMEA sales in Salesforce, and nobody in EMEA sales reports to them, so there are no numbers.</p>
+                  <p class="os-empty" data-msg-for="oo-numbers" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see their numbers.</p>
+                </div>
+              </section>
+              <section class="ag-sec">
+                <h3>Talking points</h3>
+                <ul class="ag-bullets ag-talk" data-draw="oo-talk" data-source="oo_points"></ul>
+                <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-talk"></span>
+                  <p class="os-empty" data-msg-for="oo-talk" data-msg="empty" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance or data checks.</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="view" data-view-panel="oneonone:team" hidden>
+        <div class="pane" id="oo-team">
+          <div class="pane-head">
+            <div><h2 class="pane-title">Team scorecard</h2><p class="pane-note">Each direct report with the numbers of their whole team (them and everyone below them in Salesforce). Starts from you when EMEA people report to you, otherwise from the top EMEA leader.</p></div>
+            <div class="tools">
+              <label class="app-pick">Leader
+                <select class="os-oo-root" aria-label="Leader" data-draw="oo-root" data-source="team_tree sf_me"></select>
+              </label>
+              <button class="ibtn" type="button" data-copy-table="oo-team-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+            </div>
+          </div>
+          <div class="statbar statbar-in">
+            <div class="stat"><span class="stat-label">People</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="teamSize" data-fmt="size">—</b></span><span class="stat-sub">the leader and everyone below</span></div>
+            <div class="stat"><span class="stat-label">Pipeline this quarter</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="thisPipe" data-fmt="usd">—</b></span><span class="stat-sub">next quarter <b data-draw="kpi-team" data-source="team_tree" data-field="nextPipe" data-fmt="usd">—</b></span></div>
+            <div class="stat"><span class="stat-label">Created this quarter</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="crOpps">—</b></span><span class="stat-sub"><b data-draw="kpi-team" data-source="team_tree" data-field="crArr" data-fmt="usd">—</b> ARR</span></div>
+            <div class="stat"><span class="stat-label">Won this quarter</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="wonThisArr" data-fmt="usd">—</b></span><span class="stat-sub">win rate <b data-draw="kpi-team" data-source="team_tree" data-field="winRate" data-fmt="pct">—</b></span></div>
+            <div class="stat"><span class="stat-label">Past due</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="pastDue">—</b></span><span class="stat-sub">opps past their close date</span></div>
+            <div class="stat"><span class="stat-label">Routing gaps</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="routingGaps">—</b></span><span class="stat-sub"><b data-draw="kpi-team" data-source="team_tree" data-field="checks">—</b> data checks</span></div>
+          </div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="team_tree" data-row-key="name">
+              <thead><tr>
+                <th data-field="name">Name</th>
+                <th data-field="region">Team</th>
+                <th class="num" data-field="teamSize">Below them</th>
+                <th class="num" data-field="thisPipe">Pipeline this Q</th>
+                <th class="num" data-field="nextPipe">Next Q</th>
+                <th class="num" data-field="crOpps">Created this Q</th>
+                <th class="num" data-field="wonThisArr">Won this Q</th>
+                <th class="num" data-field="winRate">Win rate</th>
+                <th class="num" data-field="pastDue">Past due</th>
+                <th class="num" data-field="riskReps">Reps at risk</th>
+                <th class="num" data-field="routingGaps">Routing gaps</th>
+                <th class="num" data-field="checks">Data checks</th>
+              </tr></thead>
+              <tbody data-draw="oo-team-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-team-table"></span>
+              <p class="os-empty" data-msg-for="oo-team-table" data-msg="empty" hidden>Nobody reports to this leader in Salesforce.</p>
+              <p class="os-empty" data-msg-for="oo-team-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="oo-team-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="oo-team-table" data-msg="limit" hidden>Showing the first 400.</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -1233,6 +1391,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="books:orphans" aria-selected="false">Orphans</button>
         <button class="vtab" role="tab" type="button" data-view-tab="books:books" aria-selected="false">Books</button>
         <button class="vtab" role="tab" type="button" data-view-tab="books:routing" aria-selected="false">Routing vs books</button>
+        <button class="vtab" role="tab" type="button" data-view-tab="books:plan" aria-selected="false">Plan moves</button>
       </div>
 
       <div class="view" data-view-panel="books:reps">
@@ -1386,10 +1545,36 @@
           </div>
         </div>
       </div>
+      <div class="view" data-view-panel="books:plan" hidden>
+        <div class="pane" id="bk-plan">
+          <div class="pane-head"><div><h2 class="pane-title">Suggested moves</h2><p class="pane-note">A starting point for territory planning. Within each AE team and SMB, active accounts to move from Heavy books (2× the team median or more) to Light ones (half or less), so both reps end up nearer the median. Pick the accounts themselves in Salesforce.</p></div><button class="ibtn" type="button" data-copy-table="bk-plan-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="book_moves" data-row-key="key">
+              <thead><tr>
+                <th data-field="region">Team</th>
+                <th data-field="from">From</th>
+                <th data-field="to">To</th>
+                <th class="num" data-field="accounts">Accounts</th>
+                <th class="num" data-field="fromAfter">From, after</th>
+                <th class="num" data-field="toAfter">To, after</th>
+                <th class="num" data-field="teamMedian">Team median</th>
+                <th data-field="note">Note</th>
+              </tr></thead>
+              <tbody data-draw="bk-plan-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-plan-table"></span>
+              <p class="os-empty" data-msg-for="bk-plan-table" data-msg="empty" hidden>Every book in this team is within half to twice the team median, so there is nothing to move.</p>
+              <p class="os-empty" data-msg-for="bk-plan-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="bk-plan-table" data-msg="limit" hidden>Showing the first 400.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <p class="toast" data-toast="ok" role="status" hidden>Copied to clipboard</p>
     <p class="toast" data-toast="fail" role="status" hidden>Couldn't copy. Select the text and copy it instead.</p>
+    <p class="app-foot"><span class="live-dot" aria-hidden="true"></span><span>Live from Salesforce, LeanData, HiBob and Granola. Every number uses your own access.</span></p>
   </main>
 
   <!-- ===================== PERSON PANEL ===================== -->
@@ -1506,6 +1691,7 @@
       </div>
     </section>
     <div class="pd-actions">
+      <button class="btn" type="button" data-prep-oo><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>Prep a 1:1</button>
       <button class="btn" type="button" data-copy-person-id><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy Salesforce user ID</button>
     </div>
     <p class="toast" data-toast="ok" role="status" hidden>Copied to clipboard</p>

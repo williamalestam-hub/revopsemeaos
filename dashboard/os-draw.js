@@ -22,15 +22,56 @@ const statusCls = (v) => (/^In routing$/.test(v) ? 'ok'
 const ago = (n) => (n == null ? '' : n === 0 ? 'today' : n + 'd ago');
 const monthLabel = (m, i) => d3.utcFormat(i === 0 || m.endsWith('-01') ? "%b '%y" : '%b')(new Date(m + '-01T00:00:00Z'));
 
+// Action-item counts: the headline calc, unless some items were ticked off in this app; then the count of what is
+// still open in the action items themselves (the mark then names that list instead of the calc's field).
+const GR_COUNT = {
+  forYou: (r) => r.forYou, mine: (r) => r.bucket === 'mine', unassigned: (r) => r.bucket === 'unassigned', others: (r) => r.bucket === 'others',
+  overdue: (r) => r.forYou && r.dueStatus === 'Overdue', dueSoon: (r) => r.forYou && r.dueStatus === 'Due soon', total: () => true,
+};
+const grCount = (el) => {
+  if (!el.dataset.s0) el.dataset.s0 = el.dataset.source;
+  if (!el.dataset.f0) el.dataset.f0 = el.dataset.field || el.dataset.f;
+  const f = el.dataset.f0;
+  const rows = OS.state('gr_actions') === 'ok' ? dash.data('gr_actions').data || [] : [];
+  const open = rows.filter((r) => !r.done && !OS.done.has(r));
+  if (open.length !== rows.filter((r) => !r.done).length) {
+    el.dataset.source = 'gr_actions';
+    delete el.dataset.field; delete el.dataset.row;
+    return f === 'meetings' ? new Set(open.map((r) => r.meetingId)).size : open.filter(GR_COUNT[f] || (() => false)).length;
+  }
+  el.dataset.source = el.dataset.s0;
+  el.dataset.field = f; el.dataset.row = '0';
+  return +firstRow('gr_kpi')[f] || 0;
+};
+// a check button that ticks an action item off (kept per viewer); a plain dot where ticking isn't available
+const doneBtn = (r) => {
+  const k = OS.done.keyOf(r);
+  if (!OS.done.can() || !k) return OS.el('span', 'itm-dot ' + (r.bucket || ''));
+  const on = OS.done.has(r);
+  const b = OS.el('button', 'itm-dot itm-check ' + (r.bucket || ''));
+  b.type = 'button';
+  b.dataset.doneKey = k;
+  b.setAttribute('aria-pressed', String(on));
+  b.setAttribute('aria-label', on ? 'Mark as not done' : 'Mark as done');
+  b.title = on ? 'Mark as not done' : 'Mark as done';
+  b.appendChild(OS.icon(OS.ICON.check));
+  return b;
+};
+
 // ===================== NAV BADGES =====================
 dash.draw('nav-badge', (el) => {
-  const id = el.dataset.source;
+  if (!el.dataset.s0) el.dataset.s0 = el.dataset.source;
+  const id = el.dataset.s0;
   if (!el.dataset.f0) el.dataset.f0 = el.dataset.f;
   if (OS.state(id) !== 'ok') { el.classList.remove('is-on'); el.textContent = '—'; return; }
-  let row;
-  if (el.hasAttribute('data-by-region')) row = regionRow(el, id);
-  else { row = firstRow(id); el.dataset.field = el.dataset.f0; }
-  const n = +row[el.dataset.f0] || 0;
+  let n;
+  if (id === 'gr_kpi') n = grCount(el);
+  else {
+    let row;
+    if (el.hasAttribute('data-by-region')) row = regionRow(el, id);
+    else { row = firstRow(id); el.dataset.field = el.dataset.f0; }
+    n = +row[el.dataset.f0] || 0;
+  }
   el.textContent = OS.num(n);
   el.classList.toggle('is-on', n > 0);
 });
@@ -118,13 +159,13 @@ OS.defTable('cr-rep-table', ['cr_leader'], () => (dash.data('cr_leader').data ||
 ], { key: 'owner' });
 
 // ===================== ACTION ITEMS =====================
-dash.draw('kpi-gr', (el) => OS.value(el, ['gr_kpi'], () => OS.num(firstRow('gr_kpi')[el.dataset.field] || 0)));
+dash.draw('kpi-gr', (el) => OS.value(el, ['gr_kpi'], () => OS.num(grCount(el))));
 dash.draw('kpi-checks', (el) => OS.value(el, ['checks_kpi'], () => OS.num(regionRow(el, 'checks_kpi')[keepField(el)] || 0)));
 dash.draw('kpi-checks-hb', (el) => OS.value(el, ['checks_hb_kpi'], () => OS.num(regionRow(el, 'checks_hb_kpi')[keepField(el)] || 0)));
 
 const ownerChip = (r) => OS.el('span', 'chip' + (r.bucket === 'mine' ? ' info' : r.bucket === 'unassigned' ? ' warn' : ''), r.owner || 'Unassigned');
 const actionItem = (r, byOwner) => {
-  const li = OS.el('li', 'itm');
+  const li = OS.el('li', 'itm' + (OS.done.has(r) ? ' is-done' : ''));
   li.dataset.key = r.id;
   const main = OS.el('div', 'itm-main');
   main.append(OS.el('span', 'itm-title', r.item));
@@ -152,7 +193,7 @@ const actionItem = (r, byOwner) => {
   cp.dataset.copyText = `${r.item}${r.owner ? ' (' + r.owner + ')' : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`;
   cp.appendChild(OS.icon(OS.ICON.copy));
   meta.append(cp);
-  li.append(OS.el('span', 'itm-dot ' + r.bucket), main, meta);
+  li.append(doneBtn(r), main, meta);
   return li;
 };
 const meetingHead = (r) => {
@@ -197,9 +238,10 @@ OS.defList('act-list', ['gr_actions'], () => {
   const own = dash.params().grOwner || 'all';
   const one = !!dash.params().gr11;
   const late = !!dash.params().grDue;
-  return (dash.data('gr_actions').data || []).filter((r) => !r.done && (!one || r.oneOnOne) && (!late || r.dueStatus) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own)));
+  const showDone = !!dash.params().grShowDone;
+  return (dash.data('gr_actions').data || []).filter((r) => !r.done && (showDone || !OS.done.has(r)) && (!one || r.oneOnOne) && (!late || r.dueStatus) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own)));
 }, groupedActions, { fields: ['item', 'detail', 'owner', 'meeting'] });
-OS.defList('home-actions', ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou).slice(0, 6), (rows) => {
+OS.defList('home-actions', ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou && !OS.done.has(r)).slice(0, 6), (rows) => {
   const out = [];
   let last = null;
   for (const r of rows) {
@@ -599,3 +641,167 @@ OS.defTable('ramp-table', ['ramp'], () => (dash.data('ramp').data || [])
   { f: 'daysToFirst', fmt: OS.num, num: true }, { f: 'pipeThisQ', fmt: OS.usd, num: true },
   { f: 'sourced', fmt: OS.num, num: true }, { f: 'status', chip: rampCls },
 ], { key: 'id' });
+
+// ===================== 1:1s =====================
+const ooRows = (id) => OS.oo.rowsOf(id);
+OS.defList('oo-list', ['oo_upcoming'], () => dash.data('oo_upcoming').data || [], (rows) => {
+  const out = [];
+  const cur = OS.oo.who();
+  let last = null;
+  for (const r of rows) {
+    const [dayTxt, timeTxt] = OS.oo.when(r).split(', ');
+    if (dayTxt !== last) { last = dayTxt; const g = OS.el('li', 'grp'); g.append(OS.el('b', null, dayTxt || '—')); out.push(g); }
+    const li = OS.el('li', 'oo-itm');
+    li.dataset.key = r.key;
+    const b = OS.el('button', 'oo-btn');
+    b.type = 'button';
+    b.dataset.ooWho = r.email;
+    if (r.email === cur) b.setAttribute('aria-current', 'true');
+    const txt = OS.el('span', 'oo-txt');
+    txt.append(OS.el('span', 'oo-name', r.name), OS.el('span', 'oo-title', r.title));
+    b.append(OS.el('span', 'oo-time', timeTxt || ''), txt);
+    const meta = OS.el('div', 'itm-meta');
+    if (r.recurring) meta.append(OS.el('span', 'chip', 'Recurring'));
+    if (!r.sfName) meta.append(OS.el('span', 'chip', 'Not in Salesforce'));
+    li.append(b, meta);
+    out.push(li);
+  }
+  return out;
+});
+dash.draw('oo-pick', (sel) => {
+  const s = OS.state('team_tree');
+  const rows = s === 'ok' ? (dash.data('team_tree').data || []).filter((r) => r.email) : [];
+  const leaders = rows.filter((r) => r.isLeader).sort((a, b) => b.emeaPeople - a.emeaPeople || a.name.localeCompare(b.name));
+  const others = rows.filter((r) => !r.isLeader && r.inEmea).sort((a, b) => a.name.localeCompare(b.name));
+  const group = (label, list) => { const g = document.createElement('optgroup'); g.label = label; g.append(...list.map((r) => new Option(r.name, r.email))); return g; };
+  sel.replaceChildren(new Option(s === 'ok' ? 'Choose a person…' : s === 'loading' ? 'Loading people…' : 'People unavailable', ''), group('Leaders', leaders), group('People', others));
+  const cur = OS.oo.who();
+  sel.value = rows.some((r) => r.email === cur) ? cur : '';
+  sel.disabled = s !== 'ok';
+});
+dash.draw('oo-who', (el) => { const w = OS.oo.who(); el.textContent = w ? OS.oo.nameOf(w) || '—' : '—'; });
+dash.draw('oo-when', (el) => { const w = OS.oo.who(); const n = w ? OS.oo.nextFor(w) : null; el.textContent = n ? OS.oo.when(n) + ' · ' + n.title : ''; });
+dash.draw('oo-last', (el) => {
+  const w = OS.oo.who();
+  const r = w ? ooRows('oo_followups').find((x) => x.email === w && x.kind === 'last') : null;
+  el.replaceChildren();
+  if (!r) return;
+  el.append(document.createTextNode(r.meeting + ', ' + OS.day(r.date) + ' '));
+  if (r.url && /^https:\/\//.test(r.url)) {
+    const a = OS.el('a');
+    a.href = r.url; a.target = '_blank'; a.rel = 'noopener';
+    a.setAttribute('aria-label', 'Open the note in Granola');
+    a.appendChild(OS.icon(OS.ICON.open));
+    el.append(a);
+  }
+});
+const ooFollow = () => { const w = OS.oo.who(); return w ? (dash.data('oo_followups').data || []).filter((r) => r.email === w && r.kind === 'item' && !OS.done.has(r)) : []; };
+OS.defList('oo-follow', ['oo_followups'], ooFollow, (rows) => rows.map((r) => {
+  const li = OS.el('li', 'itm');
+  li.dataset.key = r.key;
+  const main = OS.el('div', 'itm-main');
+  main.append(OS.el('span', 'itm-title', r.item));
+  const from = OS.el('span', 'itm-from', r.meeting + ' · ' + OS.shortDay(r.date));
+  if (r.url && /^https:\/\//.test(r.url)) {
+    const a = OS.el('a');
+    a.href = r.url; a.target = '_blank'; a.rel = 'noopener';
+    a.setAttribute('aria-label', 'Open the note in Granola');
+    a.appendChild(OS.icon(OS.ICON.open));
+    from.append(a);
+  }
+  main.append(from);
+  const meta = OS.el('div', 'itm-meta');
+  meta.append(ownerChip(r));
+  if (r.dueStatus) meta.append(OS.el('span', 'chip ' + (r.dueStatus === 'Overdue' ? 'bad' : 'warn'), r.dueStatus + ' · ' + OS.shortDay(r.due)));
+  li.append(doneBtn(r), main, meta);
+  return li;
+}), { msg: () => (!OS.oo.who() ? 'nowho' : ooFollow().length ? null : 'empty') });
+const ooPoints = (sec) => () => { const w = OS.oo.who(); return w ? (dash.data('oo_points').data || []).filter((r) => r.email === w && r.section === sec) : []; };
+OS.defList('oo-numbers', ['oo_points'], ooPoints('numbers'), (rows) => rows.map((r) => OS.el('li', null, r.text)),
+  { msg: () => (!OS.oo.who() ? 'nowho' : ooPoints('numbers')().length ? null : 'empty') });
+OS.defList('oo-talk', ['oo_points'], ooPoints('talk'), (rows) => rows.map((r) => {
+  const li = OS.el('li', 'ag-pt');
+  li.dataset.key = r.key;
+  li.append(OS.el('span', 'itm-dot ' + (r.sev || 'low')), OS.el('span', 'ag-txt', r.text));
+  if (r.screen) {
+    const go = OS.el('button', 'ibtn');
+    go.type = 'button';
+    go.dataset.nav = r.screen;
+    if (r.view) go.dataset.navView = r.view;
+    go.setAttribute('aria-label', 'Open in the app');
+    go.appendChild(OS.icon(OS.ICON.go));
+    li.append(go);
+  }
+  return li;
+}), { msg: () => (!OS.oo.who() ? 'nowho' : ooPoints('talk')().length ? null : ooPoints('numbers')().length ? 'empty' : 'nodata') });
+
+// ===================== TEAM SCORECARD =====================
+const ooRoot = () => {
+  const rows = ooRows('team_tree');
+  const p = dash.params().ooRoot || '';
+  if (p && rows.some((r) => r.name === p)) return p;
+  const me = ooRows('sf_me')[0];
+  const mine = me && rows.find((r) => r.name === me.name && r.isLeader);
+  if (mine) return mine.name;
+  const top = rows.find((r) => r.isTop);
+  return top ? top.name : '';
+};
+dash.draw('oo-root', (sel) => {
+  const s = OS.state('team_tree');
+  const rows = s === 'ok' ? (dash.data('team_tree').data || []).filter((r) => r.isLeader) : [];
+  const me = ooRows('sf_me')[0];
+  const list = rows.slice().sort((a, b) => (me && b.name === me.name) - (me && a.name === me.name) || b.emeaPeople - a.emeaPeople || a.name.localeCompare(b.name));
+  sel.replaceChildren(...(s === 'ok' ? list.map((r) => new Option(r.name + ' (' + r.emeaPeople + ')', r.name)) : [new Option(s === 'loading' ? 'Loading leaders…' : 'Leaders unavailable', '')]));
+  sel.value = ooRoot();
+  sel.disabled = s !== 'ok';
+});
+const teamRow = (el) => {
+  const root = ooRoot();
+  return markRow(el, 'name', root, root ? ooRows('team_tree').find((r) => r.name === root) : null);
+};
+dash.draw('kpi-team', (el) => OS.value(el, ['team_tree'], () => {
+  const r = teamRow(el);
+  const v = r[keepField(el)];
+  const fmt = el.dataset.fmt;
+  return v == null ? '—' : fmt === 'usd' ? OS.usd(v) : fmt === 'pct' ? OS.pct(v) : OS.num(fmt === 'size' ? v + 1 : v);
+}));
+const agendaBtn = (r) => {
+  if (!r.email) return null;
+  const b = OS.el('button', 'ibtn ibtn-sm');
+  b.type = 'button';
+  b.dataset.ooWho = r.email;
+  b.setAttribute('aria-label', '1:1 agenda for ' + r.name);
+  b.title = '1:1 agenda';
+  b.appendChild(OS.icon(OS.ICON.agenda));
+  return b;
+};
+OS.defTable('oo-team-table', ['team_tree'], () => {
+  const root = ooRoot();
+  return root ? (dash.data('team_tree').data || []).filter((r) => r.manager === root).sort((a, b) => b.emeaPeople - a.emeaPeople || b.thisPipe - a.thisPipe) : [];
+}, [
+  { f: 'name', person: (r) => r.name, after: agendaBtn },
+  { f: 'region' },
+  { f: 'teamSize', fmt: OS.num, num: true },
+  { f: 'thisPipe', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.thisPipe) },
+  { f: 'nextPipe', fmt: OS.usd, num: true },
+  { f: 'crOpps', fmt: OS.num, num: true },
+  { f: 'wonThisArr', fmt: OS.usd, num: true },
+  { f: 'winRate', fmt: (v) => (v == null ? '—' : OS.pct(v)), num: true },
+  { f: 'pastDue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'riskReps', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'routingGaps', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'checks', fmt: OS.num, num: true },
+], { key: 'name' });
+
+// ===================== BOOK MOVES =====================
+OS.defTable('bk-plan-table', ['book_moves'], () => (dash.data('book_moves').data || [])
+  .filter((r) => (mgrPick() ? r.manager === mgrPick() || r.toManager === mgrPick() : OS.region() === 'All' || r.region === OS.region())), [
+  { f: 'region' },
+  { f: 'from', person: (r) => r.from },
+  { f: 'to', person: (r) => r.to },
+  { f: 'accounts', fmt: OS.num, num: true },
+  { f: 'fromAfter', fmt: OS.num, num: true },
+  { f: 'toAfter', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true },
+  { f: 'teamMedian', fmt: (v) => (v == null ? '—' : OS.num(Math.round(v))), num: true },
+  { f: 'note', cls: (v) => (v ? 'os-warn' : '') },
+], { key: 'key' });
