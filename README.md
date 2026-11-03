@@ -23,10 +23,10 @@ manager, their team.
 | Screen | What it answers | Sources |
 |---|---|---|
 | Home | Headline numbers, your next steps from meetings, the most urgent data checks, pipeline by team, created per week | all of the below |
-| Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), plus data checks: routing gaps, joiners with no Salesforce user, past-due opps, orphan accounts, split books | Granola `list_meetings` + `get_meetings`; the Salesforce and HiBob sources |
+| Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), with due dates read from the wording (overdue / due soon), plus data checks: routing gaps, joiners with no Salesforce user, selling titles outside EMEA sales roles, manager differences, past-due opps, orphan accounts, split books | Granola `list_meetings` + `get_meetings`; the Salesforce and HiBob sources |
 | Pipeline | Open NB + Upsell pipeline by team → manager → rep; **Forecast** roll-up (won, won + commit, won + commit + best case); **Top deals**: the 300 largest open deals with risk flags (past due, Commit at early stage, early stage closing this quarter, stale 30d+, no next step) and a risk score; renewals at stake | `Opportunity` |
 | Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards | `Opportunity` |
-| Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to Salesforce user and routing pools | HiBob `commons_searchEmployees`, `User`, LeanData pools |
+| Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to their Salesforce user (by work email, then name) and routing pools; ramp of recent joiners; selling titles without an EMEA sales role and HiBob vs Salesforce manager differences are flagged | HiBob `commons_searchEmployees`, `User`, LeanData pools |
 | Routing pools | Every EMEA LeanData pool and its members, 90-day assignments and how evenly they're spread, reps missing from routing, joiners due in week 2, inactive members, members getting none | `LeanData__Round_Robin_Setting__c`, `LeanData__Log__c` (counts only), `User` |
 | Account books | Book size per rep (incl. EM book), territory coverage by Sales Region, orphan accounts with reason, split books, routing vs book mismatches | `Account`, `Opportunity`, LeanData pools |
 
@@ -53,6 +53,12 @@ and never re-runs a query.
   (LATAM included) whose owner is inactive, has no role, is RevOps or sits outside EMEA. Strategic and
   partnership owners are marked "review", not counted.
 - **Territory**: Salesforce Territory2 is not enabled. Books come from `Account.Territory_ID__c`.
+- **People matching**: a HiBob person is matched to an active Salesforce user by work email (any role;
+  when two users share an address, the EMEA-role one wins), then by normalised name against the EMEA
+  roster (full name, then first + last). A selling HiBob title (GTM Manager / Associate / Team Lead,
+  Business Development Representative, Engagement Manager) whose Salesforce user has no role or a role
+  outside EMEA sales is flagged, because their pipeline, book and routing don't count here. Managers are
+  compared by normalised name; a difference is a low-severity check.
 
 ## Action items from Granola
 
@@ -66,6 +72,9 @@ and never re-runs a query.
 - Each viewer sees **their own** notes: Granola runs with each reader's own connection, and no note
   content is stored in the dashboard. The loader only splits notes into lines; the rules for what
   counts as an action item are the `gr_actions` calculation, visible in the dashboard's Sources.
+- A due date is read from the wording relative to the meeting date ("today", "tomorrow", "by Friday",
+  "next week", "in two weeks", "end of month", "by 30 Oct", "by 30/10"). Past it is overdue; within
+  3 days is due soon.
 - Items can't be ticked off in the app yet (the dashboard has no storage for that). Use
   "Copy as checklist" to move them into your task tool.
 
@@ -74,7 +83,6 @@ and never re-runs a query.
 - No quota or target data in Salesforce, so there's no coverage-to-target ratio yet.
 - HiBob hides people in the Hired state from this connection, so signed-but-not-started joiners
   and open requisitions aren't visible. Both need an ATS connector or wider HiBob access.
-- HiBob → Salesforce matching is by normalised name (email is not used).
 - LeanData vacation schedules live in a long-text JSON field; out-of-office isn't shown.
 
 ## Repo layout

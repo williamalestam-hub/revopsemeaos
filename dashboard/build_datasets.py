@@ -113,11 +113,16 @@ ds("roster", "EMEA sales roster",
    Legora_Start_Date__c startDate, DAY_ONLY(CreatedDate) createdDate FROM User WHERE UserRole.Name IN ({ROLES})
    GROUP BY Id, Name, UserRole.Name, Title, Manager.Name, IsActive, Legora_Start_Date__c, DAY_ONLY(CreatedDate) LIMIT 2000"""))
 
+ds("users_all", "Salesforce users",
+   "Every active standard Salesforce user, any role, with email and manager. Used to match HiBob people to Salesforce by email.",
+   SF("""SELECT Id userId, Name name, Email email, UserRole.Name role, Manager.Name manager FROM User
+   WHERE IsActive = true AND UserType = 'Standard' GROUP BY Id, Name, Email, UserRole.Name, Manager.Name LIMIT 2000"""))
+
 # ---------- Hiring ----------
 D["hb_people"] = {"title": "EMEA GTM people (HiBob)",
-  "description": "Everyone on headcount in HiBob's GTM EMEA, Engagement EMEA and Growth EMEA departments, with title, team, site, manager and start date.",
+  "description": "Everyone on headcount in HiBob's GTM EMEA, Engagement EMEA and Growth EMEA departments, with work email, title, team, site, manager and start date.",
   "source": {"kind": "query", "connector": "HiBob", "tool": "commons_searchEmployees", "args": {
-    "fieldsPaths": ["/root/id", "/root/displayName", "/work/title", "/work/department", "/work/custom/field_1775721273768",
+    "fieldsPaths": ["/root/id", "/root/displayName", "/root/email", "/work/title", "/work/department", "/work/custom/field_1775721273768",
                     "/work/site", "/work/reportsTo", "/work/secondLevelManager", "/work/startDate"],
     "filter": [{"fieldPath": "/work/department", "operator": "equals", "values": ["GTM EMEA", "Engagement EMEA", "Growth EMEA"]}]}}}
 

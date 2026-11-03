@@ -167,9 +167,21 @@
    }
   }
  },
+ "users_all": {
+  "title": "Salesforce users",
+  "description": "Every active standard Salesforce user, any role, with email and manager. Used to match HiBob people to Salesforce by email.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Id userId, Name name, Email email, UserRole.Name role, Manager.Name manager FROM User WHERE IsActive = true AND UserType = 'Standard' GROUP BY Id, Name, Email, UserRole.Name, Manager.Name LIMIT 2000"
+   }
+  }
+ },
  "hb_people": {
   "title": "EMEA GTM people (HiBob)",
-  "description": "Everyone on headcount in HiBob's GTM EMEA, Engagement EMEA and Growth EMEA departments, with title, team, site, manager and start date.",
+  "description": "Everyone on headcount in HiBob's GTM EMEA, Engagement EMEA and Growth EMEA departments, with work email, title, team, site, manager and start date.",
   "source": {
    "kind": "query",
    "connector": "HiBob",
@@ -178,6 +190,7 @@
     "fieldsPaths": [
      "/root/id",
      "/root/displayName",
+     "/root/email",
      "/work/title",
      "/work/department",
      "/work/custom/field_1775721273768",

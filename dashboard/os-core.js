@@ -26,6 +26,7 @@ const sfRows = ({ answer }) => {
   'cr_daily', 'cr_monthly', 'cr_source', 'cr_owner_q', 'cr_bdr',
   'rr_members', 'rr_assign', 'roster',
   'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'top_deals', 'top_renewals', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
+  'users_all',
 ].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped)', fn: sfRows }));
 
 dash.loader('hb_people', {
@@ -41,6 +42,7 @@ dash.loader('hb_people', {
     const rows = a.employees.map((e) => ({
       id: String(g(e, 'id') ?? g(e, 'root/id') ?? ''),
       name: g(e, 'displayName') ?? g(e, 'root/displayName') ?? '',
+      email: String(g(e, 'email') ?? g(e, 'root/email') ?? '').trim().toLowerCase() || null,
       title: g(e, 'work/title') ?? null,
       department: g(e, 'work/department') ?? null,
       team: g(e, 'work/custom/field_1775721273768') ?? null,
@@ -49,7 +51,7 @@ dash.loader('hb_people', {
       secondManager: g(e, 'work/secondLevelManager') ?? null,
       startDate: g(e, 'work/startDate') ?? null,
     }));
-    return { columns: ['id', 'name', 'title', 'department', 'team', 'site', 'manager', 'secondManager', 'startDate'], rows };
+    return { columns: ['id', 'name', 'email', 'title', 'department', 'team', 'site', 'manager', 'secondManager', 'startDate'], rows };
   },
 });
 
@@ -548,10 +550,11 @@ window.OS = (() => {
     if (OS.state('gr_actions') !== 'ok') return [];
     const own = dash.params().grOwner || 'all';
     const one = !!dash.params().gr11;
+    const late = !!dash.params().grDue;
     return OS.searchFilter('act-list', (dash.data('gr_actions').data || [])
-      .filter((r) => !r.done && (!one || r.oneOnOne) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
+      .filter((r) => !r.done && (!one || r.oneOnOne) && (!late || r.dueStatus) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
   };
-  const checklist = () => actionRows().map((r) => `- [ ] ${r.item}${r.owner ? ' (' + r.owner + ')' : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`).join('\n');
+  const checklist = () => actionRows().map((r) => `- [ ] ${r.item}${r.owner ? ' (' + r.owner + ')' : ''}${r.due ? ', due ' + OS.shortDay(r.due) : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`).join('\n');
   const personRowNow = () => {
     const p = dash.params().person;
     if (!p || OS.state('person') !== 'ok') return null;
@@ -575,6 +578,7 @@ window.OS = (() => {
   const openPalette = () => {
     document.querySelectorAll('[data-palette]').forEach((p) => { p.hidden = false; });
     document.querySelectorAll('input[data-search="palette-list"]').forEach((inp) => { inp.value = ''; OS.queries['palette-list'] = ''; inp.focus(); });
+    filterGos('');
     OS.redraw('palette-list');
   };
   const closePalette = () => document.querySelectorAll('[data-palette]').forEach((p) => { p.hidden = true; });
@@ -610,7 +614,7 @@ window.OS = (() => {
   const syncCopyList = () => document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
+    const t = e.target.closest('[data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
     if (!t) return;
     if (t.matches('[data-nav]')) {
       if (t.dataset.grOwner) dash.setParams({ grOwner: t.dataset.grOwner });
@@ -628,6 +632,7 @@ window.OS = (() => {
     if (t.matches('[data-clear-mgr]')) { dash.setParams({ mgr: '' }); return; }
     if (t.matches('[data-gr-group]')) { dash.setParams({ grGroup: t.dataset.grGroup }); return; }
     if (t.matches('[data-gr-11]')) { dash.setParams({ gr11: !dash.params().gr11 }); return; }
+    if (t.matches('[data-gr-due]')) { dash.setParams({ grDue: !dash.params().grDue }); return; }
     if (t.matches('[data-view-tab]')) { const [s, v] = t.dataset.viewTab.split(':'); view[s] = v; apply(); return; }
     if (t.matches('[data-person]')) { lastPerson = { name: t.dataset.person, draw: (t.closest('[data-draw]') || {}).dataset?.draw || null }; closePalette(); dash.setParams({ person: t.dataset.person }); focusPanel(); return; }
     if (t.matches('[data-close-person]')) { closePanel(); return; }
@@ -686,7 +691,16 @@ window.OS = (() => {
   document.querySelectorAll('.os-mgr').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ mgr: sel.value || '' })));
   document.querySelectorAll('.os-only-missing').forEach((c) => c.addEventListener('change', () => dash.setParams({ onlyMissing: c.checked })));
   document.querySelectorAll('.os-orphan-reason').forEach((s) => s.addEventListener('change', () => dash.setParams({ orphanReason: s.value })));
+  const filterGos = (q) => {
+    const words = String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    document.querySelectorAll('.pal-go').forEach((b) => {
+      const label = b.textContent.toLowerCase();
+      const li = b.closest('li') || b;
+      li.hidden = words.length ? !words.every((w) => label.includes(w)) : false;
+    });
+  };
   document.querySelectorAll('input[data-search]').forEach((inp) => inp.addEventListener('input', () => {
+    if (inp.dataset.search === 'palette-list') filterGos(inp.value);
     OS.queries[inp.dataset.search] = inp.value;
     OS.redraw(inp.dataset.search);
     if (inp.dataset.search === 'act-list') syncCopyList();
@@ -710,6 +724,7 @@ window.OS = (() => {
     pressed('[data-renew-flag]', 'renewFlag', p.renewFlag || '');
     pressed('[data-gr-group]', 'grGroup', p.grGroup || 'meeting');
     document.querySelectorAll('[data-gr-11]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.gr11)));
+    document.querySelectorAll('[data-gr-due]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.grDue)));
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
     document.querySelectorAll('.os-region').forEach((sel) => { sel.value = p.region || 'All'; });
     document.querySelectorAll('.os-only-missing').forEach((c) => { c.checked = !!p.onlyMissing; });
@@ -722,11 +737,13 @@ window.OS = (() => {
       const sf = OS.state('person');
       const hb = OS.state('person_hb');
       const inSf = sf === 'ok' && (dash.data('person').data || []).some((r) => r.name === p.person);
-      const inHb = hb === 'ok' && (dash.data('person_hb').data || []).some((r) => r.name === p.person);
+      const hbRow = hb === 'ok' ? (dash.data('person_hb').data || []).find((r) => r.name === p.person) || null : null;
+      const inHb = !!hbRow;
       document.querySelectorAll('[data-pd-note]').forEach((n) => {
         const k = n.dataset.pdNote;
         n.hidden = !((k === 'missing' && sf === 'ok' && hb === 'ok' && !inSf && !inHb)
-          || (k === 'nosf' && sf === 'ok' && !inSf && inHb)
+          || (k === 'nosf' && sf === 'ok' && !inSf && inHb && !hbRow.sfMatched)
+          || (k === 'outside' && sf === 'ok' && !inSf && inHb && hbRow.sfMatched)
           || (k === 'nohb' && hb === 'ok' && inSf && !inHb)
           || (k === 'hbconnect' && (hb === 'connect' || hb === 'error')));
       });

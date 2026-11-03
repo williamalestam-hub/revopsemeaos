@@ -17,7 +17,7 @@ const regionRow = (el, id) => {
 };
 const firstRow = (id) => (dash.data(id).data || [])[0] || {};
 const statusCls = (v) => (/^In routing$/.test(v) ? 'ok'
-  : /Overdue|Missing|^No Salesforce/.test(v) ? 'bad'
+  : /Overdue|Missing|^No Salesforce|outside EMEA/.test(v) ? 'bad'
   : /week 2|next week|Week 1|none assigned|New joiner|Not started/i.test(v) ? 'warn' : '');
 const ago = (n) => (n == null ? '' : n === 0 ? 'today' : n + 'd ago');
 const monthLabel = (m, i) => d3.utcFormat(i === 0 || m.endsWith('-01') ? "%b '%y" : '%b')(new Date(m + '-01T00:00:00Z'));
@@ -142,6 +142,8 @@ const actionItem = (r, byOwner) => {
   }
   const meta = OS.el('div', 'itm-meta');
   if (!byOwner) meta.append(ownerChip(r));
+  if (r.dueStatus) meta.append(OS.el('span', 'chip ' + (r.dueStatus === 'Overdue' ? 'bad' : 'warn'), r.dueStatus + ' · ' + OS.shortDay(r.due)));
+  else if (r.due) meta.append(OS.el('span', 'chip', 'Due ' + OS.shortDay(r.due)));
   if (r.ageDays != null && r.ageDays >= 14) meta.append(OS.el('span', 'chip warn', Math.floor(r.ageDays / 7) + 'w old'));
   else meta.append(OS.el('span', null, ago(r.ageDays)));
   const cp = OS.el('button', 'ibtn');
@@ -194,7 +196,8 @@ const groupedActions = (rows) => {
 OS.defList('act-list', ['gr_actions'], () => {
   const own = dash.params().grOwner || 'all';
   const one = !!dash.params().gr11;
-  return (dash.data('gr_actions').data || []).filter((r) => !r.done && (!one || r.oneOnOne) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own)));
+  const late = !!dash.params().grDue;
+  return (dash.data('gr_actions').data || []).filter((r) => !r.done && (!one || r.oneOnOne) && (!late || r.dueStatus) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own)));
 }, groupedActions, { fields: ['item', 'detail', 'owner', 'meeting'] });
 OS.defList('home-actions', ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou).slice(0, 6), (rows) => {
   const out = [];
@@ -375,6 +378,7 @@ dash.draw('pd-chips', (el) => {
   if (r && r.isActive === false) chips.push(['Inactive in Salesforce', 'bad']);
   if (r && r.routing) chips.push([r.routing, statusCls(r.routing)]);
   if (h && h.hiring && (!r || h.hiring !== r.routing) && h.hiring !== 'In routing') chips.push([h.hiring, statusCls(h.hiring)]);
+  if (h && h.mgrDiffers) chips.push([h.sfManager ? 'Manager differs from HiBob' : 'No manager in Salesforce', 'warn']);
   if (r && r.pastDue > 0) chips.push([OS.num(r.pastDue) + ' past due', 'bad']);
   el.replaceChildren(...chips.map(([t, c]) => OS.el('span', 'chip ' + c, t)));
 });

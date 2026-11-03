@@ -332,13 +332,28 @@ dash.calc('rr_kpi', {
 // ===================== HIRING =====================
 dash.calc('people', {
   title: 'EMEA GTM people and routing',
-  description: 'HiBob people matched by normalised name to an EMEA Salesforce user (name and id) and their LeanData pools, with days since start and a routing status. Routed roles: AE, SMB, BDR, EM.',
-  inputs: ['hb_people', 'roster', 'rr_members'],
-  fn: (hb_people, roster, rr_members) => {
+  description: 'HiBob people matched to a Salesforce user by work email (an active user, any role), or failing that by normalised name against the EMEA roster, with their LeanData pools, days since start and a routing status. Routed roles: AE, SMB, BDR, EM. Someone whose HiBob title is a selling one (GTM Manager, Associate or Team Lead, BDR, Engagement Manager) but whose Salesforce user has no role or a role outside EMEA sales gets that as their status; other roles show as not routed. Also flags when HiBob and Salesforce name a different manager.',
+  inputs: ['hb_people', 'roster', 'rr_members', 'users_all'],
+  fn: (hb_people, roster, rr_members, users_all) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const kindOfRole = (role) => /^AE-EMEA-/.test(role || '') ? 'AE' : role === 'SMB-EMEA' ? 'SMB' : role === 'BDR-EMEA' ? 'BDR' : /^EM-EMEA/.test(role || '') ? 'EM' : null;
     const kindOfPool = (p) => /^RR BDR/i.test(p) ? 'BDR' : /^RR SMB/i.test(p) ? 'SMB' : /^EM/i.test(p) ? 'EM' : /^RR(:| Gov)/i.test(p) ? 'AE' : 'Other';
-    const toks = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
+    const SELLER = /(^|\s)(GTM (Manager|Associate|Team Lead)|Business Development Representative|Engagement Manager|Account (Executive|Manager))\b/i;
+    const toks = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
+    const sameName = (a, b) => {
+      const x = toks(a), y = toks(b);
+      if (!x.length || !y.length) return false;
+      return x.join(' ') === y.join(' ') || (x[0] === y[0] && x[x.length - 1] === y[y.length - 1]);
+    };
+    // email: active users of any role; when two users share an address, an EMEA-role user wins, then the lowest id
+    const byEmail = new Map();
+    const ordered = users_all.slice().sort((a, b) => (TEAM[a.role] ? 1 : 0) - (TEAM[b.role] ? 1 : 0) || String(b.userId).localeCompare(String(a.userId)));
+    for (const u of ordered) {
+      const e = String(u.email || '').trim().toLowerCase();
+      if (e) byEmail.set(e, u);
+    }
+    // name: the EMEA roster (active users win over inactive ones with the same name)
+    const rosterById = new Map(roster.map((u) => [String(u.userId).slice(0, 15), u]));
     const full = new Map(), firstLast = new Map();
     for (const u of roster.slice().sort((a, b) => (a.isActive === b.isActive ? 0 : a.isActive ? 1 : -1))) {
       const t = toks(u.name);
@@ -355,18 +370,31 @@ dash.calc('people', {
     const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
     return hb_people.map((p) => {
       const t = toks(p.name);
-      const sf = full.get(t.join(' ')) || (t.length ? firstLast.get(t[0] + ' ' + t[t.length - 1]) : null) || null;
+      const viaEmail = p.email ? byEmail.get(String(p.email).toLowerCase()) || null : null;
+      const viaName = viaEmail ? null : full.get(t.join(' ')) || (t.length ? firstLast.get(t[0] + ' ' + t[t.length - 1]) : null) || null;
+      const hit = viaEmail || viaName;
+      const sf = hit ? { ...hit, ...(rosterById.get(String(hit.userId).slice(0, 15)) || {}) } : null;
       const start = p.startDate ? String(p.startDate).slice(0, 10) : null;
       const daysIn = start ? Math.floor((today - Date.parse(start + 'T00:00:00Z')) / 864e5) : null;
-      const kind = sf ? kindOfRole(sf.role) : null;
-      const mine = sf ? [...(pools.get(String(sf.userId).slice(0, 15)) || [])].filter((x) => kindOfPool(x) === kind) : [];
+      const emea = !!(sf && TEAM[sf.role]);
+      const seller = SELLER.test(String(p.title || ''));
+      const kind = emea ? kindOfRole(sf.role) : null;
+      const mine = kind ? [...(pools.get(String(sf.userId).slice(0, 15)) || [])].filter((x) => kindOfPool(x) === kind) : [];
       const status = daysIn != null && daysIn < 0 ? 'Not started'
         : !sf ? (daysIn != null && daysIn < 7 ? 'Week 1, no Salesforce user yet' : 'No Salesforce user')
+        : !emea && seller ? (sf.role ? 'Role outside EMEA sales' : 'No Salesforce role')
         : !kind ? 'Not routed'
         : mine.length ? 'In routing'
         : daysIn != null && daysIn < 7 ? 'Add in week 2'
         : 'Overdue: add to pool';
-      return { id: p.id, name: p.name, title: p.title, department: p.department, team: p.team || p.department, site: p.site, manager: p.manager, startDate: start, daysIn, sfName: sf ? sf.name : null, sfUserId: sf ? sf.userId : null, sfRole: sf ? sf.role : null, sfManager: sf ? sf.manager || null : null, region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', pools: mine.length, status };
+      const sfManager = sf ? sf.manager || null : null;
+      const mgrDiffers = !!(sf && p.manager && (sfManager ? !sameName(p.manager, sfManager) : true));
+      return {
+        id: p.id, name: p.name, title: p.title, department: p.department, team: p.team || p.department, site: p.site, manager: p.manager,
+        startDate: start, daysIn, sfName: sf ? sf.name : null, sfUserId: sf ? sf.userId : null, sfRole: sf ? sf.role || null : null, sfManager,
+        matchedBy: viaEmail ? 'email' : viaName ? 'name' : null, sellerTitle: seller, mgrDiffers,
+        region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', pools: mine.length, status,
+      };
     });
   },
 });
@@ -621,12 +649,12 @@ dash.calc('person', {
 
 dash.calc('person_hb', {
   title: 'Person view, HiBob',
-  description: 'HiBob details per person, keyed by their matched Salesforce name (or HiBob name when there is no match): title, team, site, manager, start date and hiring status.',
+  description: 'HiBob details per person, keyed by their matched Salesforce name (or HiBob name when there is no match): title, team, site, manager, start date, hiring status, how they were matched (email or name), their Salesforce role and manager, and whether the two managers differ.',
   inputs: ['people'],
   fn: (people) => {
     const m = new Map();
     for (const p of people) {
-      m.set(p.sfName || p.name, { name: p.sfName || p.name, hbName: p.name, title: p.title, team: p.team, site: p.site, manager: p.manager, startDate: p.startDate, daysIn: p.daysIn, hiring: p.status, sfMatched: !!p.sfName });
+      m.set(p.sfName || p.name, { name: p.sfName || p.name, hbName: p.name, title: p.title, team: p.team, site: p.site, manager: p.manager, startDate: p.startDate, daysIn: p.daysIn, hiring: p.status, sfMatched: !!p.sfName, matchedBy: p.matchedBy, sfRole: p.sfRole, sfManager: p.sfManager, mgrDiffers: p.mgrDiffers });
     }
     return [...m.values()];
   },
@@ -635,7 +663,7 @@ dash.calc('person_hb', {
 // ===================== ACTION ITEMS =====================
 dash.calc('gr_actions', {
   title: 'Action items from meetings',
-  description: 'Items under a "Next steps", "Action items", "Follow-ups" or "To-dos" heading of your Granola summaries (a bullet and the indented lines under it), plus to-do lines in your private notes. The owner is the name in brackets after the item, before a colon, or the name a group of items sits under; it is yours when it matches your Granola name or email. "For you" is yours, or unassigned in a note you took. Placeholders such as "None" are left out.',
+  description: 'Items under a "Next steps", "Action items", "Follow-ups" or "To-dos" heading of your Granola summaries (a bullet and the indented lines under it), plus to-do lines in your private notes. A due date is read from the wording relative to the meeting date ("today", "tomorrow", "this week", "next week", "by Friday", "in two weeks", "end of month", "by 30 Oct", "by 30/10"): overdue once it has passed, due soon within 3 days. The owner is the name in brackets after the item, before a colon, or the name a group of items sits under; it is yours when it matches your Granola name or email. "For you" is yours, or unassigned in a note you took. Placeholders such as "None" are left out.',
   inputs: ['gr_notes'],
   fn: (gr_notes) => {
     const ACTION = /\b(next steps?|action items?|action points?|actions?|follow[- ]?ups?|to[- ]?dos?|tasks?)\b/i;
@@ -687,6 +715,37 @@ dash.calc('gr_actions', {
       || (!!myName && (o === myName || o === myFirst))));
     const d0 = new Date();
     const today = Date.UTC(d0.getFullYear(), d0.getMonth(), d0.getDate());
+    // due date from the wording, relative to the meeting date ("by Friday", "this week", "next week", "by 30 Oct", "in two weeks", "EOM")
+    const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const NUM = { one: 1, two: 2, three: 3, four: 4, a: 1 };
+    const iso = (t) => new Date(t).toISOString().slice(0, 10);
+    const dueFrom = (text, meetingDate) => {
+      const base = Date.parse(String(meetingDate || '') + 'T00:00:00Z');
+      if (Number.isNaN(base)) return null;
+      const s = ' ' + String(text || '').toLowerCase() + ' ';
+      const dow = new Date(base).getUTCDay();
+      const friday = (weeks) => base + (((5 - dow + 7) % 7) + 7 * weeks) * 864e5;
+      let m;
+      if (/\b(today|eod|end of (the )?day)\b/.test(s)) return iso(base);
+      if (/\btomorrow\b/.test(s)) return iso(base + 864e5);
+      if (/\b(this week|eow|end of (the )?week|by friday)\b/.test(s)) return iso(friday(0));
+      if (/\bnext week\b/.test(s)) return iso(friday(1));
+      if ((m = s.match(/\bin (\d+|one|two|three|four|a) weeks?\b/))) return iso(base + 7 * (NUM[m[1]] || +m[1]) * 864e5);
+      if ((m = s.match(/\bin (\d+|one|two|three|four|a) days?\b/))) return iso(base + (NUM[m[1]] || +m[1]) * 864e5);
+      if (/\b(eom|end of (the )?month)\b/.test(s)) { const d = new Date(base); return iso(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)); }
+      if ((m = s.match(/\b(?:by|on|before|until|due) (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/))) { const t = DAYS.indexOf(m[1]); return iso(base + (((t - dow + 7) % 7) || 7) * 864e5); }
+      const mkDate = (day, mon) => {
+        const d = new Date(base);
+        let t = Date.UTC(d.getUTCFullYear(), mon, day);
+        if (t < base - 31 * 864e5) t = Date.UTC(d.getUTCFullYear() + 1, mon, day);
+        return iso(t);
+      };
+      if ((m = s.match(/\b(\d{1,2})(?:st|nd|rd|th)? (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/))) return mkDate(+m[1], MONTHS.indexOf(m[2]));
+      if ((m = s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (\d{1,2})(?:st|nd|rd|th)?\b/))) return mkDate(+m[2], MONTHS.indexOf(m[1]));
+      if ((m = s.match(/\b(?:by|on|before|due) (\d{1,2})\/(\d{1,2})\b/)) && +m[2] >= 1 && +m[2] <= 12) return mkDate(+m[1], +m[2] - 1);
+      return null;
+    };
     const out = [];
     const emit = (r, text, ownerDefault) => {
       let t = String(text || '').trim();
@@ -709,6 +768,12 @@ dash.calc('gr_actions', {
       };
       out.push(o);
       return o;
+    };
+    const withDue = (o) => {
+      const due = dueFrom(o.item + ' ' + o.detail, o.date);
+      const t = due ? Date.parse(due + 'T00:00:00Z') : NaN;
+      const left = Number.isNaN(t) ? null : Math.round((t - today) / 864e5);
+      return { ...o, due, daysLeft: left, dueStatus: left == null || o.done ? null : left < 0 ? 'Overdue' : left <= 3 ? 'Due soon' : null };
     };
     let key = null, cur = null, label = null;
     const groupOf = (r) => (r ? r.meetingId + '|' + r.source + '|' + r.section + '|' + r.parentSection : null);
@@ -744,13 +809,13 @@ dash.calc('gr_actions', {
       cur = null;
       if (actionSec && r.depth === 0 && r.source === 'summary') cur = emit(r, text, secOwner || label);
     }
-    return out.sort((a, b) => String(b.meetingAt || '').localeCompare(String(a.meetingAt || '')) || String(a.meetingId).localeCompare(String(b.meetingId)) || (a.source === b.source ? 0 : a.source === 'summary' ? -1 : 1) || a.pos - b.pos);
+    return out.map(withDue).sort((a, b) => String(b.meetingAt || '').localeCompare(String(a.meetingAt || '')) || String(a.meetingId).localeCompare(String(b.meetingId)) || (a.source === b.source ? 0 : a.source === 'summary' ? -1 : 1) || a.pos - b.pos);
   },
 });
 
 dash.calc('gr_kpi', {
   title: 'Action items headline',
-  description: 'Open action items from your meetings: for you (yours, or unassigned in notes you took), assigned to you, unassigned, with others, and the meetings they came from.',
+  description: 'Open action items from your meetings: for you (yours, or unassigned in notes you took), assigned to you, unassigned, with others, the meetings they came from, and how many of yours are overdue or due soon.',
   inputs: ['gr_actions'],
   fn: (gr_actions) => {
     const open = gr_actions.filter((r) => !r.done);
@@ -761,6 +826,8 @@ dash.calc('gr_kpi', {
       others: open.filter((r) => r.bucket === 'others').length,
       meetings: new Set(open.map((r) => r.meetingId)).size,
       total: open.length,
+      overdue: open.filter((r) => r.forYou && r.dueStatus === 'Overdue').length,
+      dueSoon: open.filter((r) => r.forYou && r.dueStatus === 'Due soon').length,
     }];
   },
 });
@@ -805,12 +872,25 @@ dash.calc('checks', {
 
 dash.calc('checks_hb', {
   title: 'Data checks, HiBob',
-  description: 'People who joined in the last 90 days (past their first week) with no Salesforce user found by name.',
+  description: 'HiBob against Salesforce: people who joined in the last 90 days (past their first week) with no Salesforce user; people with a selling title whose Salesforce user has no role or a role outside EMEA sales, so their pipeline, book and routing are not counted here; and people whose manager in HiBob differs from their manager in Salesforce.',
   inputs: ['people'],
   fn: (people) => {
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
-    return people.filter((h) => h.status === 'No Salesforce user' && h.daysIn != null && h.daysIn >= 0 && h.daysIn <= 90)
-      .map((h) => ({ id: 'hb:' + h.id, area: 'Hiring', severity: 'medium', title: h.name, person: h.name, region: h.region, manager: h.sfManager || null, what: 'No Salesforce user found', meta: 'Started ' + plural(h.daysIn, 'day', 'days') + ' ago', screen: 'hiring' }));
+    const out = [];
+    for (const h of people) {
+      const base = { area: 'Hiring', title: h.name, person: h.sfName || h.name, region: h.region, manager: h.sfManager || null, screen: 'hiring' };
+      if (h.status === 'No Salesforce user' && h.daysIn != null && h.daysIn >= 0 && h.daysIn <= 90) {
+        out.push({ ...base, id: 'hb:' + h.id, severity: 'medium', what: 'No Salesforce user found', meta: 'Started ' + plural(h.daysIn, 'day', 'days') + ' ago' });
+      }
+      if (h.status === 'No Salesforce role' || h.status === 'Role outside EMEA sales') {
+        out.push({ ...base, id: 'hb:' + h.id + ':role', severity: 'medium', what: h.status === 'No Salesforce role' ? 'Salesforce user has no role' : 'Salesforce role ' + h.sfRole + ' is outside EMEA sales', meta: (h.title || 'Selling title') + ' in HiBob, so their pipeline, book and routing are not counted here' });
+      }
+      if (h.mgrDiffers && h.status !== 'Not started') {
+        out.push({ ...base, id: 'hb:' + h.id + ':mgr', severity: 'low', what: h.sfManager ? 'Manager differs between HiBob and Salesforce' : 'No manager in Salesforce', meta: 'HiBob: ' + (h.manager || 'none') + ' · Salesforce: ' + (h.sfManager || 'none') });
+      }
+    }
+    const rank = { high: 0, medium: 1, low: 2 };
+    return out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.title).localeCompare(String(b.title)));
   },
 });
 
@@ -830,7 +910,7 @@ dash.calc('checks_kpi', {
 
 dash.calc('checks_hb_kpi', {
   title: 'HiBob checks headline',
-  description: 'Number of HiBob data checks (recent joiners with no Salesforce user), per team and for all EMEA.',
+  description: 'Number of HiBob data checks (recent joiners with no Salesforce user, selling titles without an EMEA sales role, manager differences), per team and for all EMEA.',
   inputs: ['checks_hb'],
   fn: (checks_hb) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
