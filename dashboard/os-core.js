@@ -916,12 +916,27 @@ OS.oo = (() => {
     const orph = rowOf('orphan_kpi', () => true);
     const gr = rowOf('gr_kpi', () => true);
     const ck = rowOf('checks_kpi', (r) => r.region === scope);
+    const cov = rowOf('pipe_cover', (r) => r.key === pipeKey);
+    const mv = rowOf('moves_kpi', (r) => r.region === scope);
+    const rk = rowOf('risk_kpi', (r) => r.region === scope);
+    const lv = rowOf('leavers_kpi', (r) => r.region === scope);
+    const eng = rowOf('engagement_kpi', (r) => r.region === scope);
+    const x = (v) => (v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '×');
+    const signed = (v) => (v < 0 ? '−' : '+') + OS.usd(Math.abs(v));
+    const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
     const lines = [`RevOps update, ${label}, ${OS.day(new Date().toISOString().slice(0, 10))}`];
     if (pipe) lines.push(`• Pipeline this quarter: ${OS.usd(pipe.thisPipe)} open (commit ${OS.usd(pipe.thisCommit)}, best case ${OS.usd(pipe.thisBest)}), ${OS.usd(pipe.won)} closed won`);
+    if (cov && cov.avgBookings > 0) lines.push(cov.aheadOfUsual
+      ? `• Coverage: past a usual quarter already (${OS.usd(cov.wonSoFar)} won, ${OS.usd(cov.avgBookings)} usual); next quarter ${x(cov.coverageNext)}`
+      : `• Coverage: ${OS.usd(cov.openThis)} open against ${OS.usd(cov.toGo)} still to win for a usual quarter (${x(cov.coverageThis)}); next quarter ${x(cov.coverageNext)}${cov.projectedThis != null ? `; expected ${OS.usd(cov.projectedThis)} at a ${OS.pct(cov.winRate)} win rate` : ''}`);
+    if (mv) lines.push(`• Last 7 days: ${n(mv.created, 'opp', 'opps')} created (${OS.usd(mv.createdArr)}), ${OS.num(mv.won)} won (${OS.usd(mv.wonArr)}), ${OS.num(mv.lost)} lost (${OS.usd(mv.lostArr)}); ${n(mv.pushed, 'deal', 'deals')} (${OS.usd(mv.pushedArr)}) pushed out of this quarter, ${OS.num(mv.pulled)} pulled in; Commit ${signed(mv.netCommitArr)} net`);
     if (cr) lines.push(`• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
-    if (rr) lines.push(`• Routing: ${OS.num(rr.missing)} reps missing from a pool, ${OS.num(rr.weekOne)} joiners to add next week`);
+    if (rk && rk.stuck) lines.push(`• Stuck in stage: ${n(rk.stuck, 'deal', 'deals')} (${OS.usd(rk.stuckArr)}) closing this or next quarter, past twice the usual time in their stage`);
+    if (rr) lines.push(`• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
     if (ck) lines.push(`• Data checks: ${OS.num(ck.total)} open, ${OS.num(ck.high)} urgent`);
+    if (lv && lv.people) lines.push(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${[lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '', lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : ''].filter(Boolean).join(', ') || 'LeanData pool seats'}`);
     if (orph && !p.mgr && (!p.region || p.region === 'All')) lines.push(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
+    if (eng && eng.untouched) lines.push(`• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`);
     const mine = OS.state('gr_actions') === 'ok' ? (dash.data('gr_actions').data || []).filter((r) => r.forYou && !r.done && !OS.done.has(r)) : null;
     if (mine) lines.push(`• My action items: ${OS.num(mine.length)} for me from ${OS.num(new Set(mine.map((r) => r.meetingId)).size)} meetings`);
     else if (gr) lines.push(`• My action items: ${OS.num(gr.forYou)} for me`);
