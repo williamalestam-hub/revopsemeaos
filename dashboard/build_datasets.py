@@ -152,5 +152,19 @@ ds("bk_books", "Account books by owner",
    SUM(ARR_USD__c) arrUsd FROM Account WHERE Territory_ID__c != null AND ({OWNER} OR {GEO})
    GROUP BY Territory_ID__c, Owner.Name, Owner.UserRole.Name, Owner.IsActive LIMIT 2000"""))
 
+
+# ---------- Granola (each viewer's own notes) ----------
+DATE = "^20[0-9]{2}-[01][0-9]-[0-3][0-9]$"
+D["gr_notes"] = {"title": "Granola meeting notes",
+  "description": "Your Granola meetings in the chosen window (notes you took or were invited to); the page then reads each note and keeps every bullet of its summary and private notes.",
+  "source": {"kind": "query", "connector": "Granola", "tool": "list_meetings",
+    "args": {"from_date": "{{gr_since}}", "to_date": "{{gr_until}}",
+             "involvement": {"captured_by_me": True, "listed_as_participant": True},
+             "max_participants": 0, "limit": 200},
+    "rules": {"gr_since": {"type": "string", "pattern": DATE}, "gr_until": {"type": "string", "pattern": DATE}}}}
+D["gr_me"] = {"title": "Granola account",
+  "description": "The Granola account each viewer is signed in with, used to tell which action items are theirs.",
+  "source": {"kind": "query", "connector": "Granola", "tool": "get_account_info", "args": {}}}
+
 json.dump(D, open('datasets.json', 'w'), indent=1)
 print(len(D), 'datasets')

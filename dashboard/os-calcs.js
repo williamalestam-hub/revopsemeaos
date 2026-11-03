@@ -298,7 +298,7 @@ dash.calc('rr_kpi', {
 // ===================== HIRING =====================
 dash.calc('people', {
   title: 'EMEA GTM people and routing',
-  description: 'HiBob people matched by normalised name to an EMEA Salesforce user and their LeanData pools, with days since start and a routing status. Routed roles: AE, SMB, BDR, EM.',
+  description: 'HiBob people matched by normalised name to an EMEA Salesforce user (name and id) and their LeanData pools, with days since start and a routing status. Routed roles: AE, SMB, BDR, EM.',
   inputs: ['hb_people', 'roster', 'rr_members'],
   fn: (hb_people, roster, rr_members) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -332,7 +332,7 @@ dash.calc('people', {
         : mine.length ? 'In routing'
         : daysIn != null && daysIn < 7 ? 'Add in week 2'
         : 'Overdue: add to pool';
-      return { id: p.id, name: p.name, title: p.title, department: p.department, team: p.team || p.department, site: p.site, manager: p.manager, startDate: start, daysIn, sfRole: sf ? sf.role : null, region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', pools: mine.length, status };
+      return { id: p.id, name: p.name, title: p.title, department: p.department, team: p.team || p.department, site: p.site, manager: p.manager, startDate: start, daysIn, sfName: sf ? sf.name : null, sfUserId: sf ? sf.userId : null, sfRole: sf ? sf.role : null, region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', pools: mine.length, status };
     });
   },
 });
@@ -537,6 +537,167 @@ dash.calc('book_pool', {
       const pn = (pools.get(String(u.userId).slice(0, 15)) || new Set()).size;
       const flag = bl.length && !pn ? 'Book, no pool' : !bl.length && pn ? 'Pool, no book' : !bl.length && !pn ? 'No book, no pool' : 'OK';
       return { userId: u.userId, name: u.name, region: TEAM[u.role], books: bl.length, bookList: bl.join(', '), pools: pn, flag };
+    });
+  },
+});
+
+// ===================== PERSON =====================
+dash.calc('person', {
+  title: 'Person view',
+  description: 'One row per person (Salesforce name, or HiBob name when there is no Salesforce match) joining their roster entry, HiBob record, pipeline, created opps, account book and routing.',
+  inputs: ['roster', 'pipe_reps', 'cr_leader', 'books_owner', 'rr_people', 'people'],
+  fn: (roster, pipe_reps, cr_leader, books_owner, rr_people, people) => {
+    const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
+    const m = new Map();
+    const get = (name) => {
+      if (!m.has(name)) m.set(name, { name, userId: null, role: null, region: null, manager: null, isActive: null, title: null, createdDate: null, team: null, site: null, startDate: null, daysIn: null, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crNb: 0, crUp: 0, crArr: 0, crBdr: 0, accounts: 0, activeAccts: 0, customers: 0, custArr: 0, emCustomers: 0, openPipe: 0, openRenewals: 0, pools: 0, poolNames: '', assignments: 0, routing: null, hiring: null, inSf: false, inHb: false });
+      return m.get(name);
+    };
+    for (const u of roster.slice().sort((a, b) => (a.isActive === b.isActive ? 0 : a.isActive ? 1 : -1))) {
+      const o = get(u.name);
+      Object.assign(o, { userId: u.userId, role: u.role, region: TEAM[u.role] || 'Other', manager: u.manager || null, isActive: u.isActive, title: u.title || null, createdDate: u.createdDate || null, startDate: u.startDate || null, inSf: true });
+    }
+    for (const r of pipe_reps) {
+      const o = get(r.owner);
+      Object.assign(o, { thisPipe: r.thisPipe, thisOpps: r.thisOpps, nextPipe: r.nextPipe, pastDue: r.pastDue, stale: r.stale });
+      if (!o.role) { o.role = r.role; o.region = r.region; o.manager = r.manager; }
+    }
+    for (const r of cr_leader) Object.assign(get(r.owner), { crNb: r.nb, crUp: r.up, crArr: r.arr, crBdr: r.bdrSourced });
+    for (const r of books_owner) {
+      const o = get(r.owner);
+      Object.assign(o, { accounts: r.accounts, activeAccts: r.active, customers: r.customers, custArr: r.arr, emCustomers: r.emCustomers, openPipe: r.openPipe, openRenewals: r.openRenewals });
+      if (!o.role) { o.role = r.role; o.region = r.region; o.manager = r.manager; }
+    }
+    for (const r of rr_people) Object.assign(get(r.name), { pools: r.pools, poolNames: r.poolNames, assignments: r.assignments, routing: r.status });
+    for (const p of people) {
+      const o = get(p.sfName || p.name);
+      Object.assign(o, { title: p.title || o.title, team: p.team, site: p.site, startDate: p.startDate || o.startDate, daysIn: p.daysIn, hiring: p.status, inHb: true });
+      if (!o.manager) o.manager = p.manager;
+      if (!o.region) o.region = p.region;
+    }
+    return [...m.values()].map((o) => ({ ...o, region: o.region || 'Other' }));
+  },
+});
+
+// ===================== ACTION ITEMS =====================
+dash.calc('gr_actions', {
+  title: 'Action items from meetings',
+  description: 'Bullets under a "Next steps", "Action items", "Follow-ups" or "To-dos" heading in your Granola summaries, plus to-dos in your private notes. The owner is the name in brackets after the item (or before a colon); it is yours when it matches the name in your Granola email.',
+  inputs: ['gr_notes', 'gr_me'],
+  fn: (gr_notes, gr_me) => {
+    const ACTION = /^(next steps?|action items?|actions?|follow[- ]?ups?|to[- ]?dos?|todos?|tasks?)\b/i;
+    const TODO = /^(\[[ xX]?\]|todo\b|to do\b|action\b|ai:|follow[- ]?up\b)/i;
+    const clean = (s) => String(s || '').replace(/\\([\\`*_{}\[\]()#+\-.!~>|])/g, '$1').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim();
+    const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const local = String((gr_me[0] || {}).email || '').split('@')[0].split(/[._-]+/).map(norm).filter(Boolean);
+    const first = local[0] || '';
+    const last = local.length > 1 ? local[local.length - 1] : '';
+    const isMe = (owner) => String(owner || '').split(/\s*(?:,|&|\band\b|\/|\+)\s*/i).map(norm).some((o) => !!o && !!first && (o === first || o === first + ' ' + last || (o.startsWith(first + ' ') && (!last || o.endsWith(' ' + last))) || (!!last && o === last) || o === 'me' || o === 'i'));
+    const now = Date.now();
+    const out = [];
+    for (const r of gr_notes) {
+      const inSection = ACTION.test(String(r.section || '').trim());
+      let t = String(r.text || '').trim();
+      if (!(inSection || (r.source === 'private' && TODO.test(t)))) continue;
+      let done = false;
+      const box = t.match(/^\[([ xX]?)\]\s*(.*)$/);
+      if (box) { done = /x/i.test(box[1]); t = box[2]; }
+      t = t.replace(/^(todo|to do|action|ai)\s*[:-]\s*/i, '');
+      let item = t;
+      let owner = null;
+      const bold = t.match(/^\*\*(.+?)\*\*\s*(?:[([]([^)\]]+)[)\]])?\s*[:\-–—]?\s*(.*)$/);
+      if (bold) { item = bold[1]; owner = bold[2] || null; if (bold[3]) item = item + ' ' + bold[3]; }
+      else {
+        const colon = t.match(/^([A-ZÀ-Þ][\p{L}'.-]+(?:\s[A-ZÀ-Þ][\p{L}'.-]+){0,2})\s*:\s+(.+)$/u);
+        const trail = t.match(/^(.+?)\s+[([]([A-ZÀ-Þ][\p{L}'.-]+(?:\s[A-ZÀ-Þ][\p{L}'.-]+){0,2}(?:\s*(?:,|&|and)\s*[A-ZÀ-Þ][\p{L}'.-]+(?:\s[A-ZÀ-Þ][\p{L}'.-]+)?)*)[)\]]\s*$/u);
+        if (colon) { owner = colon[1]; item = colon[2]; }
+        else if (trail) { item = trail[1]; owner = trail[2]; }
+      }
+      item = clean(item);
+      owner = owner ? clean(owner) : null;
+      if (!item) continue;
+      const bucket = !owner ? 'unassigned' : isMe(owner) ? 'mine' : 'others';
+      const at = Date.parse(r.meetingAt || '');
+      out.push({
+        id: r.id, meetingId: r.meetingId, meeting: clean(r.meeting) || 'Untitled meeting', date: String(r.meetingAt || '').slice(0, 10) || null, meetingAt: r.meetingAt,
+        url: r.url, shared: r.capturedByMe === false, source: r.source, section: r.section, pos: r.pos,
+        item, detail: clean(r.detail), owner, bucket, done,
+        forYou: !done && (bucket === 'mine' || (bucket === 'unassigned' && r.capturedByMe !== false)),
+        ageDays: Number.isNaN(at) ? null : Math.max(0, Math.floor((now - at) / 864e5)),
+      });
+    }
+    return out.sort((a, b) => String(b.meetingAt || '').localeCompare(String(a.meetingAt || '')) || String(a.meetingId).localeCompare(String(b.meetingId)) || (a.source === b.source ? 0 : a.source === 'summary' ? -1 : 1) || a.pos - b.pos);
+  },
+});
+
+dash.calc('gr_kpi', {
+  title: 'Action items headline',
+  description: 'Open action items from your meetings: for you (yours, or unassigned in notes you took), assigned to you, unassigned, with others, and the meetings they came from.',
+  inputs: ['gr_actions'],
+  fn: (gr_actions) => {
+    const open = gr_actions.filter((r) => !r.done);
+    return [{
+      forYou: open.filter((r) => r.forYou).length,
+      mine: open.filter((r) => r.bucket === 'mine').length,
+      unassigned: open.filter((r) => r.bucket === 'unassigned').length,
+      others: open.filter((r) => r.bucket === 'others').length,
+      meetings: new Set(open.map((r) => r.meetingId)).size,
+      total: open.length,
+    }];
+  },
+});
+
+dash.calc('checks', {
+  title: 'Data checks',
+  description: 'Problems to act on: reps missing from routing or due next week, inactive users in pools, recent joiners with no Salesforce user, reps with past-due opps, orphan accounts by reason and split books.',
+  inputs: ['rr_people', 'rr_pools', 'people', 'pipe_reps', 'orphans', 'books'],
+  fn: (rr_people, rr_pools, people, pipe_reps, orphans, books) => {
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const money = (v) => { const a = Math.abs(+v || 0); const s = a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 1e3 ? Math.round(a / 1e3) + 'K' : String(Math.round(a)); return (v < 0 ? '−$' : '$') + s; };
+    const out = [];
+    for (const p of rr_people) {
+      if (p.status === 'Missing' || p.status === 'New joiner: overdue') {
+        out.push({ id: 'rr:' + p.userId, area: 'Routing', severity: 'high', title: p.name, person: p.name, region: p.region, what: 'Not in any ' + p.kind + ' pool', meta: p.daysIn != null ? plural(p.daysIn, 'day', 'days') + ' since their Salesforce user was created' : '', screen: 'routing' });
+      } else if (p.status === 'New: add next week') {
+        out.push({ id: 'rr:' + p.userId, area: 'Routing', severity: 'low', title: p.name, person: p.name, region: p.region, what: 'Add to a ' + p.kind + ' pool next week', meta: p.daysIn != null ? plural(p.daysIn, 'day', 'days') + ' since their Salesforce user was created' : '', screen: 'routing' });
+      }
+    }
+    for (const pool of rr_pools) {
+      if (pool.inactiveMembers) out.push({ id: 'pool:' + pool.pool, area: 'Routing', severity: 'high', title: pool.pool, person: null, region: 'All', what: plural(pool.inactiveMembers, 'inactive user', 'inactive users') + ' still in the pool', meta: '', screen: 'routing' });
+    }
+    const flagged = new Set(out.map((o) => o.person).filter(Boolean));
+    for (const h of people) {
+      if (h.daysIn == null || h.daysIn < 0 || h.daysIn > 90) continue;
+      if (h.status === 'No Salesforce user') out.push({ id: 'hb:' + h.id, area: 'Hiring', severity: 'medium', title: h.name, person: h.name, region: h.region, what: 'No Salesforce user found', meta: 'Started ' + plural(h.daysIn, 'day', 'days') + ' ago', screen: 'hiring' });
+      else if (h.status === 'Overdue: add to pool' && !flagged.has(h.sfName)) out.push({ id: 'hb:' + h.id, area: 'Hiring', severity: 'high', title: h.sfName || h.name, person: h.sfName || h.name, region: h.region, what: 'Overdue for a routing pool', meta: 'Started ' + plural(h.daysIn, 'day', 'days') + ' ago', screen: 'hiring' });
+    }
+    for (const r of pipe_reps) {
+      if (r.pastDue > 0) out.push({ id: 'pd:' + r.owner, area: 'Pipeline', severity: r.pastDue >= 3 ? 'high' : 'medium', title: r.owner, person: r.owner, region: r.region, what: plural(r.pastDue, 'open opp', 'open opps') + ' past the close date', meta: '', screen: 'pipeline' });
+    }
+    const byReason = new Map();
+    for (const o of orphans) {
+      if (/review/.test(o.reason)) continue;
+      const b = byReason.get(o.reason) || { n: 0, arr: 0 };
+      b.n += 1; b.arr += +o.arrUsd || 0;
+      byReason.set(o.reason, b);
+    }
+    for (const [reason, b] of byReason) out.push({ id: 'orph:' + reason, area: 'Books', severity: reason === 'Inactive owner' || b.arr > 0 ? 'high' : 'medium', title: reason, person: null, region: 'All', what: plural(b.n, 'active account', 'active accounts') + ' with ' + money(b.arr) + ' ARR', meta: '', screen: 'books', reason });
+    const split = books.filter((b) => b.flag === 'Split').length;
+    if (split) out.push({ id: 'books:split', area: 'Books', severity: 'low', title: 'Split books', person: null, region: 'All', what: plural(split, 'book', 'books') + ' where the main owner holds under 80%', meta: '', screen: 'books' });
+    const rank = { high: 0, medium: 1, low: 2 };
+    return out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
+  },
+});
+
+dash.calc('checks_kpi', {
+  title: 'Data checks headline',
+  description: 'Number of data checks and urgent ones, per team and for all EMEA.',
+  inputs: ['checks'],
+  fn: (checks) => {
+    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+    return regions.map((region) => {
+      const cs = checks.filter((c) => region === 'All' || c.region === region);
+      return { region, total: cs.length, high: cs.filter((c) => c.severity === 'high').length };
     });
   },
 });
