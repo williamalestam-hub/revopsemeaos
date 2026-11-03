@@ -1008,7 +1008,7 @@ OS.defTable('cov-table', ['pipe_cover'], () => {
   { f: 'coverageThis', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v) + '×'), num: true },
   { f: 'openNext', fmt: OS.usd, num: true }, { f: 'coverageNext', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v) + '×'), num: true },
   { f: 'winRate', fmt: (v) => (v == null ? '—' : OS.pct(v)), num: true },
-  { f: 'expectedThis', fmt: (v) => (v == null ? '—' : OS.usd(v)), num: true },
+  { f: 'projectedThis', fmt: (v) => (v == null ? '—' : OS.usd(v)), num: true },
   { f: 'avgCycleDays', fmt: (v) => (v == null ? '—' : OS.num(Math.round(v))), num: true },
   { f: 'status', chip: (v) => (v === 'Thin' ? 'bad' : v === 'Watch' ? 'warn' : v === 'Covered' || /Ahead/.test(v) ? 'ok' : '') },
 ], { key: 'key' });

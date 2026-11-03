@@ -1067,7 +1067,7 @@ dash.calc('pool_adds', {
 // ===================== DEALS =====================
 dash.calc('deal_list', {
   title: 'Largest deals with risk flags',
-  description: 'The largest open deals closing this or next quarter with risk flags: past due (close date gone), stale (no logged activity in 30 days), no next step (neither a next-step note nor a date), next step overdue (its date has passed), stuck in stage (longer than about twice the usual time: stage 0 35 days, 1 55, 2 60, 3 40, 4 30, 5 45, 6 40), early stage (0–1) closing this quarter, and Commit while still at stage 0–2. The risk score adds 3 for past due or early Commit, 2 for early stage or stale, 1 for a missing or overdue next step.',
+  description: 'The largest open deals closing this or next quarter with risk flags: past due (close date gone), stale (no logged activity in 30 days), no next step (neither a next-step note nor a date), next step overdue (its date has passed), stuck in stage (longer than about twice the usual time: stage 0 35 days, 1 55, 2 60, 3 40, 4 30, 5 45, 6 40), early stage (0–1) closing this quarter, and Commit while still at stage 0–2. The risk score adds 3 for past due or early Commit, 2 for early stage or stale, 1 for a missing or overdue next step. Risk score: 3 each for past due or Commit at an early stage, 2 each for stale, early stage closing this quarter or stuck in stage, 1 for no next step or an overdue one.',
   inputs: ['top_deals'],
   fn: (top_deals) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -1105,6 +1105,7 @@ dash.calc('person_deals', {
     const ago30 = new Date(now.getTime() - 30 * 864e5).toISOString().slice(0, 10);
     const q0 = new Date(Date.UTC(now.getUTCFullYear(), Math.floor(now.getUTCMonth() / 3) * 3, 1));
     const nextQStart = new Date(Date.UTC(q0.getUTCFullYear(), q0.getUTCMonth() + 3, 1)).toISOString().slice(0, 10);
+    const laterQStart = new Date(Date.UTC(q0.getUTCFullYear(), q0.getUTCMonth() + 6, 1)).toISOString().slice(0, 10);
     return deals.map((d) => {
       const stage = parseInt(d.stage, 10);
       const thisQ = String(d.closeDate) < nextQStart;
@@ -1117,7 +1118,7 @@ dash.calc('person_deals', {
       if (d.rt !== 'Renewal' && !d.nextStep && !nsDate) flags.push('No next step');
       else if (d.rt !== 'Renewal' && nsDate && nsDate < today) flags.push('Next step overdue');
       const LIMIT = [35, 55, 60, 40, 30, 45, 40];
-      if (d.rt !== 'Renewal' && d.daysInStage != null && stage >= 0 && stage <= 6 && +d.daysInStage > LIMIT[stage]) flags.push('Stuck in stage');
+      if (d.rt !== 'Renewal' && String(d.closeDate) < laterQStart && d.daysInStage != null && stage >= 0 && stage <= 6 && +d.daysInStage > LIMIT[stage]) flags.push('Stuck in stage');
       return { oppId: d.oppId, opp: d.opp, account: d.account, stage: d.stage, rt: d.rt, closeDate: d.closeDate, quarter: thisQ ? 'this' : 'later', forecast: d.forecast || null, nextStep: d.nextStep || null, lastActivity: d.lastActivity || null, arrUsd: d.rt === 'Renewal' ? +d.contractArrUsd || 0 : +d.arrUsd || 0, flags: flags.join(', ') };
     });
   },
@@ -1645,9 +1646,9 @@ dash.calc('oo_kpi', {
 // ===================== WEEKLY MOVEMENT =====================
 dash.calc('pipe_moves', {
   title: 'Pipeline movement, last 7 days',
-  description: 'Per EMEA rep, New Business and Upsell in the last 7 days: opportunities created, won and lost (by the date actually closed), close dates pushed out of this quarter or pulled into it, stage moved up or down (first stage of the week against the last; round trips left out), and moved into or out of Commit. Each deal counts once per measure, at its current ARR, for its current owner; deals created this week only count as created.',
-  inputs: ['mv_outcomes', 'mv_close', 'mv_fields', 'roster'],
-  fn: (mv_outcomes, mv_close, mv_fields, roster) => {
+  description: 'Per EMEA rep, New Business and Upsell in the last 7 days: opportunities created, won and lost (by the date actually closed; admin merges and record clean-ups left out of lost), close dates pushed out of this quarter or pulled into it, stage moved up or down, and moved into or out of Commit. Each deal counts once per measure, at its current ARR, for its current owner, comparing where it was at the start of the week with where it is now, so a push that was pulled back, or a stage moved and moved back, does not count. Deals created this week count as created (and as won or lost if they closed); their close-date, stage and Commit changes are left out.',
+  inputs: ['mv_outcomes', 'mv_created', 'mv_close', 'mv_fields', 'roster'],
+  fn: (mv_outcomes, mv_created, mv_close, mv_fields, roster) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const now = new Date();
     const curQ = now.getUTCFullYear() * 10 + Math.floor(now.getUTCMonth() / 3) + 1;
@@ -1658,13 +1659,24 @@ dash.calc('pipe_moves', {
       return m.get(owner);
     };
     for (const r of mv_outcomes) { const o = get(r.owner, r.role, r.manager); if (r.won) { o.won += +r.n || 0; o.wonArr += +r.arr || 0; } else { o.lost += +r.n || 0; o.lostArr += +r.arr || 0; } }
-    for (const r of mv_close) {
+    for (const r of mv_created) {
       const o = get(r.owner, r.role, r.manager);
-      const to = r.toFY * 10 + r.toFQ;
-      if (r.fromFY == null) { o.created += +r.opps || 0; o.createdArr += +r.arr || 0; if (to === curQ) o.createdThisQ += +r.opps || 0; continue; }
-      const from = r.fromFY * 10 + r.fromFQ;
-      if (from === curQ && to !== curQ) { o.pushed += +r.opps || 0; o.pushedArr += +r.arr || 0; }
-      else if (to === curQ && from !== curQ) { o.pulled += +r.opps || 0; o.pulledArr += +r.arr || 0; }
+      o.created += +r.opps || 0; o.createdArr += +r.arr || 0;
+      if (r.toFY * 10 + r.toFQ === curQ) o.createdThisQ += +r.opps || 0;
+    }
+    // one row per deal and from/to quarter: in this quarter before its first move of the week, and after its last?
+    const deals = new Map();
+    for (const r of mv_close) {
+      if (!deals.has(r.oppId)) { deals.set(r.oppId, { start: r, end: r }); continue; }
+      const d = deals.get(r.oppId);
+      if (String(r.firstAt) < String(d.start.firstAt)) d.start = r;
+      if (String(r.lastAt) > String(d.end.lastAt)) d.end = r;
+    }
+    for (const { start, end } of deals.values()) {
+      const wasIn = start.fromFY * 10 + start.fromFQ === curQ, isIn = end.toFY * 10 + end.toFQ === curQ;
+      if (wasIn === isIn) continue;
+      const o = get(end.owner, end.role, end.manager);
+      if (wasIn) { o.pushed += 1; o.pushedArr += +end.arr || 0; } else { o.pulled += 1; o.pulledArr += +end.arr || 0; }
     }
     const per = new Map();
     for (const r of mv_fields) {
@@ -1693,7 +1705,7 @@ dash.calc('pipe_moves', {
 
 dash.calc('moves_kpi', {
   title: 'Pipeline movement headline',
-  description: 'The last 7 days of pipeline movement added up per team, per manager ("M|<manager>", their direct reports) and for all EMEA.',
+  description: 'The last 7 days of pipeline movement added up per team, per manager ("M|<manager>", their direct reports) and for all EMEA, with net Commit ARR (into minus out of Commit) and stage moves (up plus down).',
   inputs: ['pipe_moves'],
   fn: (pipe_moves) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
@@ -1704,6 +1716,7 @@ dash.calc('moves_kpi', {
       const o = { region };
       for (const f of F) o[f] = rs.reduce((s, r) => s + (+r[f] || 0), 0);
       o.netCommitArr = o.intoCommitArr - o.outCommitArr;
+      o.moves = o.up + o.down;
       return o;
     });
   },
@@ -1712,7 +1725,7 @@ dash.calc('moves_kpi', {
 // ===================== COVERAGE =====================
 dash.calc('pipe_cover', {
   title: 'Coverage against usual bookings',
-  description: 'Per team, team and manager, manager ("M|<manager>", direct reports) and all EMEA, New Business and Upsell: average quarterly bookings over the last 4 completed quarters (missing quarters count as 0), won so far this quarter, open pipeline this and next quarter, coverage (open this quarter over what is still to win to reach the usual quarter, open next quarter over a usual quarter), the win rate by ARR over those 4 quarters (admin merges left out; falls back to all EMEA under 10 closed deals), expected close at that win rate, and the average days from creation to win.',
+  description: 'Per team, team and manager, manager ("M|<manager>", direct reports) and all EMEA, New Business and Upsell: average quarterly bookings over the last 4 completed quarters (missing quarters count as 0), won so far this quarter, open pipeline closing this and next quarter (past-due deals from earlier quarters left out, as on Pipeline), coverage (open this quarter over what is still to win to reach the usual quarter, open next quarter over a usual quarter), the win rate by ARR over those 4 quarters (admin merges left out; falls back to all EMEA under 10 closed deals), expected close at that win rate, and the average days from creation to win.',
   inputs: ['coverage_base', 'cycle_team'],
   fn: (coverage_base, cycle_team) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -1732,7 +1745,7 @@ dash.calc('pipe_cover', {
         if (r.closed) {
           if (q >= cur - 4 && q < cur) { if (r.won) { o.wonHist += arr; if (arr > 0) o.histQs.add(q); } else o.lostHist += arr; o.closedN += n; }
           else if (q === cur && r.won) o.wonSoFar += arr;
-        } else if (q <= cur) o.openThis += arr;
+        } else if (q === cur) o.openThis += arr;
         else if (q === cur + 1) o.openNext += arr;
       });
     }

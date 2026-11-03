@@ -703,7 +703,7 @@
         </div>
         <div class="pane" id="pipe-risk">
           <div class="pane-head">
-            <div><h2 class="pane-title">Deal risk per rep</h2><p class="pane-note">Pushed out: the latest close-date change in the last 30 days moved a deal out of this quarter. Re-dates: repeat close-date edits on the same deal in 30 days. Early: stage 0–1 closing this quarter. Score = 3 per past-due + 2 per pushed-out + 1 per early or no-contact + 0.5 per stale deal.</p></div>
+            <div><h2 class="pane-title">Deal risk per rep</h2><p class="pane-note">Pushed out: the latest close-date change in the last 30 days moved a deal out of this quarter. Re-dates: repeat close-date edits on the same deal in 30 days. Early: stage 0–1 closing this quarter. Stuck: closing this or next quarter and in its stage about twice the usual time. Score = 3 per past-due + 2 per pushed-out + 1 per early, no-contact or stuck deal + 0.5 per stale deal.</p></div>
             <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="risk-search" data-search="risk-table" placeholder="Search reps" aria-label="Search reps"></label>
             <button class="ibtn" type="button" data-copy-table="risk-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
           </div>
@@ -782,10 +782,10 @@
           <div class="stat"><span class="stat-label">Lost</span><span class="stat-value"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="lostArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="lost">—</b> deals</span></div>
           <div class="stat"><span class="stat-label">Pushed out of this quarter</span><span class="stat-value"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="pushedArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="pushed">—</b> deals · <b data-draw="kpi-mv" data-source="moves_kpi" data-field="pulled">—</b> pulled in</span></div>
           <div class="stat"><span class="stat-label">Net into Commit</span><span class="stat-value"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="netCommitArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="intoCommit">—</b> in · <b data-draw="kpi-mv" data-source="moves_kpi" data-field="outCommit">—</b> out</span></div>
-          <div class="stat"><span class="stat-label">Stage moves</span><span class="stat-value"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="up">—</b></span><span class="stat-sub"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="up">—</b> up · <b data-draw="kpi-mv" data-source="moves_kpi" data-field="down">—</b> down</span></div>
+          <div class="stat"><span class="stat-label">Stage moves</span><span class="stat-value"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="moves">—</b></span><span class="stat-sub"><b data-draw="kpi-mv" data-source="moves_kpi" data-field="up">—</b> up · <b data-draw="kpi-mv" data-source="moves_kpi" data-field="down">—</b> down</span></div>
         </div>
         <div class="pane" id="mv-pane">
-          <div class="pane-head"><div><h2 class="pane-title">What changed in the last 7 days</h2><p class="pane-note">New Business and Upsell per rep, for the Monday forecast call. Deals count once per column at their current ARR; deals created this week count only as created. Riskiest movement first.</p></div><button class="ibtn" type="button" data-copy-table="mv-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          <div class="pane-head"><div><h2 class="pane-title">What changed in the last 7 days</h2><p class="pane-note">New Business and Upsell per rep, for the Monday forecast call. Each deal counts once per column at its current ARR, comparing where it was at the start of the week with where it is now, so a push that was pulled back doesn't count. Deals created this week count as created (and as won or lost if they closed). Admin merges are left out of lost. Riskiest movement first.</p></div><button class="ibtn" type="button" data-copy-table="mv-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
             <table class="tbl" data-source="pipe_moves" data-row-key="owner">
               <thead><tr>
@@ -840,7 +840,7 @@
                 <th class="num" data-field="openNext">Open next Q</th>
                 <th class="num" data-field="coverageNext">Coverage next Q</th>
                 <th class="num" data-field="winRate">Win rate</th>
-                <th class="num" data-field="expectedThis">Expected this Q</th>
+                <th class="num" data-field="projectedThis">Expected this Q</th>
                 <th class="num" data-field="avgCycleDays">Avg cycle (days)</th>
                 <th data-field="status">Status</th>
               </tr></thead>
@@ -894,7 +894,7 @@
               <p class="os-empty" data-msg-for="deal-table" data-msg="limit" hidden>Showing the 100 largest. Search or pick a flag to narrow it down.</p>
             </div>
           </div>
-          <div class="pane-foot"><p class="pane-note">The 300 largest open New Business and Upsell deals closing this or next quarter (pick the quarter above). Risk adds 3 for past due or Commit at stage 0–2, 2 for early stage closing this quarter or no activity in 30 days, 1 for no next step.</p></div>
+          <div class="pane-foot"><p class="pane-note">The 300 largest open New Business and Upsell deals closing this or next quarter (pick the quarter above). Risk adds 3 for past due or Commit at stage 0–2, 2 for early stage closing this quarter, no activity in 30 days or stuck in stage, 1 for no next step or an overdue one.</p></div>
         </div>
       </div>
     </section>

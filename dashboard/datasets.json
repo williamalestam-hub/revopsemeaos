@@ -442,25 +442,37 @@
  },
  "mv_outcomes": {
   "title": "Won and lost, last 7 days",
-  "description": "EMEA New Business and Upsell deals closed won or lost in the last 7 days (by the date actually closed), per owner, in incremental ARR (USD).",
+  "description": "EMEA New Business and Upsell deals closed won or lost in the last 7 days (by the date actually closed; admin merges and record clean-ups left out of lost), per owner, in incremental ARR (USD).",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, IsWon won, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND IsClosed = true AND Actual_Close_Date__c = LAST_N_DAYS:7 GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, IsWon LIMIT 2000"
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, IsWon won, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND IsClosed = true AND Actual_Close_Date__c = LAST_N_DAYS:7 AND (IsWon = true OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup')) GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, IsWon LIMIT 2000"
+   }
+  }
+ },
+ "mv_created": {
+  "title": "Created, last 7 days",
+  "description": "EMEA New Business and Upsell opportunities created in the last 7 days, per owner and the fiscal quarter they close in, in incremental ARR (USD).",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, FISCAL_YEAR(CloseDate) toFY, FISCAL_QUARTER(CloseDate) toFQ, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arr FROM Opportunity WHERE CreatedDate = LAST_N_DAYS:7 AND RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"
    }
   }
  },
  "mv_close": {
-  "title": "Created and re-dated, last 7 days",
-  "description": "EMEA New Business and Upsell opportunity history in the last 7 days, per owner and from/to fiscal quarter: opportunities created (no previous close date) and open deals whose close date moved out of or into this quarter. ARR is the deal's current incremental ARR (USD).",
+  "title": "Close dates moved across this quarter, last 7 days",
+  "description": "Close-date changes in the last 7 days on open EMEA New Business and Upsell deals created before the window that moved a deal out of this quarter or into it, one row per deal and from/to fiscal quarter with the first and last time it happened, the current owner and the deal's current incremental ARR (USD).",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Opportunity.Owner.Name owner, Opportunity.Owner.UserRole.Name role, Opportunity.Owner.Manager.Name manager, FISCAL_YEAR(PrevCloseDate) fromFY, FISCAL_QUARTER(PrevCloseDate) fromFQ, FISCAL_YEAR(CloseDate) toFY, FISCAL_QUARTER(CloseDate) toFQ, COUNT(Id) n, COUNT_DISTINCT(OpportunityId) opps, SUM(Opportunity.Finance_ARR_USD__c) arr FROM OpportunityHistory WHERE CreatedDate = LAST_N_DAYS:7 AND Opportunity.RecordType.Name IN ('New Business','Upsell') AND Opportunity.Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND (PrevCloseDate = null OR (Opportunity.IsClosed = false AND Opportunity.CreatedDate < LAST_N_DAYS:7 AND ((PrevCloseDate = THIS_FISCAL_QUARTER AND CloseDate > THIS_FISCAL_QUARTER) OR ((PrevCloseDate > THIS_FISCAL_QUARTER OR PrevCloseDate < THIS_FISCAL_QUARTER) AND CloseDate = THIS_FISCAL_QUARTER)))) GROUP BY Opportunity.Owner.Name, Opportunity.Owner.UserRole.Name, Opportunity.Owner.Manager.Name, FISCAL_YEAR(PrevCloseDate), FISCAL_QUARTER(PrevCloseDate), FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"
+    "q": "SELECT OpportunityId oppId, Opportunity.Owner.Name owner, Opportunity.Owner.UserRole.Name role, Opportunity.Owner.Manager.Name manager, FISCAL_YEAR(PrevCloseDate) fromFY, FISCAL_QUARTER(PrevCloseDate) fromFQ, FISCAL_YEAR(CloseDate) toFY, FISCAL_QUARTER(CloseDate) toFQ, MIN(CreatedDate) firstAt, MAX(CreatedDate) lastAt, MAX(Opportunity.Finance_ARR_USD__c) arr FROM OpportunityHistory WHERE CreatedDate = LAST_N_DAYS:7 AND Opportunity.RecordType.Name IN ('New Business','Upsell') AND Opportunity.Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND Opportunity.IsClosed = false AND Opportunity.CreatedDate < LAST_N_DAYS:7 AND ((PrevCloseDate = THIS_FISCAL_QUARTER AND (CloseDate > THIS_FISCAL_QUARTER OR CloseDate < THIS_FISCAL_QUARTER)) OR ((PrevCloseDate > THIS_FISCAL_QUARTER OR PrevCloseDate < THIS_FISCAL_QUARTER) AND CloseDate = THIS_FISCAL_QUARTER)) GROUP BY OpportunityId, Opportunity.Owner.Name, Opportunity.Owner.UserRole.Name, Opportunity.Owner.Manager.Name, FISCAL_YEAR(PrevCloseDate), FISCAL_QUARTER(PrevCloseDate), FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"
    }
   }
  },
@@ -502,13 +514,13 @@
  },
  "coverage_base": {
   "title": "Bookings history and open pipeline",
-  "description": "EMEA New Business and Upsell won and lost in the last 4 completed quarters and this one (admin merges left out of lost), and open pipeline this and next quarter, per owner role, manager and fiscal quarter, in incremental ARR (USD).",
+  "description": "EMEA New Business and Upsell won and lost in the last 4 completed quarters and this one (admin merges left out of lost), and open pipeline closing this and next quarter (deals past due from earlier quarters left out, as on Pipeline), per owner role, manager and fiscal quarter, in incremental ARR (USD).",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, IsClosed closed, IsWon won, FISCAL_YEAR(Actual_Close_Date__c) fy, FISCAL_QUARTER(Actual_Close_Date__c) fq, SUM(Finance_ARR_USD__c) arr, COUNT(Id) n FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND (IsClosed = false OR IsWon = true OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup')) AND (Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER OR Actual_Close_Date__c = NEXT_FISCAL_QUARTER) GROUP BY Owner.UserRole.Name, Owner.Manager.Name, IsClosed, IsWon, FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c) LIMIT 2000"
+    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, IsClosed closed, IsWon won, FISCAL_YEAR(Actual_Close_Date__c) fy, FISCAL_QUARTER(Actual_Close_Date__c) fq, SUM(Finance_ARR_USD__c) arr, COUNT(Id) n FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND (IsClosed = false OR IsWon = true OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup')) AND ((IsClosed = true AND (Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER)) OR (IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER))) GROUP BY Owner.UserRole.Name, Owner.Manager.Name, IsClosed, IsWon, FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c) LIMIT 2000"
    }
   }
  },

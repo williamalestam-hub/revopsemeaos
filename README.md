@@ -74,14 +74,15 @@ Salesforce role and changing scope never re-runs a query.
   are open items from Granola meetings of up to three people they attended, plus items they own by full name.
   A leader's numbers add up everyone below them in Salesforce's manager chain, their own included.
 - **This week (movement)**: the last 7 days, New Business and Upsell, per current owner and at the deal's current
-  ARR. Won and lost count by the date actually closed. Created counts opportunities whose first history row is in the
-  window. Pushed is an open deal whose close date left this quarter; pulled is one whose close date came into it.
-  Stage and Commit compare the first value of the week with the last, so a round trip doesn't count; deals created
-  this week only count as created.
+  ARR. Won and lost count by the date actually closed; admin merges and record clean-ups are left out of lost.
+  Created counts opportunities created in the window (and they still count as won or lost if they closed). Pushed is
+  an open deal that was in this quarter before its first close-date change of the week and is outside it after the
+  last; pulled is the reverse, so a push that was pulled back doesn't count. Stage and Commit compare the first value
+  of the week with the last. Close-date, stage and Commit changes on deals created this week are left out.
 - **Coverage**: there are no quotas in Salesforce, so coverage compares open pipeline with what the team usually
   books: the average won per quarter over the last 4 completed quarters (a quarter with nothing won counts as 0).
-  Coverage this quarter = open this quarter ÷ what is still to win to reach a usual quarter; next quarter = open
-  next quarter ÷ a usual quarter. Win rate is by ARR over the same 4 quarters, admin merges left out, and falls back
+  Coverage this quarter = open closing this quarter ÷ what is still to win to reach a usual quarter; next quarter =
+  open closing next quarter ÷ a usual quarter. Deals past due from earlier quarters are left out, as on Pipeline. Win rate is by ARR over the same 4 quarters, admin merges left out, and falls back
   to all EMEA when a team has fewer than 10 closed deals. Expected close = won so far + open × win rate, an upper
   bound because deals that slip out are not removed. Sales cycle is the average days from creation to win.
 - **Stuck in stage**: an open deal closing this or next quarter that has sat in its stage longer than about twice
