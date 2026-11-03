@@ -1,6 +1,6 @@
 <meta name="dash-one-writer">
 <style>
-  /* Layout: an app shell. Header (brand, search, team and manager switchers) | sticky tab strip with live badges |
+  /* Layout: an app shell. Header (brand, search, scope pill) | sticky glass tab strip with live badges |
      screen | person panel on the right. Screens: header, stat bar, view tabs, then panes. One column when narrow. */
   #dash-root { --dash-gutter: 0; }
   .app { --app-detail: 23rem; --app-tabs-h: 2.75rem; --app-pad-x: clamp(16px, 3vw, 40px); display: block; font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-bg); }
@@ -275,37 +275,245 @@
     .app-main { padding: var(--cds-pad-lg) 16px var(--cds-pad-xl); }
     .app-detail { padding: var(--cds-pad-lg) 16px; }
   }
+
+  /* ===================== The look =====================
+     Accents come from dash.colors (set on .app as --c0…--c7), so light and dark themes both hold. */
+  .app {
+    --acc: var(--c0, var(--color-fg)); --acc2: var(--c2, var(--acc));
+    --grad: linear-gradient(135deg, var(--acc), var(--acc2));
+    --line: color-mix(in srgb, var(--color-fg) 10%, transparent);
+    --soft: color-mix(in srgb, var(--color-fg) 5%, transparent);
+    --softer: color-mix(in srgb, var(--color-fg) 2.5%, transparent);
+    --r: calc(var(--cds-radius) * 2); --r-lg: calc(var(--cds-radius) * 3);
+    --lift: inset 0 1px 0 color-mix(in srgb, var(--color-fg) 5%, transparent), 0 14px 34px -24px color-mix(in srgb, var(--color-fg) 60%, transparent);
+    --app-tabs-h: 3.25rem;
+    background:
+      radial-gradient(70rem 26rem at -10% -12rem, color-mix(in srgb, var(--acc) 20%, transparent), transparent 70%),
+      radial-gradient(60rem 24rem at 110% -14rem, color-mix(in srgb, var(--acc2) 15%, transparent), transparent 70%),
+      var(--color-bg);
+  }
+  .app :focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .app-tab, .vtab, .btn, .ibtn, .fchip, .schip, .hpill, .home-card, .app-search, .scope-btn, .mgr-item, .oo-btn, .itm, .tbl tbody td { transition: background-color var(--cds-dur-slow) var(--cds-ease-out), border-color var(--cds-dur-slow) var(--cds-ease-out), color var(--cds-dur-slow) var(--cds-ease-out), box-shadow var(--cds-dur-slow) var(--cds-ease-out), transform var(--cds-dur-slow) var(--cds-ease-out); }
+  }
+
+  /* header */
+  .app-head { background: transparent; padding: var(--cds-pad-md) var(--app-pad-x) var(--cds-pad-sm); gap: var(--cds-gap-md) var(--cds-gap-lg); position: relative; z-index: 7; }
+  .app-mark { width: 2.25rem; height: 2.25rem; border-radius: calc(var(--cds-radius) * 1.5); background: var(--grad); color: var(--color-bg); box-shadow: 0 10px 22px -12px var(--acc); }
+  .app-mark svg.ic { width: 1.2rem; height: 1.2rem; stroke-width: 2; }
+  .app .app-brand-name b { font-size: 1.05em; letter-spacing: -.01em; }
+  .app-live { display: inline-flex; align-items: center; gap: 6px; }
+  .app-search { min-width: min(21rem, 100%); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--color-panel) 72%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: var(--lift); }
+  .app-search:hover { border-color: color-mix(in srgb, var(--acc) 50%, var(--line)); color: var(--color-fg); }
+  .app kbd { border-radius: 6px; background: var(--soft); border-color: var(--line); }
+  .scope { position: relative; }
+  .scope-btn { display: inline-flex; align-items: center; gap: 8px; max-width: 20rem; padding: 8px 12px 8px 10px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--color-panel) 72%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: var(--lift); cursor: pointer; }
+  .scope-btn:hover { border-color: color-mix(in srgb, var(--acc) 50%, var(--line)); }
+  .scope-btn > svg.ic:first-child { color: var(--acc); }
+  .scope-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: var(--cds-font-weight-medium); }
+  .scope-btn.is-scoped { border-color: color-mix(in srgb, var(--acc) 55%, transparent); background: color-mix(in srgb, var(--acc) 14%, var(--color-panel)); }
+  .scope-btn .chev { color: var(--color-fg-muted); }
+  .scope-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  .scope-pop { position: absolute; right: 0; top: calc(100% + 10px); z-index: 30; width: min(27rem, calc(100vw - 32px)); box-sizing: border-box; display: grid; gap: var(--cds-gap-md); padding: var(--cds-pad-md); background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--r-lg); box-shadow: var(--cds-shadow-popover); }
+  .scope-sec { display: grid; gap: var(--cds-gap-sm); }
+  .scope-h { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .06em; }
+  .scope-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .schip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); cursor: pointer; font-size: var(--cds-font-size-caption); }
+  .schip:hover { border-color: color-mix(in srgb, var(--acc) 50%, var(--line)); }
+  .schip[aria-pressed="true"] { background: var(--grad); color: var(--color-bg); border-color: transparent; font-weight: var(--cds-font-weight-medium); }
+  .app .scope-search input[type="search"] { width: 100%; }
+  .mgr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 15rem; overflow: auto; min-height: 2.5rem; }
+  .mgr-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--cds-radius); background: transparent; cursor: pointer; text-align: left; }
+  .mgr-item:hover { background: var(--soft); }
+  .mgr-item[aria-pressed="true"] { background: color-mix(in srgb, var(--acc) 16%, transparent); }
+  .mgr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mgr-n { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
+  .scope-foot { display: flex; justify-content: flex-end; }
+
+  /* avatars: generated from data-initials, so a name cell still reads as the name */
+  .tbl .lnk[data-initials], .itm-title .lnk[data-initials] { display: inline-flex; align-items: center; text-decoration: none; }
+  .tbl .lnk[data-initials]:hover, .itm-title .lnk[data-initials]:hover { color: var(--acc); }
+  .tbl .lnk[data-initials]::before, .itm-title .lnk[data-initials]::before, .mgr-item[data-initials]::before {
+    content: attr(data-initials); display: inline-grid; place-items: center; flex: none; width: 1.55rem; height: 1.55rem; margin-right: 8px; border-radius: 50%;
+    background: color-mix(in srgb, var(--av, var(--acc)) 28%, var(--color-panel)); color: var(--color-fg); font-size: .66rem; font-weight: var(--cds-font-weight-medium); letter-spacing: .02em;
+  }
+  .mgr-item[data-initials]::before { margin-right: 0; }
+
+  /* tab strip */
+  .app-tabs { gap: 4px; padding: 8px var(--app-pad-x); background: color-mix(in srgb, var(--color-bg) 72%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 -1px 0 var(--line); scrollbar-width: none; }
+  .app-tabs::-webkit-scrollbar { display: none; }
+  .app-tab { min-height: 2.25rem; padding: 0 14px; border-radius: 999px; gap: 8px; }
+  .app-tab:hover { background: var(--soft); }
+  .app-tab[aria-current="page"] { background: color-mix(in srgb, var(--acc) 17%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 34%, transparent); color: var(--color-fg); }
+  .app-tab[aria-current="page"] svg.ic { color: var(--acc); }
+  .app .app-tab:focus-visible { outline-offset: -2px; }
+  .app-tab-sep { margin: 8px 4px; background: var(--line); }
+  .app-badge { min-width: 1.3rem; line-height: 1.3rem; font-size: .7rem; padding: 0 6px; background: color-mix(in srgb, var(--color-bad) 16%, transparent); }
+  .app-badge.info { background: var(--grad); color: var(--color-bg); }
+
+  /* screens */
+  .app-main { padding-top: var(--cds-pad-lg); }
+  .scr-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: calc(var(--cds-font-size-title) * 1.45); letter-spacing: -.025em; line-height: 1.1; }
+  .scr-head p { font-size: 1.02em; }
+  .statbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); gap: var(--cds-gap-sm); border: 0; background: none; overflow: visible; border-radius: 0; }
+  .stat { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--color-panel); box-shadow: var(--lift); padding: var(--cds-pad-md) var(--cds-pad-lg); }
+  .stat::after { content: ""; position: absolute; right: -2.5rem; bottom: -3.5rem; width: 8rem; height: 8rem; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--acc) 18%, transparent), transparent); pointer-events: none; }
+  .stat-value { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: calc(var(--cds-font-size-heading) * 1.4); letter-spacing: -.02em; line-height: 1.15; }
+  .statbar > :nth-child(6n+2), .home-cards > :nth-child(6n+2) { --acc: var(--c1, var(--c0, var(--color-fg))); }
+  .statbar > :nth-child(6n+3), .home-cards > :nth-child(6n+3) { --acc: var(--c2, var(--c0, var(--color-fg))); }
+  .statbar > :nth-child(6n+4), .home-cards > :nth-child(6n+4) { --acc: var(--c3, var(--c0, var(--color-fg))); }
+  .statbar > :nth-child(6n+5), .home-cards > :nth-child(6n+5) { --acc: var(--c4, var(--c0, var(--color-fg))); }
+  .statbar > :nth-child(6n+6), .home-cards > :nth-child(6n+6) { --acc: var(--c5, var(--c0, var(--color-fg))); }
+  .statbar-in { display: flex; gap: 0; border-bottom: 1px solid var(--line); }
+  .statbar-in .stat { border: 0; border-radius: 0; background: transparent; box-shadow: -1px 0 0 var(--line); }
+  .statbar-in .stat::after { display: none; }
+  .vtabs { display: flex; flex-wrap: nowrap; gap: 2px; width: fit-content; max-width: 100%; box-sizing: border-box; padding: 3px; border-radius: 999px; background: var(--soft); box-shadow: inset 0 0 0 1px var(--line); overflow-x: auto; scrollbar-width: none; }
+  .vtabs::-webkit-scrollbar { display: none; }
+  .vtab { padding: 6px 14px; border-radius: 999px; flex: none; }
+  .vtab[aria-selected="true"] { background: var(--color-panel); box-shadow: 0 1px 2px color-mix(in srgb, var(--color-fg) 18%, transparent), inset 0 0 0 1px var(--line); }
+
+  /* panes, lists, tables */
+  .pane { border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--lift); background: var(--color-panel); }
+  .pane-head { border-bottom: 1px solid var(--line); }
+  .pane-title { font-size: 1.02em; letter-spacing: -.01em; }
+  .pane-scroll { border-radius: 0 0 var(--r) var(--r); }
+  .pane-foot { border-top: 1px solid var(--line); }
+  .ilist > li { border-bottom-color: var(--line); }
+  .itm:hover { background: var(--softer); }
+  .ilist .grp { background: color-mix(in srgb, var(--color-panel) 92%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .tbl th { background: color-mix(in srgb, var(--color-panel) 94%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); text-transform: uppercase; letter-spacing: .05em; font-size: .68rem; box-shadow: inset 0 -1px 0 var(--line); }
+  .tbl td { border-bottom-color: var(--line); vertical-align: middle; }
+  .tbl tbody tr:hover td { background: color-mix(in srgb, var(--acc) 6%, transparent); }
+  .os-bar-cell i { background: var(--grad); opacity: .9; border-radius: 999px; height: 6px; }
+  .chip { padding: 2px 9px; background: var(--soft); }
+  .chip.ok { background: color-mix(in srgb, var(--color-ok) 14%, transparent); }
+  .chip.warn { background: color-mix(in srgb, var(--color-warn) 14%, transparent); }
+  .chip.bad { background: color-mix(in srgb, var(--color-bad) 14%, transparent); }
+  .chip.info { background: color-mix(in srgb, var(--acc) 18%, transparent); }
+
+  /* controls */
+  .btn { border-radius: 999px; padding: 6px 14px; border: 1px solid var(--line); background: color-mix(in srgb, var(--color-panel) 82%, transparent); }
+  .btn:hover { border-color: color-mix(in srgb, var(--acc) 50%, var(--line)); }
+  .btn-primary { background: var(--grad); color: var(--color-bg); border-color: transparent; font-weight: var(--cds-font-weight-medium); box-shadow: 0 10px 20px -12px var(--acc); }
+  .btn-primary:hover { border-color: transparent; box-shadow: 0 12px 24px -10px var(--acc); transform: translateY(-1px); }
+  .ibtn { border-radius: 999px; }
+  .ibtn.ask { color: var(--acc); }
+  .ibtn.ask:hover { background: color-mix(in srgb, var(--acc) 16%, transparent); color: var(--acc); }
+  .row-acts { display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: middle; }
+  .ag-acts, .pd-act { display: inline-flex; gap: 2px; align-items: center; }
+  .ag-pt { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .fchip { padding: 5px 12px; border-color: var(--line); background: var(--softer); }
+  .fchip[aria-pressed="true"] { background: color-mix(in srgb, var(--acc) 18%, transparent); color: var(--color-fg); border-color: color-mix(in srgb, var(--acc) 45%, transparent); }
+  .seg { background: var(--soft); border: 0; box-shadow: inset 0 0 0 1px var(--line); padding: 2px; }
+  .seg button { border-radius: 999px; padding: 4px 12px; }
+  .seg button[aria-pressed="true"] { background: var(--color-panel); color: var(--color-fg); box-shadow: 0 1px 2px color-mix(in srgb, var(--color-fg) 18%, transparent); }
+  .app select, .app input[type="search"] { border-radius: 999px; border-color: var(--line); background: var(--soft); padding: 6px 12px; }
+  .app .search input[type="search"] { padding-left: 30px; }
+  .app input[type="search"]:focus-visible, .app select:focus-visible { outline: none; border-color: color-mix(in srgb, var(--acc) 60%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--acc) 20%, transparent); }
+
+  /* home */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr); gap: var(--cds-gap-lg); align-items: stretch; }
+  @container main (max-width: 52rem) { .hero { grid-template-columns: minmax(0, 1fr); } }
+  .hero-main { display: grid; gap: var(--cds-gap-sm); align-content: center; min-width: 0; }
+  .hero-kicker { margin: 0; display: inline-flex; gap: 8px; align-items: center; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .08em; }
+  .hero-title { margin: 0; font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(2.1rem, 5cqi, 3.5rem); letter-spacing: -.035em; line-height: 1.05; background: linear-gradient(100deg, var(--color-fg) 35%, var(--acc) 75%, var(--acc2)); -webkit-background-clip: text; background-clip: text; color: transparent; overflow-wrap: anywhere; }
+  .hero-sub { margin: 0; color: var(--color-fg-muted); font-size: 1.05em; max-width: 60ch; }
+  .hero-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .hpill { display: inline-flex; gap: 6px; align-items: baseline; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--color-panel) 76%, transparent); cursor: pointer; color: var(--color-fg-muted); }
+  .app .hpill b { font-family: var(--font-anthropic-serif); font-size: 1.3em; font-weight: 400; color: var(--color-fg); }
+  .hpill:hover { border-color: color-mix(in srgb, var(--acc) 50%, var(--line)); color: var(--color-fg); transform: translateY(-1px); }
+  .app .hpill.warn b { color: var(--color-warn); }
+  .hero-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .hero-next { position: relative; overflow: hidden; display: grid; gap: var(--cds-gap-sm); align-content: start; padding: var(--cds-pad-lg); border-radius: var(--r-lg); border: 1px solid color-mix(in srgb, var(--acc) 32%, var(--line)); background: linear-gradient(160deg, color-mix(in srgb, var(--acc) 18%, var(--color-panel)), var(--color-panel) 62%); box-shadow: var(--lift); min-width: 0; }
+  .hero-next .card-top { font-size: var(--cds-font-size-caption); text-transform: uppercase; letter-spacing: .08em; color: var(--color-fg-muted); }
+  .nx { display: grid; gap: 4px; min-height: 3rem; }
+  .nx-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding-bottom: 6px; }
+  .nx-av { width: 2.75rem; height: 2.75rem; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--av, var(--acc)) 32%, var(--color-panel)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--av, var(--acc)) 16%, transparent); font-weight: var(--cds-font-weight-medium); }
+  .nx-who { display: grid; min-width: 0; }
+  .app .nx-who b { font-size: 1.12em; font-weight: var(--cds-font-weight-medium); }
+  .nx-who span { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nx-more { display: flex; gap: 10px; align-items: center; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--cds-radius); background: transparent; cursor: pointer; text-align: left; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .nx-more:hover { background: var(--soft); color: var(--color-fg); }
+  .home-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--color-panel); box-shadow: var(--lift); padding: var(--cds-pad-lg); gap: 6px; }
+  .home-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--acc), transparent 80%); }
+  .home-card::after { content: ""; position: absolute; right: -3rem; top: -3rem; width: 9rem; height: 9rem; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--acc) 16%, transparent), transparent); pointer-events: none; }
+  .home-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acc) 45%, var(--line)); }
+  .home-card .card-top svg.ic { color: var(--acc); }
+  .home-card .card-value { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: calc(var(--cds-font-size-title) * 1.4); letter-spacing: -.03em; }
+
+  /* person panel and palette */
+  .app-detail { background: color-mix(in srgb, var(--color-panel) 92%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.3); backdrop-filter: blur(20px) saturate(1.3); border-left: 1px solid var(--line); box-shadow: -24px 0 48px -36px color-mix(in srgb, var(--color-fg) 60%, transparent); }
+  .pd-avatar { width: 3rem; height: 3rem; background: var(--grad); color: var(--color-bg); box-shadow: 0 10px 22px -12px var(--acc); font-size: .95rem; }
+  .pd-sec { border-top-color: var(--line); }
+  .palette-box { border-radius: var(--r-lg); padding: var(--cds-pad-md); }
+  .pal-item { border-radius: calc(var(--cds-radius) * 1.5); }
+  .pal-item:hover, .pal-item:focus-visible { background: color-mix(in srgb, var(--acc) 12%, transparent); }
+  .scope-note { border-radius: 999px; background: color-mix(in srgb, var(--acc) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 25%, transparent); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .scr > * { animation: os-rise var(--cds-dur-slow) var(--cds-ease-out) both; }
+    .scr > :nth-child(2) { animation-delay: 40ms; }
+    .scr > :nth-child(3) { animation-delay: 80ms; }
+    .scr > :nth-child(n+4) { animation-delay: 120ms; }
+    .live-dot { animation: os-pulse 2.4s ease-in-out infinite; }
+    .scope-pop:not([hidden]), .palette:not([hidden]) .palette-box { animation: os-pop var(--cds-dur-slow) var(--cds-ease-out) both; }
+    @keyframes os-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes os-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    @keyframes os-pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+  }
+  @media (max-width: 760px) {
+    .app-head { padding: var(--cds-pad-sm) 16px; }
+    .app-live { display: none; }
+    .app-tools { flex: 1 1 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .app-search { min-width: 0; }
+    .app-search span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .app-search kbd { display: none; }
+    .scope { position: static; }
+    .scope-btn { max-width: 11rem; }
+    .scope-pop { left: 16px; right: 16px; width: auto; top: calc(100% + 2px); }
+    .app-tabs { padding: 6px 12px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 28px), transparent); }
+    .app-tab { padding: 0 12px; }
+  }
 </style>
 
 <div class="app" id="app">
   <!-- ===================== HEADER AND TABS ===================== -->
   <header class="app-head">
     <div class="app-brand">
-      <span class="app-mark" aria-hidden="true"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>
-      <span class="app-brand-name"><b>EMEA RevOps OS</b><span>Sales, people, routing, territory</span></span>
+      <span class="app-mark" aria-hidden="true"><svg class="ic" viewBox="0 0 24 24"><path d="M4 13.5 9 8l4 4 7-7.5"/><path d="M14.5 4.5H20V10"/><path d="M4 20h16"/></svg></span>
+      <span class="app-brand-name"><b>EMEA RevOps OS</b><span class="app-live"><span class="live-dot" aria-hidden="true"></span>Live · Salesforce, LeanData, HiBob, Granola, Calendar</span></span>
     </div>
     <div class="app-tools">
-      <button class="app-search" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><span>Search people, pools, books</span><kbd>Ctrl K</kbd></button>
-      <label class="app-pick">Team
-        <select class="os-region" id="os-region" aria-label="Team">
-          <option value="All">All EMEA</option>
-          <option value="France">France</option>
-          <option value="DACH">DACH</option>
-          <option value="Southern Europe">Southern Europe</option>
-          <option value="Iberia &amp; LATAM">Iberia &amp; LATAM</option>
-          <option value="Benelux">Benelux</option>
-          <option value="Nordics">Nordics</option>
-          <option value="CEE">CEE</option>
-          <option value="MEA">MEA</option>
-          <option value="SMB">SMB</option>
-          <option value="Engagement">Engagement (EM)</option>
-          <option value="BDR">BDR</option>
-          <option value="Leadership">Leadership</option>
-        </select>
-      </label>
-      <label class="app-pick">Manager
-        <select class="os-mgr" id="os-mgr" aria-label="Manager" data-draw="mgr-picker" data-source="roster"></select>
-      </label>
+      <button class="app-search" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><span>Search people, pools, books…</span><kbd>Ctrl K</kbd></button>
+      <div class="scope">
+        <button class="scope-btn" type="button" data-scope-toggle aria-expanded="false" aria-haspopup="dialog" aria-label="Choose a team or manager"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5s1.1-6.1 3.5-8.5"/></svg><span class="scope-lbl" data-draw="scope-label">—</span><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
+        <div class="scope-pop" data-scope-pop role="dialog" aria-label="Team and manager" hidden>
+          <div class="scope-sec">
+            <span class="scope-h">Team</span>
+            <div class="scope-chips">
+            <button class="schip" type="button" data-region="All" aria-pressed="true">All EMEA</button>
+            <button class="schip" type="button" data-region="France" aria-pressed="false">France</button>
+            <button class="schip" type="button" data-region="DACH" aria-pressed="false">DACH</button>
+            <button class="schip" type="button" data-region="Southern Europe" aria-pressed="false">Southern Europe</button>
+            <button class="schip" type="button" data-region="Iberia &amp; LATAM" aria-pressed="false">Iberia &amp; LATAM</button>
+            <button class="schip" type="button" data-region="Benelux" aria-pressed="false">Benelux</button>
+            <button class="schip" type="button" data-region="Nordics" aria-pressed="false">Nordics</button>
+            <button class="schip" type="button" data-region="CEE" aria-pressed="false">CEE</button>
+            <button class="schip" type="button" data-region="MEA" aria-pressed="false">MEA</button>
+            <button class="schip" type="button" data-region="SMB" aria-pressed="false">SMB</button>
+            <button class="schip" type="button" data-region="Engagement" aria-pressed="false">Engagement</button>
+            <button class="schip" type="button" data-region="BDR" aria-pressed="false">BDR</button>
+            <button class="schip" type="button" data-region="Leadership" aria-pressed="false">Leadership</button>
+            </div>
+          </div>
+          <div class="scope-sec">
+            <span class="scope-h">Manager</span>
+            <label class="search scope-search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" data-search="mgr-list" placeholder="Find a manager" aria-label="Find a manager" autocomplete="off"></label>
+            <ul class="mgr-list" data-draw="mgr-list" data-source="roster"></ul>
+          </div>
+          <div class="scope-foot"><button class="btn" type="button" data-scope-reset>Reset to all of EMEA</button></div>
+        </div>
+      </div>
     </div>
   </header>
   <nav class="app-tabs" aria-label="Sections">
@@ -400,15 +608,30 @@
 
     <!-- ===== HOME ===== -->
     <section class="scr" id="home" data-page="home">
-      <header class="scr-head">
-        <div>
-          <h1>Home</h1>
-          <p>What needs you across EMEA pipeline, people, routing and territory, plus the next steps from your meetings.</p>
+      <div class="hero">
+        <div class="hero-main">
+          <p class="hero-kicker"><span class="live-dot" aria-hidden="true"></span><span data-draw="hero-date">—</span></p>
+          <h1 class="hero-title"><span data-hello="morning" hidden>Good morning</span><span data-hello="afternoon" hidden>Good afternoon</span><span data-hello="evening" hidden>Good evening</span><span data-draw="hero-name" data-source="sf_me"></span></h1>
+          <p class="hero-sub">Here's what needs you across EMEA pipeline, people, routing and territory.</p>
+          <div class="hero-pills">
+            <button class="hpill" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="forYou" data-row="0">—</b> next steps for you</button>
+            <button class="hpill" type="button" data-nav="oneonone"><b data-draw="kpi-oo" data-source="oo_kpi" data-field="today" data-row="0">—</b> 1:1s today</button>
+            <button class="hpill warn" type="button" data-nav="actions" data-nav-view="checks"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent data checks</button>
+          </div>
+          <div class="hero-acts">
+            <button class="btn btn-primary" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg>Jump to anything</button>
+            <button class="btn" type="button" data-copy-summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy weekly summary</button>
+          </div>
         </div>
-        <div class="scr-actions">
-          <button class="btn" type="button" data-copy-summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy weekly summary</button>
+        <div class="hero-next" id="home-next">
+          <span class="card-top">Up next · 1:1s</span>
+          <div class="nx" data-draw="home-next" data-source="oo_upcoming"></div>
+          <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-next"></span>
+            <p class="os-empty" data-msg-for="home-next" data-msg="empty" hidden>No 1:1s with a colleague in the next 14 days.</p>
+            <p class="os-empty" data-msg-for="home-next" data-msg="connect" hidden>Connect Google Calendar in your claude.ai connectors to see your next 1:1s here.</p>
+          </div>
         </div>
-      </header>
+      </div>
 
       <div class="home-cards">
         <button class="home-card" type="button" data-nav="pipeline" id="card-pipeline">
@@ -647,7 +870,8 @@
           <div class="pane" id="oo-agenda">
             <div class="pane-head">
               <div><h2 class="pane-title" data-draw="oo-who" data-source="team_tree oo_upcoming">—</h2><p class="pane-note"><span data-draw="oo-when" data-source="oo_upcoming">—</span><span data-oo-note="nobooking" hidden>No 1:1 with them in the next 14 days.</span></p></div>
-              <button class="ibtn" type="button" data-copy-agenda aria-label="Copy agenda" title="Copy the agenda for the invite, your notes or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+              <div class="tools"><button class="btn btn-primary" type="button" data-ask-agenda><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>Send to Claude</button><span data-draw="oo-mail" data-source="oo_points oo_followups"></span>
+              <button class="ibtn" type="button" data-copy-agenda aria-label="Copy agenda" title="Copy the agenda for the invite, your notes or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
             </div>
             <div class="pane-body ag">
               <p class="pd-note" data-oo-note="pick" hidden>Pick a 1:1 or a person to see their agenda.</p>
@@ -1577,7 +1801,8 @@
 
     <p class="toast" data-toast="ok" role="status" hidden>Copied to clipboard</p>
     <p class="toast" data-toast="fail" role="status" hidden>Couldn't copy. Select the text and copy it instead.</p>
-    <p class="app-foot"><span class="live-dot" aria-hidden="true"></span><span>Live from Salesforce, LeanData, HiBob and Granola. Every number uses your own access.</span></p>
+    <p class="toast" data-toast="asked" role="status" hidden>Handed to Claude. Check your conversation.</p>
+    <p class="toast" data-toast="askfail" role="status" hidden>Couldn't reach Claude. Open the chat beside the dashboard and try again.</p>
   </main>
 
   <!-- ===================== PERSON PANEL ===================== -->
@@ -1694,6 +1919,7 @@
       </div>
     </section>
     <div class="pd-actions">
+      <span class="pd-act" data-draw="pd-act" data-source="person users_all"></span>
       <button class="btn" type="button" data-prep-oo><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>Prep a 1:1</button>
       <button class="btn" type="button" data-copy-person-id><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy Salesforce user ID</button>
     </div>

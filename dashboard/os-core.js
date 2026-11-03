@@ -280,10 +280,14 @@ window.OS = (() => {
     if (text != null) n.textContent = text;
     return n;
   };
+  const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+  const hue = (name) => { let h = 0; for (const ch of String(name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return dash.colors[h % dash.colors.length]; };
   const personBtn = (name, label) => {
     const b = el('button', 'lnk', label == null ? name : label);
     b.type = 'button';
     b.dataset.person = name;
+    b.dataset.initials = initials(name);
+    b.style.setProperty('--av', hue(name));
     return b;
   };
   const icon = (paths) => {
@@ -301,6 +305,9 @@ window.OS = (() => {
     go: ['m9 6 6 6-6 6'],
     check: ['m5.5 12.5 4 4 9-9.5'],
     agenda: ['M9 6h11', 'M9 12h11', 'M9 18h11', 'M4.5 6h.01', 'M4.5 12h.01', 'M4.5 18h.01'],
+    spark: ['M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z', 'M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z'],
+    mail: ['M4 6h16v12H4z', 'm4 7 8 6 8-6'],
+    ext: ['M14 4h6v6', 'M20 4l-9 9', 'M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'],
   };
 
   const searchFilter = (name, list, fields) => {
@@ -557,7 +564,77 @@ window.OS = (() => {
     });
   };
 
-  return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, icon, ICON, defTable, defList, defChart, drawMsg, redraw, tableText, vbars, hbars, searchFilter };
+  return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, initials, hue, icon, ICON, defTable, defList, defChart, drawMsg, redraw, tableText, vbars, hbars, searchFilter };
+})();
+
+// ---------- Acting on things ----------
+// "Ask Claude" hands a request to the viewer's own Claude beside this page (room.sendToClaudeSession, from their
+// click; the platform asks them to confirm). The page itself never writes to Salesforce, LeanData, mail or calendars.
+OS.ask = (() => {
+  let room = null, mode = 'off';
+  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act'];
+  const refresh = async () => {
+    if (!room || typeof room.canSendToClaudeSession !== 'function') return;
+    let m = 'off';
+    try { m = await room.canSendToClaudeSession(); } catch (e) { m = 'off'; }
+    if (m !== mode) { mode = m; DRAWS.forEach((n) => dash.draw(n)); }
+  };
+  (async () => {
+    try {
+      const c = window.claude;
+      if (!c || typeof c.use !== 'function') return;
+      room = await c.use('room');
+      await refresh();
+    } catch (e) { room = null; }
+  })();
+  const RULES = 'Sent from a button on the EMEA RevOps OS dashboard, as the viewer asking for help with this item. Before changing anything in Salesforce, LeanData, Slack, email or calendars, show exactly what you would change or send and wait for their OK; for Salesforce writes use the salesforce-ai-crud skill.';
+  const clip = (t, n) => {
+    let x = '';
+    for (const ch of String(t == null ? '' : t)) {
+      const c = ch.codePointAt(0);
+      const bad = (c < 32 && c !== 9 && c !== 10 && c !== 13) || (c >= 127 && c < 160) || c === 173 || (c >= 0x200b && c <= 0x200f)
+        || (c >= 0x2028 && c <= 0x202e) || (c >= 0x2060 && c <= 0x206f) || c === 0xfeff || (c >= 0xe000 && c <= 0xf8ff);
+      if (!bad) x += ch;
+    }
+    return x.length > n ? x.slice(0, n - 1) + '\u2026' : x;
+  };
+  return {
+    can: () => !!room && (mode === 'available' || mode === 'available_if_summoned'),
+    refresh,
+    data: (label, ask, extra) => {
+      const d = { label: clip(label, 120), source: 'EMEA RevOps OS', ask: clip(ask, 2600), rules: RULES };
+      for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '') d[k] = typeof v === 'string' ? clip(v, 300) : v;
+      return d;
+    },
+    // call straight from the click handler, nothing awaited before it
+    send: (data) => (room && typeof room.sendToClaudeSession === 'function' ? room.sendToClaudeSession(data, { deliver: 'send' }) : Promise.reject(new Error('unavailable'))),
+  };
+})();
+OS.links = (() => {
+  const SF = 'https://legora.lightning.force.com/lightning/r/';
+  const a = (href, label, icon, cls) => {
+    const x = OS.el('a', 'ibtn' + (cls ? ' ' + cls : ''));
+    x.href = href;
+    if (!/^mailto:/.test(href)) { x.target = '_blank'; x.rel = 'noopener'; }
+    x.setAttribute('aria-label', label);
+    x.title = label;
+    x.appendChild(OS.icon(icon));
+    return x;
+  };
+  return {
+    sf: (object, id) => (id && /^[A-Za-z0-9]{15,18}$/.test(String(id)) ? a(SF + object + '/' + id + '/view', 'Open in Salesforce', OS.ICON.ext) : null),
+    mail: (email, subject, body) => (email && /^[^\s@]+@[^\s@]+$/.test(email) ? a('mailto:' + encodeURIComponent(email).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(String(body || '').slice(0, 1800)), 'Email ' + email, OS.ICON.mail) : null),
+    ask: (data) => {
+      if (!OS.ask.can()) return null;
+      const b = OS.el('button', 'ibtn ask');
+      b.type = 'button';
+      b.dataset.ask = JSON.stringify(data);
+      b.setAttribute('aria-label', 'Ask Claude: ' + data.label);
+      b.title = 'Ask Claude to help with this';
+      b.appendChild(OS.icon(OS.ICON.spark));
+      return b;
+    },
+  };
 })();
 
 // ---------- Completed next steps ----------
@@ -728,7 +805,8 @@ OS.oo = (() => {
   let toastTimer = null;
   const toast = (ok, from) => {
     const scope = (from && from.closest('.app-detail')) ? '.app-detail' : '.app-main';
-    document.querySelectorAll('[data-toast]').forEach((t) => { t.hidden = !(t.closest(scope) && t.dataset.toast === (ok ? 'ok' : 'fail')); });
+    const kind = typeof ok === 'string' ? ok : ok ? 'ok' : 'fail';
+    document.querySelectorAll('[data-toast]').forEach((t) => { t.hidden = !(t.closest(scope) && t.dataset.toast === kind); });
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => document.querySelectorAll('[data-toast]').forEach((t) => { t.hidden = true; }), 2200);
   };
@@ -806,11 +884,36 @@ OS.oo = (() => {
     return all.filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region) && (area === 'All' || c.area === area))
       .map((c) => `- [ ] ${c.title}: ${c.what}${c.meta ? ' (' + c.meta + ')' : ''}`).join('\n');
   };
+  const scopeOpen = (open) => {
+    document.querySelectorAll('[data-scope-pop]').forEach((p) => { p.hidden = !open; });
+    document.querySelectorAll('[data-scope-toggle]').forEach((b) => b.setAttribute('aria-expanded', String(!!open)));
+    if (open) requestAnimationFrame(() => document.querySelectorAll('[data-scope-pop] .schip[aria-pressed="true"]').forEach((c) => c.focus({ preventScroll: true })));
+  };
   const syncCopyList = () => document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
+    if (!e.target.closest('.scope')) scopeOpen(false);
+    const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
     if (!t) return;
+    if (t.matches('[data-ask]')) {
+      let data = null;
+      try { data = JSON.parse(t.dataset.ask); } catch (err) { data = null; }
+      if (!data) return;
+      OS.ask.send(data).then(() => toast('asked', t), () => toast('askfail', t));
+      return;
+    }
+    if (t.matches('[data-ask-agenda]')) {
+      const text = OS.oo.text();
+      if (!text) { toast(false, t); return; }
+      const who = OS.oo.who();
+      OS.ask.send(OS.ask.data('1:1 agenda for ' + OS.oo.nameOf(who), 'Here is my agenda for the 1:1 with ' + OS.oo.nameOf(who) + '. Offer to add it to the calendar invite or to send it to them on Slack, and ask me which before doing either.\n\n' + text, { person: OS.oo.nameOf(who), email: who }))
+        .then(() => toast('asked', t), () => toast('askfail', t));
+      return;
+    }
+    if (t.matches('[data-scope-toggle]')) { scopeOpen(t.getAttribute('aria-expanded') !== 'true'); return; }
+    if (t.matches('[data-region]')) { dash.setParams({ region: t.dataset.region || 'All', mgr: '' }); return; }
+    if (t.matches('[data-mgr]')) { dash.setParams({ mgr: t.dataset.mgr || '' }); scopeOpen(false); return; }
+    if (t.matches('[data-scope-reset]')) { dash.setParams({ region: 'All', mgr: '' }); scopeOpen(false); return; }
     if (t.matches('[data-done-key]')) { OS.done.toggle(t.dataset.doneKey); syncCopyList(); return; }
     if (t.matches('[data-oo-who]')) { dash.setParams({ ooWho: t.dataset.ooWho }); if (screen !== 'oneonone' || view.oneonone !== 'upcoming') go('oneonone', 'upcoming'); return; }
     if (t.matches('[data-prep-oo]')) { const n = dash.params().person; if (n) { dash.setParams({ ooWho: 'n:' + n, person: '' }); go('oneonone', 'upcoming'); } return; }
@@ -885,6 +988,7 @@ OS.oo = (() => {
       }
     }
     if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-8]$/.test(e.key)) { go(SCREENS[+e.key - 1]); return; }
+    if (e.key === 'Escape' && [...document.querySelectorAll('[data-scope-pop]')].some((p) => !p.hidden)) { scopeOpen(false); document.querySelectorAll('[data-scope-toggle]').forEach((b) => b.focus()); return; }
     if (e.key === 'Escape' && dash.params().person) closePanel();
   });
   document.querySelectorAll('.os-region').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ region: sel.value || 'All', mgr: '' })));
@@ -945,7 +1049,16 @@ OS.oo = (() => {
     document.querySelectorAll('.os-only-missing').forEach((c) => { c.checked = !!p.onlyMissing; });
     document.querySelectorAll('.os-orphan-reason').forEach((s) => { s.value = p.orphanReason || ''; });
     document.querySelectorAll('.os-sw[data-color]').forEach((sw) => { sw.style.background = dash.colors[+sw.dataset.color]; });
-    document.querySelectorAll('.app').forEach((a) => a.style.setProperty('--app-accent', dash.colors[0]));
+    document.querySelectorAll('.app').forEach((a) => {
+      a.style.setProperty('--app-accent', dash.colors[0]);
+      dash.colors.forEach((c, i) => a.style.setProperty('--c' + i, c));
+    });
+    document.querySelectorAll('.schip[data-region]').forEach((b) => b.setAttribute('aria-pressed', String(!p.mgr && b.dataset.region === (p.region || 'All'))));
+    document.querySelectorAll('[data-scope-toggle]').forEach((b) => b.classList.toggle('is-scoped', !!p.mgr || (p.region || 'All') !== 'All'));
+    const hr = new Date().getHours();
+    const part = hr < 12 ? 'morning' : hr < 18 ? 'afternoon' : 'evening';
+    document.querySelectorAll('[data-hello]').forEach((h) => { h.hidden = h.dataset.hello !== part; });
+    OS.ask.refresh();
     syncCopyList();
     // person panel notes and copy button, only while the panel is open
     if (p.person) {

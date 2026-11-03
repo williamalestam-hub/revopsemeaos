@@ -1377,8 +1377,8 @@ dash.calc('oo_points', {
       for (const d of deal_list.filter((x) => inT.has(x.owner) && x.risk >= 3).sort((a, b) => b.arrUsd - a.arrUsd).slice(0, 3)) {
         push('talk', 'medium', 'Deal: ' + d.opp + ' (' + usd(d.arrUsd) + ', ' + d.stage + ', closes ' + day(d.closeDate) + (lead ? ', ' + d.owner : '') + '): ' + d.flags + '.', { screen: 'pipeline', view: 'deals', oppId: d.oppId });
       }
-      for (const r of renewal_list.filter((x) => inT.has(x.owner) && (x.rating === 'HIGH' || x.netChangeArrUsd < 0)).sort((a, b) => b.renewingArrUsd - a.renewingArrUsd).slice(0, 2)) {
-        push('talk', r.rating === 'HIGH' ? 'high' : 'medium', 'Renewal: ' + r.opp + ' (' + usd(r.renewingArrUsd) + ', closes ' + day(r.closeDate) + (lead ? ', ' + r.owner : '') + ')' + (r.rating === 'HIGH' ? ' rated HIGH risk' : '') + (r.netChangeArrUsd < 0 ? (r.rating === 'HIGH' ? ' and' : '') + ' downselling ' + usd(r.netChangeArrUsd) : '') + '.', { screen: 'pipeline', view: 'renewals', oppId: r.oppId });
+      for (const r of renewal_list.filter((x) => inT.has(x.owner) && (x.rating === 'High' || x.netChangeArrUsd < 0)).sort((a, b) => b.renewingArrUsd - a.renewingArrUsd).slice(0, 2)) {
+        push('talk', r.rating === 'High' ? 'high' : 'medium', 'Renewal: ' + r.opp + ' (' + usd(r.renewingArrUsd) + ', closes ' + day(r.closeDate) + (lead ? ', ' + r.owner : '') + ')' + (r.rating === 'High' ? ' rated high risk' : '') + (r.netChangeArrUsd < 0 ? (r.rating === 'High' ? ' and' : '') + ' downselling ' + usd(r.netChangeArrUsd) : '') + '.', { screen: 'pipeline', view: 'renewals', oppId: r.oppId });
       }
       // routing
       const gaps = rr_people.filter((r) => inT.has(r.name) && (r.status === 'Missing' || r.status === 'New joiner: overdue'));
@@ -1438,5 +1438,22 @@ dash.calc('book_moves', {
       }
     }
     return out;
+  },
+});
+
+dash.calc('oo_kpi', {
+  title: '1:1s headline',
+  description: 'How many 1:1s with a colleague you have today (your local date) and in the next 7 and 14 days.',
+  inputs: ['oo_upcoming'],
+  fn: (oo_upcoming) => {
+    const now = new Date();
+    const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const today = day(now);
+    const at = (r) => { const d = new Date(r.start); return Number.isNaN(+d) ? null : day(d); };
+    return [{
+      today: oo_upcoming.filter((r) => at(r) === today).length,
+      week: oo_upcoming.filter((r) => at(r) != null && at(r) - today < 7 * 864e5).length,
+      total: oo_upcoming.length,
+    }];
   },
 });

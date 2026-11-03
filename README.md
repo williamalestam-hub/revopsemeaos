@@ -7,13 +7,18 @@ Every number is a live connector call made with the reader's own access when the
 Data comes from **Salesforce** (including LeanData's round-robin objects, which live in Salesforce),
 **HiBob** and **Granola**. Nothing is copied into the page.
 
-The app has a header (team and manager switchers, Ctrl K search), a tab strip across the top with
-live count badges, screens with view tabs, and a person panel: click any name to see that person's
+The app has a header (Ctrl K search and one scope pill that opens team chips and a manager search), a
+glass tab strip across the top with live count badges, a Home hero (greeting, your next 1:1, what needs you), screens with view tabs, and a person panel: click any name to see that person's
 pipeline, open deals with risk flags, created opps, book, routing pools, HiBob details and, for a
 manager, their team (with a "Prep a 1:1" button).
 
 **Working with it**
-- **Team / Manager**: pick a team or one manager; stats, tables and charts follow (Created trends stay all EMEA).
+- **Scope pill**: pick a team or one manager; stats, tables and charts follow (Created trends stay all EMEA).
+- **Act from the app**: the sparkle button on a next step, data check, talking point, deal or person hands a
+  ready-made request to *your* Claude beside the dashboard (the platform asks you to confirm first); Claude then
+  drafts the message, proposes the Salesforce or LeanData fix and waits for your OK before writing anything.
+  Deals and people also open straight in Salesforce, and next steps owned by someone else get an email nudge.
+  The dashboard itself never writes to Salesforce, LeanData, mail or calendars.
 - **Search (Ctrl K or /)**: jump to any person, routing pool, account book or view. Keys 1–8 switch screens,
   and the link follows you (`#pipeline-deals` opens that view).
 - **Tick off next steps**: the circle in front of an action item marks it done; it leaves your lists and

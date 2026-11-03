@@ -43,6 +43,16 @@ const grCount = (el) => {
   el.dataset.field = f; el.dataset.row = '0';
   return +firstRow('gr_kpi')[f] || 0;
 };
+// who someone is in Salesforce, by name (full name, then first + last), for an email link
+const emailOf = (name) => {
+  if (!name) return null;
+  const rows = OS.oo.rowsOf('users_all');
+  const t = (x) => String(x || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const want = t(name);
+  const hit = rows.find((u) => t(u.name).join(' ') === want.join(' ')) || (want.length > 1 ? rows.find((u) => { const v = t(u.name); return v[0] === want[0] && v[v.length - 1] === want[want.length - 1]; }) : null);
+  return hit && hit.email ? String(hit.email).toLowerCase() : null;
+};
+const firstName = (name) => String(name || '').split(/\s+/)[0] || '';
 // a check button that ticks an action item off (kept per viewer); a plain dot where ticking isn't available
 const doneBtn = (r) => {
   const k = OS.done.keyOf(r);
@@ -187,6 +197,15 @@ const actionItem = (r, byOwner) => {
   else if (r.due) meta.append(OS.el('span', 'chip', 'Due ' + OS.shortDay(r.due)));
   if (r.ageDays != null && r.ageDays >= 14) meta.append(OS.el('span', 'chip warn', Math.floor(r.ageDays / 7) + 'w old'));
   else meta.append(OS.el('span', null, ago(r.ageDays)));
+  const ask = OS.links.ask(OS.ask.data('Next step: ' + r.item,
+    'Help me get this next step done: "' + r.item + '"' + (r.owner ? ', owner ' + r.owner : '') + (r.due ? ', due ' + r.due : '') + '. It came from the meeting "' + r.meeting + '" on ' + r.date + (r.url ? ' (Granola note ' + r.url + ')' : '') + '. Work out what doing it takes (a message, an email, a Salesforce update or a task) and draft it for me.',
+    { kind: 'next_step', meeting: r.meeting, date: r.date, owner: r.owner, note: r.url }));
+  if (ask) meta.append(ask);
+  if (r.bucket === 'others' && r.owner) {
+    const em = emailOf(r.owner);
+    const mail = em ? OS.links.mail(em, 'Follow-up: ' + r.item, 'Hi ' + firstName(r.owner) + ',\n\nFollowing up on this from "' + r.meeting + '" (' + OS.shortDay(r.date) + '):\n\n- ' + r.item + (r.due ? ' (due ' + OS.shortDay(r.due) + ')' : '') + '\n\nHow is it going?\n') : null;
+    if (mail) meta.append(mail);
+  }
   const cp = OS.el('button', 'ibtn');
   cp.type = 'button';
   cp.setAttribute('aria-label', 'Copy item');
@@ -269,6 +288,13 @@ const checkItem = (c) => {
   if (c.screen === 'pipeline') go.dataset.navView = 'reps';
   if (c.screen === 'hiring') go.dataset.navView = 'joiners';
   go.appendChild(OS.icon(OS.ICON.go));
+  const how = c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
+    : c.area === 'Pipeline' ? ' Pull their past-due opportunities and propose a new close date, stage or closing each one.'
+    : c.area === 'Books' ? ' List the accounts behind it and propose who should own them.'
+    : c.area === 'Hiring' ? ' Compare their HiBob record with their Salesforce user (role, manager, active) and propose the fix.' : '';
+  const ask = OS.links.ask(OS.ask.data('Fix: ' + c.title + ' (' + c.what + ')', 'Help me fix this data check from the EMEA RevOps OS. ' + c.area + ': ' + c.title + ': ' + c.what + (c.meta ? ' (' + c.meta + ')' : '') + '.' + how,
+    { kind: 'data_check', area: c.area, severity: c.severity, person: c.person, manager: c.manager }));
+  if (ask) meta.append(ask);
   meta.append(go);
   li.append(OS.el('span', 'itm-dot ' + c.severity), main, meta);
   return li;
@@ -431,22 +457,40 @@ dash.draw('pd-pools', (el) => {
 });
 
 // ===================== MANAGER PICKER =====================
-dash.draw('mgr-picker', (sel) => {
-  const s = OS.state('roster');
+const TEAM_OF = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
+dash.draw('mgr-list', (ul) => {
+  const s0 = OS.state('roster');
   const region = OS.region();
-  const teamOf = (role) => ({ 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' })[role] || 'Other';
   const counts = new Map();
-  for (const u of s === 'ok' ? dash.data('roster').data || [] : []) {
+  for (const u of s0 === 'ok' ? dash.data('roster').data || [] : []) {
     if (!u.isActive || !u.manager) continue;
-    if (region !== 'All' && teamOf(u.role) !== region) continue;
+    if (region !== 'All' && (TEAM_OF[u.role] || 'Other') !== region) continue;
     counts.set(u.manager, (counts.get(u.manager) || 0) + 1);
   }
-  const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+  const q = String(OS.queries['mgr-list'] || '').trim().toLowerCase();
   const cur = mgrPick();
-  if (cur && !counts.has(cur)) names.unshift(cur);
-  sel.replaceChildren(new Option(s === 'ok' ? 'All managers' : 'Loading managers…', ''), ...names.map((n) => new Option(counts.has(n) ? n + ' (' + counts.get(n) + ')' : n, n)));
-  sel.value = cur;
-  sel.disabled = s !== 'ok';
+  const names = [...counts.keys()].filter((n) => !q || n.toLowerCase().includes(q)).sort((a, b) => a.localeCompare(b));
+  const item = (name, label, n) => {
+    const li = OS.el('li');
+    const b = OS.el('button', 'mgr-item');
+    b.type = 'button';
+    b.dataset.mgr = name;
+    b.setAttribute('aria-pressed', String(name === cur));
+    if (name) { b.dataset.initials = OS.initials(name); b.style.setProperty('--av', OS.hue(name)); }
+    b.append(OS.el('span', 'mgr-name', label));
+    if (n != null) b.append(OS.el('span', 'mgr-n', String(n)));
+    li.append(b);
+    return li;
+  };
+  if (s0 !== 'ok') { ul.replaceChildren(); ul.classList.toggle('dash-skeleton', s0 === 'loading'); return; }
+  ul.classList.remove('dash-skeleton');
+  ul.replaceChildren(...(q ? [] : [item('', 'Everyone in the team', null)]), ...names.map((n) => item(n, n, counts.get(n))));
+});
+dash.draw('scope-label', (el) => {
+  const m = mgrPick();
+  if (m) { el.textContent = m + "'s team"; return; }
+  const chip = [...document.querySelectorAll('.schip[data-region]')].find((c) => c.dataset.region === OS.region());
+  el.textContent = chip ? chip.textContent : OS.region();
 });
 
 // ===================== TEAM IN THE PERSON PANEL =====================
@@ -516,12 +560,20 @@ OS.defList('home-pooladds', ['pool_adds'], () => dash.data('pool_adds').data || 
 
 // ===================== DEALS =====================
 const flagCls = (f) => (f === 'Past due' || f === 'Commit at early stage' ? 'bad' : f === 'No next step' ? '' : 'warn');
+const dealActs = (r) => {
+  const box = OS.el('span', 'row-acts');
+  const sf = OS.links.sf('Opportunity', r.oppId);
+  if (sf) box.append(sf);
+  const ask = OS.links.ask(OS.ask.data('Deal: ' + r.opp, 'Review this opportunity and propose hygiene fixes (close date, stage, amount, next step): ' + r.opp + ' (' + r.oppId + '), owner ' + (r.owner || 'unknown') + ', stage ' + r.stage + ', closes ' + r.closeDate + (r.forecast ? ', forecast ' + r.forecast : '') + (r.flags ? '. Flags: ' + r.flags : '') + '.', { kind: 'deal', oppId: r.oppId, owner: r.owner }));
+  if (ask) box.append(ask);
+  return box.children.length ? box : null;
+};
 OS.defTable('deal-table', ['deal_list'], () => {
   const pq = dash.params().pq === 'next' ? 'next' : 'this';
   const flag = dash.params().dealFlag || '';
   return (dash.data('deal_list').data || []).filter((x) => x.quarter === pq && inTeam(x) && (!flag || x.flags.split(', ').includes(flag)));
 }, [
-  { f: 'opp', wrap: true }, { f: 'owner', person: (r) => r.owner }, { f: 'stage' },
+  { f: 'opp', wrap: true, after: (r) => dealActs(r) }, { f: 'owner', person: (r) => r.owner }, { f: 'stage' },
   { f: 'closeDate', fmt: OS.shortDay }, { f: 'forecast' },
   { f: 'arrUsd', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.arrUsd) },
   { f: 'flags', chips: flagCls }, { f: 'risk', fmt: OS.num, num: true },
@@ -539,6 +591,8 @@ OS.defList('pd-deals', ['person_deals'], () => dash.data('person_deals').data ||
   if (x.flags) main.append(flags);
   const meta = OS.el('div', 'itm-meta');
   meta.append(OS.el('span', 'itm-arr', OS.usd(x.arrUsd)));
+  const acts = dealActs(x);
+  if (acts) meta.append(acts);
   const cp = OS.el('button', 'ibtn');
   cp.type = 'button';
   cp.setAttribute('aria-label', 'Copy opportunity ID');
@@ -578,7 +632,7 @@ OS.defTable('renew-table', ['renewal_list'], () => {
   const flag = dash.params().renewFlag || '';
   return (dash.data('renewal_list').data || []).filter((x) => x.quarter === pq && inTeam(x) && (!flag || x.flags.split(', ').includes(flag)));
 }, [
-  { f: 'opp', wrap: true }, { f: 'owner', person: (r) => r.owner }, { f: 'stage' },
+  { f: 'opp', wrap: true, after: (r) => OS.links.sf('Opportunity', r.oppId) }, { f: 'owner', person: (r) => r.owner }, { f: 'stage' },
   { f: 'closeDate', fmt: OS.shortDay }, { f: 'daysToClose', fmt: OS.num, num: true, cls: (v) => (v < 0 ? 'os-bad' : v <= 30 ? 'os-warn' : '') },
   { f: 'rating', chip: (v) => (v === 'High' ? 'bad' : v === 'Medium' ? 'warn' : v === 'Low' ? 'ok' : '') },
   { f: 'renewingArrUsd', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.renewingArrUsd) },
@@ -713,6 +767,8 @@ OS.defList('oo-follow', ['oo_followups'], ooFollow, (rows) => rows.map((r) => {
   const meta = OS.el('div', 'itm-meta');
   meta.append(ownerChip(r));
   if (r.dueStatus) meta.append(OS.el('span', 'chip ' + (r.dueStatus === 'Overdue' ? 'bad' : 'warn'), r.dueStatus + ' · ' + OS.shortDay(r.due)));
+  const ask = OS.links.ask(OS.ask.data('Follow-up: ' + r.item, 'Before my 1:1 with ' + OS.oo.nameOf(r.email) + ', help me close out this follow-up: "' + r.item + '"' + (r.owner ? ' (owner ' + r.owner + ')' : '') + ' from "' + r.meeting + '" on ' + r.date + (r.url ? ' (Granola note ' + r.url + ')' : '') + '. Draft what is needed.', { kind: 'follow_up', person: OS.oo.nameOf(r.email) }));
+  if (ask) meta.append(ask);
   li.append(doneBtn(r), main, meta);
   return li;
 }), { msg: () => (!OS.oo.who() ? 'nowho' : ooFollow().length ? null : 'empty') });
@@ -723,6 +779,12 @@ OS.defList('oo-talk', ['oo_points'], ooPoints('talk'), (rows) => rows.map((r) =>
   const li = OS.el('li', 'ag-pt');
   li.dataset.key = r.key;
   li.append(OS.el('span', 'itm-dot ' + (r.sev || 'low')), OS.el('span', 'ag-txt', r.text));
+  const acts = OS.el('span', 'ag-acts');
+  const ask = OS.links.ask(OS.ask.data('1:1 point: ' + r.text, 'I have a 1:1 with ' + r.name + '. Help me prepare this point from the EMEA RevOps OS: ' + r.text + ' Pull the records behind it and suggest what to ask or agree.', { kind: 'talking_point', person: r.name }));
+  if (ask) acts.append(ask);
+  const sf = r.oppId ? OS.links.sf('Opportunity', r.oppId) : null;
+  if (sf) acts.append(sf);
+  li.append(acts);
   if (r.screen) {
     const go = OS.el('button', 'ibtn');
     go.type = 'button';
@@ -805,3 +867,58 @@ OS.defTable('bk-plan-table', ['book_moves'], () => (dash.data('book_moves').data
   { f: 'teamMedian', fmt: (v) => (v == null ? '—' : OS.num(Math.round(v))), num: true },
   { f: 'note', cls: (v) => (v ? 'os-warn' : '') },
 ], { key: 'key' });
+
+// ===================== HOME HERO =====================
+dash.draw('hero-date', (el) => { el.textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); });
+dash.draw('hero-name', (el) => {
+  const me = OS.state('sf_me') === 'ok' ? (dash.data('sf_me').data || [])[0] : null;
+  el.textContent = me && me.name ? ', ' + firstName(me.name) : '';
+});
+dash.draw('kpi-oo', (el) => OS.value(el, ['oo_kpi'], () => OS.num(firstRow('oo_kpi')[el.dataset.field] || 0)));
+OS.defList('home-next', ['oo_upcoming'], () => (dash.data('oo_upcoming').data || []).slice(0, 4), (rows) => {
+  const r = rows[0];
+  if (!r) return [];
+  const av = OS.el('span', 'nx-av', OS.initials(r.name));
+  av.style.setProperty('--av', OS.hue(r.name));
+  const who = OS.el('div', 'nx-who');
+  who.append(OS.el('b', null, r.name), OS.el('span', null, OS.oo.when(r) + ' · ' + r.title));
+  const go = OS.el('button', 'btn btn-primary');
+  go.type = 'button';
+  go.dataset.ooWho = r.email;
+  go.appendChild(OS.icon(OS.ICON.agenda));
+  go.append(document.createTextNode('Agenda'));
+  const head = OS.el('div', 'nx-row');
+  head.append(av, who, go);
+  const rest = rows.slice(1).map((x) => {
+    const b = OS.el('button', 'nx-more');
+    b.type = 'button';
+    b.dataset.ooWho = x.email;
+    b.append(OS.el('span', 'oo-time', OS.oo.when(x)), OS.el('span', null, x.name));
+    return b;
+  });
+  return [head, ...rest];
+});
+
+
+// ===================== PERSON PANEL ACTIONS =====================
+dash.draw('pd-act', (box) => {
+  const n = dash.params().person;
+  const p = n && OS.state('person') === 'ok' ? (dash.data('person').data || []).find((r) => r.name === n) : null;
+  const out = [];
+  const em = n ? emailOf(n) : null;
+  const mail = em ? OS.links.mail(em, '', 'Hi ' + firstName(n) + ',\n\n') : null;
+  if (mail) out.push(mail);
+  const sf = p && p.userId ? OS.links.sf('User', p.userId) : null;
+  if (sf) out.push(sf);
+  const ask = n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book and open follow-ups with me, and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
+  if (ask) out.push(ask);
+  box.replaceChildren(...out);
+});
+dash.draw('oo-mail', (box) => {
+  const w = OS.oo.who();
+  const text = w && !w.startsWith('n:') ? OS.oo.text() : '';
+  const name = w ? OS.oo.nameOf(w) : '';
+  const a = text ? OS.links.mail(w, '1:1 agenda', text) : null;
+  box.replaceChildren(...(a ? [a] : []));
+  if (a) a.setAttribute('aria-label', 'Email the agenda to ' + name);
+});
