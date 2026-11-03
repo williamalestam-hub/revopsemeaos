@@ -4,7 +4,7 @@
 // ===================== PIPELINE =====================
 dash.calc('pipe_team', {
   title: 'Pipeline by team and manager',
-  description: 'Open New Business and Upsell pipeline, commit, best case and stage bands per team and manager for this and next quarter, with closed won this quarter and renewals at stake past stage 0. Team comes from the owner role.',
+  description: 'Open New Business and Upsell pipeline, commit, best case and stage bands per team and manager for this and next quarter, with closed won this quarter and renewals at stake past stage 0. Team comes from the owner role; "M|<manager>" rows total each manager across teams.',
   inputs: ['pipe_stage', 'won_q', 'renew_stake'],
   fn: (pipe_stage, won_q, renew_stake) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -14,7 +14,7 @@ dash.calc('pipe_team', {
     const out = new Map();
     const get = (region, manager) => {
       const key = region + '|' + manager;
-      if (!out.has(key)) out.set(key, { key, region, manager, level: region === 'All' ? 'all' : manager === 'All' ? 'region' : 'team', thisPipe: 0, thisOpps: 0, thisCommit: 0, thisBest: 0, thisEarly: 0, thisMid: 0, thisLate: 0, nextPipe: 0, nextOpps: 0, nextEarly: 0, nextMid: 0, nextLate: 0, won: 0, renewThis: 0, renewThisCount: 0 });
+      if (!out.has(key)) out.set(key, { key, region, manager, level: region === 'All' ? 'all' : region === 'M' ? 'manager' : manager === 'All' ? 'region' : 'team', thisPipe: 0, thisOpps: 0, thisCommit: 0, thisBest: 0, thisEarly: 0, thisMid: 0, thisLate: 0, nextPipe: 0, nextOpps: 0, nextEarly: 0, nextMid: 0, nextLate: 0, won: 0, renewThis: 0, renewThisCount: 0 });
       return out.get(key);
     };
     get('All', 'All');
@@ -22,7 +22,7 @@ dash.calc('pipe_team', {
     const each = (r, f) => {
       const region = TEAM[r.role] || 'Other';
       const manager = r.manager || '(no manager)';
-      [get('All', 'All'), get(region, 'All'), get(region, manager)].forEach(f);
+      [get('All', 'All'), get(region, 'All'), get(region, manager), get('M', manager)].forEach(f);
     };
     for (const r of pipe_stage) {
       if (r.recordType === 'Renewal') continue;
@@ -256,44 +256,54 @@ dash.calc('rr_people', {
 
 dash.calc('rr_pools', {
   title: 'Pools and members',
-  description: 'Each EMEA LeanData pool (name across object types) with its members, member teams, inactive members and 90-day assignments.',
-  inputs: ['rr_members', 'rr_assign'],
-  fn: (rr_members, rr_assign) => {
+  description: 'Each EMEA LeanData pool (name across object types) with its members, their teams and managers, inactive members, 90-day assignments and how evenly they were spread (members with none while the pool had 10 or more).',
+  inputs: ['rr_members', 'rr_assign', 'roster'],
+  fn: (rr_members, rr_assign, roster) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const kindOfPool = (p) => /^RR BDR/i.test(p) ? 'BDR' : /^RR SMB/i.test(p) ? 'SMB' : /^EM/i.test(p) ? 'EM' : /^RR Gov/i.test(p) ? 'Gov (AE)' : /^RR:/i.test(p) ? 'AE' : 'Other';
+    const mgr = new Map(roster.map((u) => [String(u.userId).slice(0, 15), u.manager || null]));
     const pools = new Map();
     for (const m of rr_members) {
-      if (!pools.has(m.poolName)) pools.set(m.poolName, { pool: m.poolName, family: kindOfPool(m.poolName), users: new Map(), assignments: 0, lastAssigned: null });
-      pools.get(m.poolName).users.set(String(m.userId).slice(0, 15), { name: m.userName, active: m.userActive !== false, region: TEAM[m.userRole] || 'Other' });
+      if (!pools.has(m.poolName)) pools.set(m.poolName, { pool: m.poolName, family: kindOfPool(m.poolName), users: new Map(), assignments: 0, lastAssigned: null, per: new Map() });
+      const id = String(m.userId).slice(0, 15);
+      pools.get(m.poolName).users.set(id, { id, name: m.userName, active: m.userActive !== false, region: TEAM[m.userRole] || 'Other', manager: mgr.get(id) || null });
     }
     for (const a of rr_assign) {
       const p = pools.get(a.poolName);
       if (!p) continue;
       p.assignments += +a.assignments || 0;
+      const id = String(a.userId || '').slice(0, 15);
+      if (id) p.per.set(id, (p.per.get(id) || 0) + (+a.assignments || 0));
       const d = String(a.lastAssigned || '').slice(0, 10);
       if (d && (!p.lastAssigned || d > p.lastAssigned)) p.lastAssigned = d;
     }
     return [...pools.values()].map((p) => {
       const us = [...p.users.values()];
       const inactive = us.filter((u) => !u.active).length;
-      const flag = inactive ? 'Inactive member' : !p.assignments ? 'No assignments in 90 days' : us.length === 1 ? 'Single member' : 'OK';
-      return { pool: p.pool, family: p.family, members: us.length, inactiveMembers: inactive, memberNames: us.map((u) => u.name + (u.active ? '' : ' (inactive)')).sort().join(', '), regions: [...new Set(us.map((u) => u.region))].join('|'), assignments: p.assignments, lastAssigned: p.lastAssigned, flag };
+      const counts = us.filter((u) => u.active).map((u) => p.per.get(u.id) || 0);
+      const minA = counts.length ? Math.min(...counts) : 0;
+      const maxA = counts.length ? Math.max(...counts) : 0;
+      const starved = us.filter((u) => u.active && p.assignments >= 10 && !(p.per.get(u.id) || 0)).map((u) => u.name);
+      const flag = inactive ? 'Inactive member' : !p.assignments ? 'No assignments in 90 days' : starved.length ? 'Member getting none' : us.length === 1 ? 'Single member' : 'OK';
+      return { pool: p.pool, family: p.family, members: us.length, inactiveMembers: inactive, memberNames: us.map((u) => u.name + (u.active ? '' : ' (inactive)')).sort().join(', '), regions: [...new Set(us.map((u) => u.region))].join('|'), managers: [...new Set(us.map((u) => u.manager).filter(Boolean))].join('|'), assignments: p.assignments, lastAssigned: p.lastAssigned, balance: counts.length > 1 ? minA + '–' + maxA : null, starved: starved.join(', '), flag };
     });
   },
 });
 
 dash.calc('rr_kpi', {
   title: 'Routing headline',
-  description: 'Per team and for all EMEA: reps missing from routing, joiners to add next week, inactive users still in pools, pools and pools with no assignment in 90 days.',
+  description: 'Per team, per manager ("M|<manager>") and for all EMEA: reps missing from routing, joiners to add next week, inactive users still in pools, pools and pools with no assignment in 90 days.',
   inputs: ['rr_people', 'rr_pools', 'rr_members'],
   fn: (rr_people, rr_pools, rr_members) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const regions = ['All', ...new Set(Object.values(TEAM))];
-    return regions.map((region) => {
+    const managers = [...new Set(rr_people.map((p) => p.manager).filter((m) => m && m !== '(no manager)'))];
+    return regions.map((r) => ({ scope: r, isMgr: false })).concat(managers.map((m) => ({ scope: 'M|' + m, isMgr: true, m }))).map(({ scope, isMgr, m }) => {
+      const region = scope;
       const inR = (r) => region === 'All' || r === region;
-      const people = rr_people.filter((p) => inR(p.region));
-      const pools = rr_pools.filter((p) => region === 'All' || p.regions.split('|').includes(region));
-      const inactive = new Set(rr_members.filter((m) => m.userActive === false && inR(TEAM[m.userRole] || 'Other')).map((m) => m.userId));
+      const people = rr_people.filter((p) => (isMgr ? p.manager === m : inR(p.region)));
+      const pools = rr_pools.filter((p) => (isMgr ? p.managers.split('|').includes(m) : region === 'All' || p.regions.split('|').includes(region)));
+      const inactive = new Set(rr_members.filter((x) => x.userActive === false && (isMgr ? false : inR(TEAM[x.userRole] || 'Other'))).map((x) => x.userId));
       return {
         region,
         missing: people.filter((p) => p.status === 'Missing' || p.status === 'New joiner: overdue').length,
@@ -343,7 +353,7 @@ dash.calc('people', {
         : mine.length ? 'In routing'
         : daysIn != null && daysIn < 7 ? 'Add in week 2'
         : 'Overdue: add to pool';
-      return { id: p.id, name: p.name, title: p.title, department: p.department, team: p.team || p.department, site: p.site, manager: p.manager, startDate: start, daysIn, sfName: sf ? sf.name : null, sfUserId: sf ? sf.userId : null, sfRole: sf ? sf.role : null, region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', pools: mine.length, status };
+      return { id: p.id, name: p.name, title: p.title, department: p.department, team: p.team || p.department, site: p.site, manager: p.manager, startDate: start, daysIn, sfName: sf ? sf.name : null, sfUserId: sf ? sf.userId : null, sfRole: sf ? sf.role : null, sfManager: sf ? sf.manager || null : null, region: sf ? (TEAM[sf.role] || 'Other') : 'Not matched', pools: mine.length, status };
     });
   },
 });
@@ -354,8 +364,9 @@ dash.calc('hire_kpi', {
   inputs: ['people'],
   fn: (people) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    return regions.map((region) => {
-      const ps = people.filter((p) => region === 'All' || p.region === region);
+    const managers = [...new Set(people.map((p) => p.sfManager).filter(Boolean))];
+    return regions.concat(managers.map((m) => 'M|' + m)).map((region) => {
+      const ps = people.filter((p) => (region.startsWith('M|') ? p.sfManager === region.slice(2) : region === 'All' || p.region === region));
       const recent = ps.filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 90);
       return {
         region,
@@ -446,8 +457,9 @@ dash.calc('books_kpi', {
   inputs: ['books_owner'],
   fn: (books_owner) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    return regions.map((region) => {
-      const rs = books_owner.filter((r) => region === 'All' || r.region === region);
+    const managers = [...new Set(books_owner.map((r) => r.manager).filter((m) => m && m !== '(no manager)'))];
+    return regions.concat(managers.map((m) => 'M|' + m)).map((region) => {
+      const rs = books_owner.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
       return { region, accounts: rs.reduce((s, r) => s + r.accounts, 0), customers: rs.reduce((s, r) => s + r.customers, 0), arr: rs.reduce((s, r) => s + r.arr, 0) };
     });
   },
@@ -495,8 +507,9 @@ dash.calc('orphans', {
 dash.calc('books', {
   title: 'Account books',
   description: 'Per account book (Territory ID): number of owners, main owner and their share of accounts, total accounts and ARR, and a check.',
-  inputs: ['bk_books'],
-  fn: (bk_books) => {
+  inputs: ['bk_books', 'roster'],
+  fn: (bk_books, roster) => {
+    const mgrOf = new Map(roster.filter((u) => u.isActive).map((u) => [u.name, u.manager || null]));
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const m = new Map();
     for (const r of bk_books) {
@@ -511,7 +524,7 @@ dash.calc('books', {
         : !TEAM[main.ownerRole] ? 'Main owner outside EMEA'
         : b.owners.some((o) => o.ownerActive === false) ? 'Inactive owner'
         : share < 0.8 ? 'Split' : 'OK';
-      return { book: b.book, mainOwner: main.owner, mainRole: main.ownerRole, region: TEAM[main.ownerRole] || 'Other', mainShare: share, owners: b.owners.length, accounts: b.accounts, arr: b.arr, flag };
+      return { book: b.book, mainOwner: main.owner, mainRole: main.ownerRole, region: TEAM[main.ownerRole] || 'Other', manager: mgrOf.get(main.owner) || null, mainShare: share, owners: b.owners.length, accounts: b.accounts, arr: b.arr, flag };
     });
   },
 });
@@ -561,7 +574,7 @@ dash.calc('person', {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const m = new Map();
     const get = (name) => {
-      if (!m.has(name)) m.set(name, { name, userId: null, role: null, region: null, manager: null, isActive: null, title: null, createdDate: null, startDate: null, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crNb: 0, crUp: 0, crArr: 0, crBdr: 0, accounts: 0, activeAccts: 0, customers: 0, custArr: 0, emCustomers: 0, openPipe: 0, openRenewals: 0, pools: 0, poolNames: '', assignments: 0, routing: null, inRoster: false });
+      if (!m.has(name)) m.set(name, { name, userId: null, role: null, region: null, manager: null, isActive: null, title: null, createdDate: null, startDate: null, thisPipe: 0, thisOpps: 0, nextPipe: 0, pastDue: 0, stale: 0, crNb: 0, crUp: 0, crOpps: 0, crArr: 0, crBdr: 0, accounts: 0, activeAccts: 0, customers: 0, custArr: 0, emCustomers: 0, openPipe: 0, openRenewals: 0, pools: 0, poolNames: '', assignments: 0, routing: null, inRoster: false });
       return m.get(name);
     };
     for (const u of roster.slice().sort((a, b) => (a.isActive === b.isActive ? 0 : a.isActive ? 1 : -1))) {
@@ -572,7 +585,7 @@ dash.calc('person', {
       Object.assign(o, { thisPipe: r.thisPipe, thisOpps: r.thisOpps, nextPipe: r.nextPipe, pastDue: r.pastDue, stale: r.stale });
       if (!o.role) { o.role = r.role; o.region = r.region; o.manager = r.manager; }
     }
-    for (const r of cr_leader) Object.assign(get(r.owner), { crNb: r.nb, crUp: r.up, crArr: r.arr, crBdr: r.bdrSourced });
+    for (const r of cr_leader) Object.assign(get(r.owner), { crNb: r.nb, crUp: r.up, crOpps: r.opps, crArr: r.arr, crBdr: r.bdrSourced });
     for (const r of books_owner) {
       const o = get(r.owner);
       Object.assign(o, { accounts: r.accounts, activeAccts: r.active, customers: r.customers, custArr: r.arr, emCustomers: r.emCustomers, openPipe: r.openPipe, openRenewals: r.openRenewals });
@@ -667,7 +680,7 @@ dash.calc('gr_actions', {
       const date = String(r.meetingAt || '').slice(0, 10) || null;
       const o = {
         id: r.id, meetingId: r.meetingId, meeting: clean(r.meeting) || 'Untitled meeting', date, meetingAt: r.meetingAt, url: r.url,
-        shared: r.capturedByMe === false, source: r.source, section: r.section, pos: r.pos, item, detail: '', owner, bucket, done,
+        shared: r.capturedByMe === false, participants: r.participants ?? null, oneOnOne: r.participants === 2, source: r.source, section: r.section, pos: r.pos, item, detail: '', owner, bucket, done,
         forYou: !done && (bucket === 'mine' || (bucket === 'unassigned' && r.capturedByMe !== false)),
         ageDays: date ? Math.max(0, Math.round((today - Date.parse(date + 'T00:00:00Z')) / 864e5)) : null,
       };
@@ -740,14 +753,15 @@ dash.calc('checks', {
     const out = [];
     for (const p of rr_people) {
       const since = p.daysIn != null && p.daysIn >= 0 && p.daysIn < 60 ? 'Started ' + plural(p.daysIn, 'day', 'days') + ' ago' : '';
-      if (p.status === 'Missing' || p.status === 'New joiner: overdue') out.push({ id: 'rr:' + p.userId, area: 'Routing', severity: 'high', title: p.name, person: p.name, region: p.region, what: 'Not in any ' + p.kind + ' pool', meta: since, screen: 'routing' });
-      else if (p.status === 'New: add next week') out.push({ id: 'rr:' + p.userId, area: 'Routing', severity: 'low', title: p.name, person: p.name, region: p.region, what: 'Add to a ' + p.kind + ' pool next week', meta: since, screen: 'routing' });
+      if (p.status === 'Missing' || p.status === 'New joiner: overdue') out.push({ id: 'rr:' + p.userId, area: 'Routing', severity: 'high', title: p.name, person: p.name, region: p.region, manager: p.manager, what: 'Not in any ' + p.kind + ' pool', meta: since, screen: 'routing' });
+      else if (p.status === 'New: add next week') out.push({ id: 'rr:' + p.userId, area: 'Routing', severity: 'low', title: p.name, person: p.name, region: p.region, manager: p.manager, what: 'Add to a ' + p.kind + ' pool next week', meta: since, screen: 'routing' });
     }
     for (const pool of rr_pools) {
-      if (pool.inactiveMembers) out.push({ id: 'pool:' + pool.pool, area: 'Routing', severity: 'high', title: pool.pool, person: null, region: 'All', what: plural(pool.inactiveMembers, 'inactive user', 'inactive users') + ' still in the pool', meta: '', screen: 'routing' });
+      if (pool.inactiveMembers) out.push({ id: 'pool:' + pool.pool, area: 'Routing', severity: 'high', title: pool.pool, person: null, region: 'All', manager: null, what: plural(pool.inactiveMembers, 'inactive user', 'inactive users') + ' still in the pool', meta: '', screen: 'routing' });
+      if (pool.starved) out.push({ id: 'starved:' + pool.pool, area: 'Routing', severity: 'low', title: pool.pool, person: null, region: 'All', manager: null, what: 'No assignments in 90 days for ' + pool.starved, meta: plural(pool.assignments, 'assignment', 'assignments') + ' went to the others', screen: 'routing' });
     }
     for (const r of pipe_reps) {
-      if (r.pastDue > 0) out.push({ id: 'pd:' + r.owner, area: 'Pipeline', severity: r.pastDue >= 3 ? 'high' : 'medium', title: r.owner, person: r.owner, region: r.region, what: plural(r.pastDue, 'open opp', 'open opps') + ' past the close date', meta: '', screen: 'pipeline' });
+      if (r.pastDue > 0) out.push({ id: 'pd:' + r.owner, area: 'Pipeline', severity: r.pastDue >= 3 ? 'high' : 'medium', title: r.owner, person: r.owner, region: r.region, manager: r.manager, what: plural(r.pastDue, 'open opp', 'open opps') + ' past the close date', meta: '', screen: 'pipeline' });
     }
     const byReason = new Map();
     for (const o of orphans) {
@@ -756,9 +770,9 @@ dash.calc('checks', {
       b.n += 1; b.arr += +o.arrUsd || 0;
       byReason.set(o.reason, b);
     }
-    for (const [reason, b] of byReason) out.push({ id: 'orph:' + reason, area: 'Books', severity: reason === 'Inactive owner' || b.arr > 0 ? 'high' : 'medium', title: reason, person: null, region: 'All', what: plural(b.n, 'active account', 'active accounts') + ' with ' + money(b.arr) + ' ARR', meta: '', screen: 'books', reason });
+    for (const [reason, b] of byReason) out.push({ id: 'orph:' + reason, area: 'Books', severity: reason === 'Inactive owner' || b.arr > 0 ? 'high' : 'medium', title: reason, person: null, region: 'All', manager: null, what: plural(b.n, 'active account', 'active accounts') + ' with ' + money(b.arr) + ' ARR', meta: '', screen: 'books', reason });
     const split = books.filter((b) => b.flag === 'Split').length;
-    if (split) out.push({ id: 'books:split', area: 'Books', severity: 'low', title: 'Split books', person: null, region: 'All', what: plural(split, 'book', 'books') + ' where the main owner holds under 80%', meta: '', screen: 'books' });
+    if (split) out.push({ id: 'books:split', area: 'Books', severity: 'low', title: 'Split books', person: null, region: 'All', manager: null, what: plural(split, 'book', 'books') + ' where the main owner holds under 80%', meta: '', screen: 'books' });
     const rank = { high: 0, medium: 1, low: 2 };
     return out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
   },
@@ -771,7 +785,7 @@ dash.calc('checks_hb', {
   fn: (people) => {
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
     return people.filter((h) => h.status === 'No Salesforce user' && h.daysIn != null && h.daysIn >= 0 && h.daysIn <= 90)
-      .map((h) => ({ id: 'hb:' + h.id, area: 'Hiring', severity: 'medium', title: h.name, person: h.name, region: h.region, what: 'No Salesforce user found', meta: 'Started ' + plural(h.daysIn, 'day', 'days') + ' ago', screen: 'hiring' }));
+      .map((h) => ({ id: 'hb:' + h.id, area: 'Hiring', severity: 'medium', title: h.name, person: h.name, region: h.region, manager: h.sfManager || null, what: 'No Salesforce user found', meta: 'Started ' + plural(h.daysIn, 'day', 'days') + ' ago', screen: 'hiring' }));
   },
 });
 
@@ -781,8 +795,9 @@ dash.calc('checks_kpi', {
   inputs: ['checks'],
   fn: (checks) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    return regions.map((region) => {
-      const cs = checks.filter((c) => region === 'All' || c.region === region);
+    const managers = [...new Set(checks.map((c) => c.manager).filter((m) => m && m !== '(no manager)'))];
+    return regions.concat(managers.map((m) => 'M|' + m)).map((region) => {
+      const cs = checks.filter((c) => (region.startsWith('M|') ? c.manager === region.slice(2) : region === 'All' || c.region === region));
       return { region, total: cs.length, high: cs.filter((c) => c.severity === 'high').length };
     });
   },
@@ -794,6 +809,7 @@ dash.calc('checks_hb_kpi', {
   inputs: ['checks_hb'],
   fn: (checks_hb) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    return regions.map((region) => ({ region, total: checks_hb.filter((c) => region === 'All' || c.region === region).length }));
+    const managers = [...new Set(checks_hb.map((c) => c.manager).filter(Boolean))];
+    return regions.concat(managers.map((m) => 'M|' + m)).map((region) => ({ region, total: checks_hb.filter((c) => (region.startsWith('M|') ? c.manager === region.slice(2) : region === 'All' || c.region === region)).length }));
   },
 });

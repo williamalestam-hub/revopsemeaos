@@ -66,7 +66,7 @@ dash.loader('gr_notes', {
       .replace(/&#39;|&apos;/g, "'").replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCodePoint(parseInt(h, 16)))
       .replace(/&#(\d+);/g, (m, n) => String.fromCodePoint(+n)).replace(/&amp;/g, '&');
     const attr = (s, k) => { const m = String(s).match(new RegExp('(?:^|\\s)' + k + '="([^"]*)"')); return m ? dec(m[1]) : null; };
-    const columns = ['id', 'meetingId', 'meeting', 'meetingAt', 'url', 'capturedByMe', 'me', 'myName', 'source', 'section', 'parentSection', 'pos', 'kind', 'depth', 'gap', 'text'];
+    const columns = ['id', 'meetingId', 'meeting', 'meetingAt', 'url', 'capturedByMe', 'participants', 'me', 'myName', 'source', 'section', 'parentSection', 'pos', 'kind', 'depth', 'gap', 'text'];
     let page = txt(answer);
     if (!/<meetings_data[\s>]/.test(page)) {
       if (/no meetings|count="0"/i.test(page)) return { columns, rows: [] };
@@ -83,7 +83,9 @@ dash.loader('gr_notes', {
         const head = ' ' + block.slice(0, block.indexOf('>'));
         const id = attr(head, 'id');
         if (!id) continue;
-        meetings.set(id, { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: attr(head, 'captured_by_me') === 'true' });
+        const kp = block.match(/<known_participants(\s[^>]*)?>/);
+        const total = kp && kp[1] ? attr(kp[1], 'total') : null;
+        meetings.set(id, { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: attr(head, 'captured_by_me') === 'true', participants: total != null ? +total : null });
         if (!myName && me) {
           const end = block.indexOf('</meeting>');
           for (const m of block.slice(0, end < 0 ? block.length : end).matchAll(/([^\n<>()]+?)\s*\(note creator\)[^\n]*?\(([^()\s]+@[^()\s]+)\)/g)) {
@@ -123,7 +125,7 @@ dash.loader('gr_notes', {
         }
         const b = line.match(/^( *)(?:[-*+•]|\d+[.)])\s+(.*)$/);
         if (stack.length) stack[stack.length - 1].has = true;
-        rows.push({ id: meta.id + ':' + source[0] + pos, meetingId: meta.id, meeting: meta.meeting, meetingAt: meta.meetingAt, url: meta.url, capturedByMe: meta.capturedByMe, me, myName, source, section, parentSection, pos, kind: b ? 'bullet' : 'text', depth: Math.min(3, Math.floor(indent / 2)), gap, text: (b ? b[2] : line).trim() });
+        rows.push({ id: meta.id + ':' + source[0] + pos, meetingId: meta.id, meeting: meta.meeting, meetingAt: meta.meetingAt, url: meta.url, capturedByMe: meta.capturedByMe, participants: meta.participants ?? null, me, myName, source, section, parentSection, pos, kind: b ? 'bullet' : 'text', depth: Math.min(3, Math.floor(indent / 2)), gap, text: (b ? b[2] : line).trim() });
         pos += 1;
         gap = false;
       }
@@ -148,7 +150,7 @@ dash.loader('gr_notes', {
         const head = ' ' + block.slice(0, block.indexOf('>'));
         const id = attr(head, 'id');
         if (!id) continue;
-        const meta = meetings.get(id) || { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: null };
+        const meta = meetings.get(id) || { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: null, participants: null };
         const sum = (block.match(/<summary>([\s\S]*?)<\/summary>/) || [])[1];
         const priv = (block.match(/<private_notes(?:\s[^>]*)?>([\s\S]*?)<\/private_notes>/) || [])[1];
         if (sum) parse(dec(sum), 'summary', meta);
@@ -286,6 +288,7 @@ window.OS = (() => {
     if (!r) return null;
     const s = state(...r.ids());
     if (s !== 'ok') return s;
+    if (r.msg) return r.msg();
     const all = r.rows();
     if (!all.length) return 'empty';
     const vis = r.fields ? searchFilter(name, all, r.fields) : all;
@@ -305,7 +308,7 @@ window.OS = (() => {
 
   // lists: the drawing holds only items; sentences come from the message slot beside it
   const defList = (name, ids, rows, render, opts = {}) => {
-    reg[name] = { kind: 'list', ids: typeof ids === 'function' ? ids : () => ids, rows, fields: opts.fields || null, limit: 0 };
+    reg[name] = { kind: 'list', ids: typeof ids === 'function' ? ids : () => ids, rows, fields: opts.fields || null, limit: 0, msg: opts.msg || null };
     dash.draw(name, (ul) => {
       if (msgOf(name) !== null && msgOf(name) !== 'limit') { ul.replaceChildren(); return; }
       const items = opts.fields ? searchFilter(name, rows(), opts.fields) : rows();
@@ -440,9 +443,10 @@ window.OS = (() => {
 
   // charts: draw(box, rows); an empty or unconnected chart leaves its box empty and the slot beside it speaks
   const defChart = (name, ids, rows, draw) => {
-    reg[name] = { kind: 'chart', ids: () => ids, rows, fields: null, limit: 0 };
+    const getIds = typeof ids === 'function' ? ids : () => ids;
+    reg[name] = { kind: 'chart', ids: getIds, rows, fields: null, limit: 0 };
     dash.draw(name, (box) => {
-      const s = state(...ids);
+      const s = state(...getIds());
       box.classList.toggle('dash-skeleton', s === 'loading');
       if (s === 'error') { box.style.minHeight = ''; box.replaceChildren(el('div', 'os-fail', 'Failed to load')); return; }
       box.querySelectorAll('.os-fail').forEach((n) => n.remove());
@@ -525,8 +529,9 @@ window.OS = (() => {
   const actionRows = () => {
     if (OS.state('gr_actions') !== 'ok') return [];
     const own = dash.params().grOwner || 'all';
+    const one = !!dash.params().gr11;
     return OS.searchFilter('act-list', (dash.data('gr_actions').data || [])
-      .filter((r) => !r.done && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
+      .filter((r) => !r.done && (!one || r.oneOnOne) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own))), ['item', 'detail', 'owner', 'meeting']);
   };
   const checklist = () => actionRows().map((r) => `- [ ] ${r.item}${r.owner ? ' (' + r.owner + ')' : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`).join('\n');
   const personRowNow = () => {
@@ -549,18 +554,35 @@ window.OS = (() => {
       if (hit) hit.focus();
     });
   };
+  const openPalette = () => {
+    document.querySelectorAll('[data-palette]').forEach((p) => { p.hidden = false; });
+    document.querySelectorAll('input[data-search="palette-list"]').forEach((inp) => { inp.value = ''; OS.queries['palette-list'] = ''; inp.focus(); });
+    OS.redraw('palette-list');
+  };
+  const closePalette = () => document.querySelectorAll('[data-palette]').forEach((p) => { p.hidden = true; });
   const syncCopyList = () => document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-nav], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], th[data-sort]');
+    const t = e.target.closest('[data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], th[data-sort]');
     if (!t) return;
     if (t.matches('[data-nav]')) {
       if (t.dataset.grOwner) dash.setParams({ grOwner: t.dataset.grOwner });
+      if (t.dataset.fill) {
+        document.querySelectorAll('input[data-search]').forEach((inp) => {
+          if (inp.dataset.search === t.dataset.fill) { inp.value = t.dataset.fillValue || ''; OS.queries[t.dataset.fill] = inp.value; }
+        });
+      }
+      closePalette();
       go(t.dataset.nav, t.dataset.navView);
+      if (t.dataset.fill) OS.redraw(t.dataset.fill);
       return;
     }
+    if (t.matches('[data-open-palette]')) { openPalette(); return; }
+    if (t.matches('[data-clear-mgr]')) { dash.setParams({ mgr: '' }); return; }
+    if (t.matches('[data-gr-group]')) { dash.setParams({ grGroup: t.dataset.grGroup }); return; }
+    if (t.matches('[data-gr-11]')) { dash.setParams({ gr11: !dash.params().gr11 }); return; }
     if (t.matches('[data-view-tab]')) { const [s, v] = t.dataset.viewTab.split(':'); view[s] = v; apply(); return; }
-    if (t.matches('[data-person]')) { lastPerson = { name: t.dataset.person, draw: (t.closest('[data-draw]') || {}).dataset?.draw || null }; dash.setParams({ person: t.dataset.person }); focusPanel(); return; }
+    if (t.matches('[data-person]')) { lastPerson = { name: t.dataset.person, draw: (t.closest('[data-draw]') || {}).dataset?.draw || null }; closePalette(); dash.setParams({ person: t.dataset.person }); focusPanel(); return; }
     if (t.matches('[data-close-person]')) { closePanel(); return; }
     if (t.matches('[data-copy-text]')) { copy(t.dataset.copyText, t); return; }
     if (t.matches('[data-copy-list]')) { const text = checklist(); if (text) copy(text, t); return; }
@@ -583,9 +605,32 @@ window.OS = (() => {
     }
   });
   document.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '');
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openPalette(); return; }
+    if (!typing && e.key === '/' ) { e.preventDefault(); openPalette(); return; }
+    const pal = [...document.querySelectorAll('[data-palette]')].find((p) => !p.hidden);
+    if (pal) {
+      if (e.key === 'Escape') { closePalette(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const items = [...pal.querySelectorAll('.pal-item')];
+        if (!items.length) return;
+        e.preventDefault();
+        const i = items.indexOf(document.activeElement);
+        const next = e.key === 'ArrowDown' ? (i < 0 ? 0 : Math.min(items.length - 1, i + 1)) : (i <= 0 ? -1 : i - 1);
+        if (next < 0) pal.querySelectorAll('input[data-search]').forEach((inp) => inp.focus());
+        else items[next].focus();
+        return;
+      }
+      if (e.key === 'Enter' && e.target.matches('input[data-search="palette-list"]')) {
+        const first = pal.querySelector('.pal-item');
+        if (first) { e.preventDefault(); first.click(); }
+        return;
+      }
+    }
     if (e.key === 'Escape' && dash.params().person) closePanel();
   });
-  document.querySelectorAll('.os-region').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ region: sel.value || 'All' })));
+  document.querySelectorAll('.os-region').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ region: sel.value || 'All', mgr: '' })));
+  document.querySelectorAll('.os-mgr').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ mgr: sel.value || '' })));
   document.querySelectorAll('.os-only-missing').forEach((c) => c.addEventListener('change', () => dash.setParams({ onlyMissing: c.checked })));
   document.querySelectorAll('.os-orphan-reason').forEach((s) => s.addEventListener('change', () => dash.setParams({ orphanReason: s.value })));
   document.querySelectorAll('input[data-search]').forEach((inp) => inp.addEventListener('input', () => {
@@ -608,6 +653,9 @@ window.OS = (() => {
     pressed('[data-gr-window]', 'grWindow', p.grWindow || 30);
     pressed('.fchip[data-gr-owner]', 'grOwner', p.grOwner || 'all');
     pressed('[data-check-area]', 'checkArea', p.checkArea || 'All');
+    pressed('[data-gr-group]', 'grGroup', p.grGroup || 'meeting');
+    document.querySelectorAll('[data-gr-11]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.gr11)));
+    document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
     document.querySelectorAll('.os-region').forEach((sel) => { sel.value = p.region || 'All'; });
     document.querySelectorAll('.os-only-missing').forEach((c) => { c.checked = !!p.onlyMissing; });
     document.querySelectorAll('.os-orphan-reason').forEach((s) => { s.value = p.orphanReason || ''; });
@@ -629,6 +677,8 @@ window.OS = (() => {
       });
       const row = personRowNow();
       document.querySelectorAll('[data-copy-person-id]').forEach((b) => { b.disabled = !(row && row.userId); });
+      const hasTeam = sf === 'ok' && (dash.data('person').data || []).some((r) => r.manager === p.person && r.isActive !== false && r.inRoster);
+      document.querySelectorAll('[data-pd-team]').forEach((n) => { n.hidden = !hasTeam; });
     }
   });
   dash.draw('msg', (slot) => OS.drawMsg(slot));

@@ -1,11 +1,16 @@
 // EMEA RevOps OS — drawings. A drawing reads only its own data, and only while it is shown.
 
-const inTeam = (r) => OS.region() === 'All' || r.region === OS.region();
+const mgrPick = () => dash.params().mgr || '';
+const inTeam = (r) => (mgrPick() ? r.manager === mgrPick() : OS.region() === 'All' || r.region === OS.region());
 const setWhere = (el, key, val) => { el.dataset.where = key + '=' + encodeURIComponent(val); };
+const scopeKey = () => (mgrPick() ? 'M|' + mgrPick() : OS.region());
 const regionRow = (el, id) => {
-  const region = OS.region();
-  setWhere(el, 'region', region);
-  return (dash.data(id).data || []).find((r) => r.region === region) || {};
+  const key = scopeKey();
+  const rows = dash.data(id).data || [];
+  const row = rows.find((r) => r.region === key);
+  if (row) { setWhere(el, 'region', key); return row; }
+  setWhere(el, 'region', 'All');
+  return mgrPick() ? {} : rows.find((r) => r.region === 'All') || {};
 };
 const firstRow = (id) => (dash.data(id).data || [])[0] || {};
 const statusCls = (v) => (/^In routing$/.test(v) ? 'ok'
@@ -28,9 +33,10 @@ dash.draw('nav-badge', (el) => {
 // ===================== PIPELINE =====================
 const pipeRow = (el) => {
   const region = OS.region();
-  const key = region === 'All' ? 'All|All' : region + '|All';
-  setWhere(el, 'key', key);
-  return (dash.data('pipe_team').data || []).find((r) => r.key === key) || {};
+  const key = mgrPick() ? 'M|' + mgrPick() : region === 'All' ? 'All|All' : region + '|All';
+  const row = (dash.data('pipe_team').data || []).find((r) => r.key === key);
+  setWhere(el, 'key', row ? key : 'All|All');
+  return row || {};
 };
 dash.draw('kpi-pipe', (el) => OS.value(el, ['pipe_team'], () => OS.usd(pipeRow(el)[el.dataset.field] || 0)));
 dash.draw('kpi-pipe-sub', (el) => OS.value(el, ['pipe_team'], () => OS.num(pipeRow(el)[el.dataset.field] || 0)));
@@ -42,14 +48,20 @@ const stageKeys = () => [
 ];
 const pipeBars = (pq) => {
   const region = OS.region();
+  if (mgrPick()) {
+    return (dash.data('pipe_reps').data || []).filter((r) => r.manager === mgrPick())
+      .map((r) => ({ label: r.owner, pipe: r[pq + 'Pipe'], total: r[pq + 'Pipe'] }))
+      .filter((r) => r.total > 0).sort((a, b) => b.total - a.total);
+  }
   return (dash.data('pipe_team').data || [])
     .filter((r) => (region === 'All' ? r.level === 'region' : r.level === 'team' && r.region === region))
     .map((r) => ({ label: region === 'All' ? r.region : r.manager, early: r[pq + 'Early'], mid: r[pq + 'Mid'], late: r[pq + 'Late'], total: r[pq + 'Pipe'] }))
     .filter((r) => r.total > 0)
     .sort((a, b) => b.total - a.total);
 };
-OS.defChart('pipe-chart', ['pipe_team'], () => pipeBars(dash.params().pq === 'next' ? 'next' : 'this'), (box, rows) => OS.hbars(box, rows, stageKeys(), OS.usd));
-OS.defChart('home-pipe-chart', ['pipe_team'], () => pipeBars('this').slice(0, 10), (box, rows) => OS.hbars(box, rows, stageKeys(), OS.usd));
+const pipeKeys = () => (mgrPick() ? [{ k: 'pipe', name: 'Open pipeline', color: dash.colors[0] }] : stageKeys());
+OS.defChart('pipe-chart', () => (mgrPick() ? ['pipe_reps'] : ['pipe_team']), () => pipeBars(dash.params().pq === 'next' ? 'next' : 'this'), (box, rows) => OS.hbars(box, rows, pipeKeys(), OS.usd));
+OS.defChart('home-pipe-chart', () => (mgrPick() ? ['pipe_reps'] : ['pipe_team']), () => pipeBars('this').slice(0, 10), (box, rows) => OS.hbars(box, rows, pipeKeys(), OS.usd));
 
 OS.defTable('pipe-mgr-table', ['pipe_team'], () => (dash.data('pipe_team').data || [])
   .filter((r) => r.level === 'team' && inTeam(r))
@@ -111,14 +123,27 @@ dash.draw('kpi-checks', (el) => OS.value(el, ['checks_kpi'], () => OS.num(region
 dash.draw('kpi-checks-hb', (el) => OS.value(el, ['checks_hb_kpi'], () => OS.num(regionRow(el, 'checks_hb_kpi')[el.dataset.field] || 0)));
 
 const ownerChip = (r) => OS.el('span', 'chip' + (r.bucket === 'mine' ? ' info' : r.bucket === 'unassigned' ? ' warn' : ''), r.owner || 'Unassigned');
-const actionItem = (r) => {
+const actionItem = (r, byOwner) => {
   const li = OS.el('li', 'itm');
   li.dataset.key = r.id;
   const main = OS.el('div', 'itm-main');
   main.append(OS.el('span', 'itm-title', r.item));
   if (r.detail) main.append(OS.el('span', 'itm-detail', r.detail));
+  if (byOwner) {
+    const from = OS.el('span', 'itm-from', r.meeting + ' · ' + OS.shortDay(r.date));
+    if (r.url && /^https:\/\//.test(r.url)) {
+      const a = OS.el('a');
+      a.href = r.url; a.target = '_blank'; a.rel = 'noopener';
+      a.setAttribute('aria-label', 'Open the note in Granola');
+      a.appendChild(OS.icon(OS.ICON.open));
+      from.append(a);
+    }
+    main.append(from);
+  }
   const meta = OS.el('div', 'itm-meta');
-  meta.append(ownerChip(r), OS.el('span', null, ago(r.ageDays)));
+  if (!byOwner) meta.append(ownerChip(r));
+  if (r.ageDays != null && r.ageDays >= 14) meta.append(OS.el('span', 'chip warn', Math.floor(r.ageDays / 7) + 'w old'));
+  else meta.append(OS.el('span', null, ago(r.ageDays)));
   const cp = OS.el('button', 'ibtn');
   cp.type = 'button';
   cp.setAttribute('aria-label', 'Copy item');
@@ -143,18 +168,43 @@ const meetingHead = (r) => {
 };
 const groupedActions = (rows) => {
   const out = [];
+  if ((dash.params().grGroup || 'meeting') === 'owner') {
+    const order = (r) => (r.bucket === 'mine' ? 0 : r.bucket === 'others' ? 1 : 2);
+    const sorted = rows.slice().sort((a, b) => order(a) - order(b) || String(a.owner || '').localeCompare(String(b.owner || '')) || String(b.meetingAt || '').localeCompare(String(a.meetingAt || '')));
+    let last = null;
+    for (const r of sorted) {
+      const who = r.bucket === 'mine' ? 'You' : r.owner || 'Unassigned';
+      if (who !== last) {
+        const li = OS.el('li', 'grp');
+        li.append(OS.el('b', null, who), OS.el('span', null, String(sorted.filter((x) => (x.bucket === 'mine' ? 'You' : x.owner || 'Unassigned') === who).length)));
+        out.push(li);
+        last = who;
+      }
+      out.push(actionItem(r, true));
+    }
+    return out;
+  }
   let last = null;
   for (const r of rows) {
     if (r.meetingId !== last) { out.push(meetingHead(r)); last = r.meetingId; }
-    out.push(actionItem(r));
+    out.push(actionItem(r, false));
   }
   return out;
 };
 OS.defList('act-list', ['gr_actions'], () => {
   const own = dash.params().grOwner || 'all';
-  return (dash.data('gr_actions').data || []).filter((r) => !r.done && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own)));
+  const one = !!dash.params().gr11;
+  return (dash.data('gr_actions').data || []).filter((r) => !r.done && (!one || r.oneOnOne) && (own === 'all' || (own === 'foryou' ? r.forYou : r.bucket === own)));
 }, groupedActions, { fields: ['item', 'detail', 'owner', 'meeting'] });
-OS.defList('home-actions', ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou).slice(0, 6), groupedActions);
+OS.defList('home-actions', ['gr_actions'], () => (dash.data('gr_actions').data || []).filter((r) => r.forYou).slice(0, 6), (rows) => {
+  const out = [];
+  let last = null;
+  for (const r of rows) {
+    if (r.meetingId !== last) { out.push(meetingHead(r)); last = r.meetingId; }
+    out.push(actionItem(r, false));
+  }
+  return out;
+});
 
 const checkItem = (c) => {
   const li = OS.el('li', 'itm');
@@ -183,7 +233,7 @@ const allChecks = () => {
   const rank = { high: 0, medium: 1, low: 2 };
   const hb = OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [];
   return (dash.data('checks').data || []).concat(hb)
-    .filter((c) => OS.region() === 'All' || c.region === OS.region())
+    .filter((c) => (mgrPick() ? c.manager === mgrPick() : OS.region() === 'All' || c.region === OS.region()))
     .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
 };
 OS.defList('check-list', () => ((dash.params().checkArea || 'All') === 'Hiring' ? ['checks_hb'] : ['checks']), () => {
@@ -234,11 +284,11 @@ OS.defTable('rr-people-table', ['rr_people'], () => {
 OS.defTable('rr-pool-table', ['rr_pools'], () => {
   const region = OS.region();
   return (dash.data('rr_pools').data || [])
-    .filter((p) => region === 'All' || p.regions.split('|').includes(region))
+    .filter((p) => (mgrPick() ? p.managers.split('|').includes(mgrPick()) : region === 'All' || p.regions.split('|').includes(region)))
     .sort((a, b) => String(a.pool).localeCompare(String(b.pool)));
 }, [
   { f: 'pool' }, { f: 'family' }, { f: 'members', fmt: OS.num, num: true }, { f: 'memberNames', wrap: true },
-  { f: 'assignments', fmt: OS.num, num: true }, { f: 'lastAssigned', fmt: OS.day },
+  { f: 'assignments', fmt: OS.num, num: true }, { f: 'balance' }, { f: 'lastAssigned', fmt: OS.day },
   { f: 'flag', chip: (v) => (v === 'OK' ? 'ok' : v === 'Inactive member' ? 'bad' : 'warn') },
 ], { key: 'pool' });
 
@@ -330,3 +380,60 @@ dash.draw('pd-pools', (el) => {
   const names = r && r.poolNames ? r.poolNames.split(', ').filter(Boolean) : [];
   el.replaceChildren(...names.map((n) => { const li = OS.el('li'); li.append(OS.el('span', 'chip', n)); return li; }));
 });
+
+// ===================== MANAGER PICKER =====================
+dash.draw('mgr-picker', (sel) => {
+  const s = OS.state('roster');
+  const region = OS.region();
+  const teamOf = (role) => ({ 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' })[role] || 'Other';
+  const counts = new Map();
+  for (const u of s === 'ok' ? dash.data('roster').data || [] : []) {
+    if (!u.isActive || !u.manager) continue;
+    if (region !== 'All' && teamOf(u.role) !== region) continue;
+    counts.set(u.manager, (counts.get(u.manager) || 0) + 1);
+  }
+  const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+  const cur = mgrPick();
+  if (cur && !counts.has(cur)) names.unshift(cur);
+  sel.replaceChildren(new Option(s === 'ok' ? 'All managers' : 'Loading managers…', ''), ...names.map((n) => new Option(counts.has(n) ? n + ' (' + counts.get(n) + ')' : n, n)));
+  sel.value = cur;
+  sel.disabled = s !== 'ok';
+});
+
+// ===================== TEAM IN THE PERSON PANEL =====================
+OS.defTable('pd-team-table', ['person'], () => {
+  const p = dash.params().person;
+  return p ? (dash.data('person').data || []).filter((r) => r.manager === p && r.isActive !== false && r.inRoster) : [];
+}, [
+  { f: 'name', person: (r) => r.name },
+  { f: 'thisPipe', fmt: OS.usd, num: true },
+  { f: 'crOpps', fmt: OS.num, num: true },
+  { f: 'routing', chip: (v) => statusCls(v || '') },
+], { key: 'name' });
+
+// ===================== COMMAND PALETTE =====================
+const paletteRows = () => {
+  const q = (OS.queries['palette-list'] || '').trim().toLowerCase();
+  if (!q) return [];
+  const out = [];
+  const seen = new Set();
+  for (const u of dash.data('roster').data || []) {
+    if (!u.isActive || seen.has(u.name) || !String(u.name).toLowerCase().includes(q)) continue;
+    seen.add(u.name);
+    out.push({ kind: 'person', label: u.name, sub: u.role, value: u.name });
+  }
+  if (OS.state('rr_pools') === 'ok') for (const p of dash.data('rr_pools').data || []) if (String(p.pool).toLowerCase().includes(q)) out.push({ kind: 'pool', label: p.pool, sub: p.members + ' members', value: p.pool });
+  if (OS.state('books') === 'ok') for (const b of dash.data('books').data || []) if (String(b.book).toLowerCase().includes(q)) out.push({ kind: 'book', label: b.book, sub: b.mainOwner, value: b.book });
+  return out.slice(0, 12);
+};
+OS.defList('palette-list', ['roster'], paletteRows, (rows) => rows.map((r) => {
+  const li = OS.el('li');
+  const b = OS.el('button', 'pal-item');
+  b.type = 'button';
+  if (r.kind === 'person') b.dataset.person = r.value;
+  else if (r.kind === 'pool') { b.dataset.nav = 'routing'; b.dataset.navView = 'pools'; b.dataset.fill = 'rr-pool-table'; b.dataset.fillValue = r.value; }
+  else { b.dataset.nav = 'books'; b.dataset.navView = 'books'; b.dataset.fill = 'bk-book-table'; b.dataset.fillValue = r.value; }
+  b.append(OS.el('span', 'pal-kind ' + r.kind, r.kind === 'person' ? 'Person' : r.kind === 'pool' ? 'Pool' : 'Book'), OS.el('span', 'pal-label', r.label), OS.el('span', 'pal-sub', r.sub || ''));
+  li.append(b);
+  return li;
+}), { msg: () => (!(OS.queries['palette-list'] || '').trim() ? 'empty' : paletteRows().length ? null : 'nomatch') });

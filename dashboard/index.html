@@ -29,6 +29,26 @@
   .app-badge { min-width: 1.5rem; padding: 0 6px; border-radius: 999px; font-size: var(--cds-font-size-caption); line-height: 1.5rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: var(--cds-font-weight-medium); background: color-mix(in srgb, var(--color-fg) 9%, transparent); color: var(--color-bad); visibility: hidden; box-sizing: border-box; }
   .app-badge.is-on { visibility: visible; }
   .app-badge.info { background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 18%, transparent); color: var(--color-fg); }
+  .app-search { display: flex; align-items: center; gap: var(--cds-gap-sm); width: 100%; box-sizing: border-box; padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-bg); color: var(--color-fg-muted); cursor: pointer; text-align: left; }
+  .app-search span { flex: 1; }
+  .app-search:hover { color: var(--color-fg); }
+  .app kbd { font: inherit; font-size: var(--cds-font-size-caption); padding: 0 5px; border: 1px solid var(--color-border-line); border-radius: 4px; color: var(--color-fg-muted); }
+  .palette { position: sticky; top: var(--cds-pad-md); z-index: 5; margin-bottom: var(--cds-gap-lg); }
+  .palette-box { max-width: 40rem; margin: 0 auto; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-sm); display: grid; gap: var(--cds-gap-xs); }
+  .pal-search input[type="search"] { width: 100%; }
+  .pal-list { list-style: none; margin: 0; padding: 0; display: grid; max-height: 22rem; overflow: auto; }
+  .pal-item { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: var(--cds-gap-sm); align-items: center; width: 100%; padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 0; border-radius: var(--cds-radius); background: transparent; text-align: left; cursor: pointer; }
+  .pal-item:hover, .pal-item:focus-visible { background: color-mix(in srgb, var(--color-fg) 8%, transparent); }
+  .app .pal-item:focus-visible { outline-offset: -2px; }
+  .pal-kind { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .pal-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pal-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); white-space: nowrap; }
+  .pal-hint { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-align: right; }
+  .scope-note { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; margin: 0 0 var(--cds-gap-lg); padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: var(--cds-radius); background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 12%, transparent); font-size: var(--cds-font-size-caption); }
+  .scope-note span { flex: 1; min-width: 12rem; }
+  .itm-from { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); display: inline-flex; gap: 4px; align-items: center; }
+  .itm-from a { color: inherit; display: inline-grid; }
+  .pd-team { overflow: auto; max-height: 18rem; }
   .app-side-foot { margin-top: auto; display: flex; gap: var(--cds-gap-sm); align-items: flex-start; padding: var(--cds-pad-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .live-dot { color: var(--color-ok); font-size: .7em; line-height: 1.9; flex: none; }
   .live-dot::before { content: "●"; }
@@ -243,6 +263,10 @@
         <option value="Leadership">Leadership</option>
       </select>
     </label>
+    <label class="app-team">Manager
+      <select class="os-mgr" id="os-mgr" aria-label="Manager" data-draw="mgr-picker" data-source="roster"></select>
+    </label>
+    <button class="app-search" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
     <nav class="app-nav" aria-label="Sections">
       <button class="app-nav-item" type="button" data-nav="home" data-nav-item id="nav-home" aria-current="page">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg>
@@ -285,6 +309,19 @@
 
   <!-- ===================== MAIN ===================== -->
   <main class="app-main">
+    <div class="palette" data-palette hidden>
+      <div class="palette-box" role="dialog" aria-label="Search">
+        <label class="search pal-search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="palette-input" data-search="palette-list" placeholder="Search people, routing pools and account books" aria-label="Search people, routing pools and account books" autocomplete="off"></label>
+        <ul class="pal-list" data-draw="palette-list" data-source="roster rr_pools books"></ul>
+        <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="palette-list"></span>
+          <p class="os-empty" data-msg-for="palette-list" data-msg="empty" hidden>Start typing a name, a pool or an account book.</p>
+          <p class="os-empty" data-msg-for="palette-list" data-msg="nomatch" hidden>Nothing matches. Try part of a name.</p>
+          <p class="os-empty" data-msg-for="palette-list" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to search.</p>
+        </div>
+        <p class="pal-hint">↑ ↓ to move · Enter to open · Esc to close</p>
+      </div>
+    </div>
+    <p class="scope-note" data-scope-note hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Showing one manager's team. Team stats and tables follow it; Created and Home charts stay all EMEA.</span><button class="more" type="button" data-clear-mgr>Show everyone</button></p>
 
     <!-- ===== HOME ===== -->
     <section class="scr" id="home" data-page="home">
@@ -425,8 +462,13 @@
               <button class="fchip" type="button" data-gr-owner="mine" aria-pressed="false">Assigned to you</button>
               <button class="fchip" type="button" data-gr-owner="unassigned" aria-pressed="false">Unassigned</button>
               <button class="fchip" type="button" data-gr-owner="others" aria-pressed="false">With others</button>
+              <button class="fchip" type="button" data-gr-11 aria-pressed="false">1:1s only</button>
             </div>
             <div class="tools">
+              <div class="seg" role="group" aria-label="Group by">
+                <button type="button" data-gr-group="meeting" aria-pressed="true">By meeting</button>
+                <button type="button" data-gr-group="owner" aria-pressed="false">By owner</button>
+              </div>
               <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="act-search" data-search="act-list" placeholder="Search items or meetings" aria-label="Search action items"></label>
               <button class="btn" type="button" data-copy-list><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
@@ -837,7 +879,7 @@
       <div class="view" data-view-panel="routing:pools" hidden>
         <div class="pane" id="rr-pools">
           <div class="pane-head">
-            <div><h2 class="pane-title">Pools</h2><p class="pane-note">Pools with the same name across lead, contact, meeting and opportunity routing are shown once. Follows the team filter by member.</p></div>
+            <div><h2 class="pane-title">Pools</h2><p class="pane-note">Pools with the same name across lead, contact, meeting and opportunity routing are shown once. Spread is the fewest to most assignments an active member got in 90 days. Follows the team or manager filter by member.</p></div>
             <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="rr-pool-search" data-search="rr-pool-table" placeholder="Search pools or members" aria-label="Search pools"></label>
           </div>
           <div class="pane-scroll">
@@ -848,6 +890,7 @@
                 <th class="num" data-field="members">Members</th>
                 <th data-field="memberNames">Who's in it</th>
                 <th class="num" data-field="assignments">Assigned, 90d</th>
+                <th data-field="balance">Spread per member</th>
                 <th data-field="lastAssigned">Last assigned</th>
                 <th data-field="flag">Check</th>
               </tr></thead>
@@ -988,7 +1031,9 @@
 
       <div class="view" data-view-panel="books:books" hidden>
         <div class="pane" id="bk-books">
-          <div class="pane-head"><div><h2 class="pane-title">Account books</h2><p class="pane-note">Books by Territory ID. Split: the main owner holds under 80% of the book's accounts. Follows the team filter by main owner.</p></div></div>
+          <div class="pane-head"><div><h2 class="pane-title">Account books</h2><p class="pane-note">Books by Territory ID. Split: the main owner holds under 80% of the book's accounts. Follows the team or manager filter by main owner.</p></div>
+            <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="bk-book-search" data-search="bk-book-table" placeholder="Search books or owners" aria-label="Search account books"></label>
+          </div>
           <div class="pane-scroll">
             <table class="tbl" data-source="books" data-row-key="book">
               <thead><tr>
@@ -1003,6 +1048,7 @@
             </table>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-book-table"></span>
               <p class="os-empty" data-msg-for="bk-book-table" data-msg="empty" hidden>No account books for this team.</p>
+            <p class="os-empty" data-msg-for="bk-book-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
               <p class="os-empty" data-msg-for="bk-book-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
               <p class="os-empty" data-msg-for="bk-book-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
             </div>
@@ -1109,6 +1155,24 @@
         <div><dt>Assigned, 90 days</dt><dd data-draw="pd-num" data-source="person" data-f="assignments">—</dd></div>
       </dl>
       <ul class="pd-pools" data-draw="pd-pools" data-source="person"></ul>
+    </section>
+    <section class="pd-sec" data-pd-team hidden>
+      <h3>Team</h3>
+      <div class="pd-team">
+        <table class="tbl" data-source="person" data-row-key="name">
+          <thead><tr>
+            <th data-field="name">Name</th>
+            <th class="num" data-field="thisPipe">Pipeline</th>
+            <th class="num" data-field="crOpps">Created</th>
+            <th data-field="routing">Routing</th>
+          </tr></thead>
+          <tbody data-draw="pd-team-table"></tbody>
+        </table>
+        <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="pd-team-table"></span>
+          <p class="os-empty" data-msg-for="pd-team-table" data-msg="empty" hidden>No active direct reports in the EMEA roster.</p>
+          <p class="os-empty" data-msg-for="pd-team-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+        </div>
+      </div>
     </section>
     <div class="pd-actions">
       <button class="btn" type="button" data-copy-person-id><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy Salesforce user ID</button>
