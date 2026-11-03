@@ -25,7 +25,7 @@ const sfRows = ({ answer }) => {
 ['pipe_stage', 'pipe_rep', 'pipe_pastdue', 'pipe_stale', 'won_q', 'renew_stake',
   'cr_daily', 'cr_monthly', 'cr_source', 'cr_owner_q', 'cr_bdr',
   'rr_members', 'rr_assign', 'roster',
-  'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books',
+  'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'top_deals', 'top_renewals', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
 ].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped)', fn: sfRows }));
 
 dash.loader('hb_people', {
@@ -262,6 +262,9 @@ window.OS = (() => {
           const txt = c.fmt ? c.fmt(v, r) : (v == null || v === '' ? '—' : String(v));
           if (c.person && v && !/^\(/.test(String(v))) {
             td.appendChild(personBtn(c.person(r), txt));
+          } else if (c.chips) {
+            String(v || '').split(', ').filter(Boolean).forEach((x) => td.appendChild(el('span', 'chip ' + c.chips(x), x)));
+            if (!v) td.textContent = '—';
           } else if (c.chip) {
             td.appendChild(el('span', 'chip ' + c.chip(v, r), txt));
           } else if (c.bar) {
@@ -305,6 +308,21 @@ window.OS = (() => {
     document.querySelectorAll('[data-msg-for]').forEach((p) => { if (p.dataset.msgFor === name) p.hidden = p.dataset.msg !== k; });
   };
   const redraw = (name) => { dash.draw(name); dash.draw('msg'); };
+  const tableText = (name) => {
+    const t = tables[name];
+    if (!t) return '';
+    const { s, list } = tableRows(name);
+    if (s !== 'ok' || !list.length) return '';
+    let heads = t.cols.map((c) => c.f);
+    document.querySelectorAll('tbody[data-draw]').forEach((tb) => {
+      if (tb.dataset.draw !== name) return;
+      const tbl = tb.closest('table');
+      const ths = tbl ? [...tbl.querySelectorAll('thead th')] : [];
+      if (ths.length === t.cols.length) heads = ths.map((th) => th.textContent.trim());
+    });
+    const cell = (v) => (v == null ? '' : String(v).replace(/[\t\r\n]+/g, ' '));
+    return [heads.join('\t')].concat(list.map((r) => t.cols.map((c) => cell(r[c.f])).join('\t'))).join('\n');
+  };
 
   // lists: the drawing holds only items; sentences come from the message slot beside it
   const defList = (name, ids, rows, render, opts = {}) => {
@@ -457,7 +475,7 @@ window.OS = (() => {
     });
   };
 
-  return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, icon, ICON, defTable, defList, defChart, drawMsg, redraw, vbars, hbars, searchFilter };
+  return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, icon, ICON, defTable, defList, defChart, drawMsg, redraw, tableText, vbars, hbars, searchFilter };
 })();
 
 // ---------- App shell ----------
@@ -560,10 +578,39 @@ window.OS = (() => {
     OS.redraw('palette-list');
   };
   const closePalette = () => document.querySelectorAll('[data-palette]').forEach((p) => { p.hidden = true; });
+  // plain-text summaries for Slack: built from the data already loaded on screen
+  const rowOf = (id, pick) => (OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
+  const weeklySummary = () => {
+    const p = dash.params();
+    const scope = p.mgr ? 'M|' + p.mgr : p.region || 'All';
+    const label = p.mgr ? p.mgr + "'s team" : (p.region && p.region !== 'All' ? p.region : 'EMEA');
+    const pipeKey = p.mgr ? 'M|' + p.mgr : !p.region || p.region === 'All' ? 'All|All' : p.region + '|All';
+    const pipe = rowOf('pipe_team', (r) => r.key === pipeKey);
+    const cr = rowOf('cr_kpi', () => true);
+    const rr = rowOf('rr_kpi', (r) => r.region === scope);
+    const orph = rowOf('orphan_kpi', () => true);
+    const gr = rowOf('gr_kpi', () => true);
+    const ck = rowOf('checks_kpi', (r) => r.region === scope);
+    const lines = [`RevOps update, ${label}, ${OS.day(new Date().toISOString().slice(0, 10))}`];
+    if (pipe) lines.push(`• Pipeline this quarter: ${OS.usd(pipe.thisPipe)} open (commit ${OS.usd(pipe.thisCommit)}, best case ${OS.usd(pipe.thisBest)}), ${OS.usd(pipe.won)} closed won`);
+    if (cr) lines.push(`• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
+    if (rr) lines.push(`• Routing: ${OS.num(rr.missing)} reps missing from a pool, ${OS.num(rr.weekOne)} joiners to add next week`);
+    if (ck) lines.push(`• Data checks: ${OS.num(ck.total)} open, ${OS.num(ck.high)} urgent`);
+    if (orph && !p.mgr && (!p.region || p.region === 'All')) lines.push(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
+    if (gr) lines.push(`• My action items: ${OS.num(gr.forYou)} for me from ${OS.num(gr.meetings)} meetings`);
+    return lines.length > 1 ? lines.join('\n') : '';
+  };
+  const checksChecklist = () => {
+    const p = dash.params();
+    const area = p.checkArea || 'All';
+    const all = (OS.state('checks') === 'ok' ? dash.data('checks').data || [] : []).concat(OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : []);
+    return all.filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region) && (area === 'All' || c.area === area))
+      .map((c) => `- [ ] ${c.title}: ${c.what}${c.meta ? ' (' + c.meta + ')' : ''}`).join('\n');
+  };
   const syncCopyList = () => document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], th[data-sort]');
+    const t = e.target.closest('[data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
     if (!t) return;
     if (t.matches('[data-nav]')) {
       if (t.dataset.grOwner) dash.setParams({ grOwner: t.dataset.grOwner });
@@ -586,12 +633,17 @@ window.OS = (() => {
     if (t.matches('[data-close-person]')) { closePanel(); return; }
     if (t.matches('[data-copy-text]')) { copy(t.dataset.copyText, t); return; }
     if (t.matches('[data-copy-list]')) { const text = checklist(); if (text) copy(text, t); return; }
+    if (t.matches('[data-copy-summary]')) { const text = weeklySummary(); if (text) copy(text, t); else toast(false, t); return; }
+    if (t.matches('[data-copy-checks]')) { const text = checksChecklist(); if (text) copy(text, t); else toast(false, t); return; }
+    if (t.matches('[data-copy-table]')) { const text = OS.tableText(t.dataset.copyTable); if (text) copy(text, t); else toast(false, t); return; }
     if (t.matches('[data-copy-person-id]')) { const row = personRowNow(); if (row && row.userId) copy(row.userId, t); return; }
     if (t.matches('[data-pq]')) { dash.setParams({ pq: t.dataset.pq }); return; }
     if (t.matches('[data-crm]')) { dash.setParams({ crm: t.dataset.crm }); return; }
     if (t.matches('[data-gr-window]')) { dash.setParams(windowParams(+t.dataset.grWindow)); return; }
     if (t.matches('[data-gr-owner]')) { dash.setParams({ grOwner: t.dataset.grOwner }); return; }
     if (t.matches('[data-check-area]')) { dash.setParams({ checkArea: t.dataset.checkArea }); return; }
+    if (t.matches('[data-deal-flag]')) { dash.setParams({ dealFlag: t.dataset.dealFlag }); return; }
+    if (t.matches('[data-renew-flag]')) { dash.setParams({ renewFlag: t.dataset.renewFlag }); return; }
     if (t.matches('th[data-sort]')) {
       const tbl = t.closest('table[data-sortable]');
       if (!tbl) return;
@@ -627,6 +679,7 @@ window.OS = (() => {
         return;
       }
     }
+    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-7]$/.test(e.key)) { go(SCREENS[+e.key - 1]); return; }
     if (e.key === 'Escape' && dash.params().person) closePanel();
   });
   document.querySelectorAll('.os-region').forEach((sel) => sel.addEventListener('change', () => dash.setParams({ region: sel.value || 'All', mgr: '' })));
@@ -653,6 +706,8 @@ window.OS = (() => {
     pressed('[data-gr-window]', 'grWindow', p.grWindow || 30);
     pressed('.fchip[data-gr-owner]', 'grOwner', p.grOwner || 'all');
     pressed('[data-check-area]', 'checkArea', p.checkArea || 'All');
+    pressed('[data-deal-flag]', 'dealFlag', p.dealFlag || '');
+    pressed('[data-renew-flag]', 'renewFlag', p.renewFlag || '');
     pressed('[data-gr-group]', 'grGroup', p.grGroup || 'meeting');
     document.querySelectorAll('[data-gr-11]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.gr11)));
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
@@ -679,6 +734,9 @@ window.OS = (() => {
       document.querySelectorAll('[data-copy-person-id]').forEach((b) => { b.disabled = !(row && row.userId); });
       const hasTeam = sf === 'ok' && (dash.data('person').data || []).some((r) => r.manager === p.person && r.isActive !== false && r.inRoster);
       document.querySelectorAll('[data-pd-team]').forEach((n) => { n.hidden = !hasTeam; });
+      // open deals: point the deals query at this person, and show the section once it has
+      if (row && row.userId && p.dealOwnerId !== row.userId) dash.setParams({ dealOwnerId: row.userId });
+      document.querySelectorAll('[data-pd-deals]').forEach((n) => { n.hidden = !(row && row.userId && p.dealOwnerId === row.userId); });
     }
   });
   dash.draw('msg', (slot) => OS.drawMsg(slot));

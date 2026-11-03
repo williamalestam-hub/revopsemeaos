@@ -4,13 +4,16 @@ const mgrPick = () => dash.params().mgr || '';
 const inTeam = (r) => (mgrPick() ? r.manager === mgrPick() : OS.region() === 'All' || r.region === OS.region());
 const setWhere = (el, key, val) => { el.dataset.where = key + '=' + encodeURIComponent(val); };
 const scopeKey = () => (mgrPick() ? 'M|' + mgrPick() : OS.region());
+// a value mark keeps its field in data-f0; with no matching row the mark is dropped (the value shows as 0)
+const keepField = (el) => { if (!el.dataset.f0 && el.dataset.field) el.dataset.f0 = el.dataset.field; return el.dataset.f0; };
+const markRow = (el, key, val, row) => {
+  const f = keepField(el);
+  if (row) { el.dataset.field = f; setWhere(el, key, val); } else { delete el.dataset.field; delete el.dataset.where; }
+  return row || {};
+};
 const regionRow = (el, id) => {
   const key = scopeKey();
-  const rows = dash.data(id).data || [];
-  const row = rows.find((r) => r.region === key);
-  if (row) { setWhere(el, 'region', key); return row; }
-  setWhere(el, 'region', 'All');
-  return mgrPick() ? {} : rows.find((r) => r.region === 'All') || {};
+  return markRow(el, 'region', key, (dash.data(id).data || []).find((r) => r.region === key));
 };
 const firstRow = (id) => (dash.data(id).data || [])[0] || {};
 const statusCls = (v) => (/^In routing$/.test(v) ? 'ok'
@@ -22,24 +25,21 @@ const monthLabel = (m, i) => d3.utcFormat(i === 0 || m.endsWith('-01') ? "%b '%y
 // ===================== NAV BADGES =====================
 dash.draw('nav-badge', (el) => {
   const id = el.dataset.source;
+  if (!el.dataset.f0) el.dataset.f0 = el.dataset.f;
   if (OS.state(id) !== 'ok') { el.classList.remove('is-on'); el.textContent = '—'; return; }
-  const row = el.hasAttribute('data-by-region') ? regionRow(el, id) : firstRow(id);
-  const n = +row[el.dataset.f] || 0;
-  el.dataset.field = el.dataset.f;
+  let row;
+  if (el.hasAttribute('data-by-region')) row = regionRow(el, id);
+  else { row = firstRow(id); el.dataset.field = el.dataset.f0; }
+  const n = +row[el.dataset.f0] || 0;
   el.textContent = OS.num(n);
   el.classList.toggle('is-on', n > 0);
 });
 
 // ===================== PIPELINE =====================
-const pipeRow = (el) => {
-  const region = OS.region();
-  const key = mgrPick() ? 'M|' + mgrPick() : region === 'All' ? 'All|All' : region + '|All';
-  const row = (dash.data('pipe_team').data || []).find((r) => r.key === key);
-  setWhere(el, 'key', row ? key : 'All|All');
-  return row || {};
-};
-dash.draw('kpi-pipe', (el) => OS.value(el, ['pipe_team'], () => OS.usd(pipeRow(el)[el.dataset.field] || 0)));
-dash.draw('kpi-pipe-sub', (el) => OS.value(el, ['pipe_team'], () => OS.num(pipeRow(el)[el.dataset.field] || 0)));
+const pipeKey = () => (mgrPick() ? 'M|' + mgrPick() : OS.region() === 'All' ? 'All|All' : OS.region() + '|All');
+const pipeRow = (el) => markRow(el, 'key', pipeKey(), (dash.data('pipe_team').data || []).find((r) => r.key === pipeKey()));
+dash.draw('kpi-pipe', (el) => OS.value(el, ['pipe_team'], () => OS.usd(pipeRow(el)[keepField(el)] || 0)));
+dash.draw('kpi-pipe-sub', (el) => OS.value(el, ['pipe_team'], () => OS.num(pipeRow(el)[keepField(el)] || 0)));
 
 const stageKeys = () => [
   { k: 'late', name: 'Late (4–6)', color: dash.colors[0] },
@@ -119,8 +119,8 @@ OS.defTable('cr-rep-table', ['cr_leader'], () => (dash.data('cr_leader').data ||
 
 // ===================== ACTION ITEMS =====================
 dash.draw('kpi-gr', (el) => OS.value(el, ['gr_kpi'], () => OS.num(firstRow('gr_kpi')[el.dataset.field] || 0)));
-dash.draw('kpi-checks', (el) => OS.value(el, ['checks_kpi'], () => OS.num(regionRow(el, 'checks_kpi')[el.dataset.field] || 0)));
-dash.draw('kpi-checks-hb', (el) => OS.value(el, ['checks_hb_kpi'], () => OS.num(regionRow(el, 'checks_hb_kpi')[el.dataset.field] || 0)));
+dash.draw('kpi-checks', (el) => OS.value(el, ['checks_kpi'], () => OS.num(regionRow(el, 'checks_kpi')[keepField(el)] || 0)));
+dash.draw('kpi-checks-hb', (el) => OS.value(el, ['checks_hb_kpi'], () => OS.num(regionRow(el, 'checks_hb_kpi')[keepField(el)] || 0)));
 
 const ownerChip = (r) => OS.el('span', 'chip' + (r.bucket === 'mine' ? ' info' : r.bucket === 'unassigned' ? ' warn' : ''), r.owner || 'Unassigned');
 const actionItem = (r, byOwner) => {
@@ -243,10 +243,10 @@ OS.defList('check-list', () => ((dash.params().checkArea || 'All') === 'Hiring' 
 OS.defList('home-checks', ['checks'], () => allChecks().slice(0, 7), (rows) => rows.map(checkItem));
 
 // ===================== HIRING =====================
-dash.draw('kpi-hire', (el) => OS.value(el, ['hire_kpi'], () => OS.num(regionRow(el, 'hire_kpi')[el.dataset.field] || 0)));
+dash.draw('kpi-hire', (el) => OS.value(el, ['hire_kpi'], () => OS.num(regionRow(el, 'hire_kpi')[keepField(el)] || 0)));
 
 OS.defTable('hire-table', ['people'], () => (dash.data('people').data || [])
-  .filter((p) => p.daysIn != null && p.daysIn <= 90 && inTeam(p))
+  .filter((p) => p.daysIn != null && p.daysIn <= 90 && (mgrPick() ? p.sfManager === mgrPick() : OS.region() === 'All' || p.region === OS.region()))
   .sort((a, b) => a.daysIn - b.daysIn), [
   { f: 'name', person: (r) => r.sfName || r.name }, { f: 'title' }, { f: 'team' }, { f: 'site' }, { f: 'manager' },
   { f: 'startDate', fmt: OS.day }, { f: 'daysIn', fmt: OS.num, num: true },
@@ -267,7 +267,7 @@ OS.defTable('hire-team-table', ['hire_teams'], () => dash.data('hire_teams').dat
 ], { key: 'team' });
 
 // ===================== ROUTING =====================
-dash.draw('kpi-rr', (el) => OS.value(el, ['rr_kpi'], () => OS.num(regionRow(el, 'rr_kpi')[el.dataset.field] || 0)));
+dash.draw('kpi-rr', (el) => OS.value(el, ['rr_kpi'], () => OS.num(regionRow(el, 'rr_kpi')[keepField(el)] || 0)));
 
 OS.defTable('rr-people-table', ['rr_people'], () => {
   const only = !!dash.params().onlyMissing;
@@ -277,7 +277,7 @@ OS.defTable('rr-people-table', ['rr_people'], () => {
     .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || String(a.name).localeCompare(String(b.name)));
 }, [
   { f: 'name', person: (r) => r.name }, { f: 'region' }, { f: 'manager' }, { f: 'createdDate', fmt: OS.day },
-  { f: 'pools', fmt: OS.num, num: true }, { f: 'poolNames', wrap: true },
+  { f: 'pools', fmt: OS.num, num: true }, { f: 'poolNames', wrap: true }, { f: 'suggested', wrap: true },
   { f: 'assignments', fmt: OS.num, num: true }, { f: 'status', chip: statusCls },
 ], { key: 'userId' });
 
@@ -293,8 +293,8 @@ OS.defTable('rr-pool-table', ['rr_pools'], () => {
 ], { key: 'pool' });
 
 // ===================== BOOKS =====================
-dash.draw('kpi-bk', (el) => OS.value(el, ['books_kpi'], () => OS.num(regionRow(el, 'books_kpi')[el.dataset.field] || 0)));
-dash.draw('kpi-bk-usd', (el) => OS.value(el, ['books_kpi'], () => OS.usd(regionRow(el, 'books_kpi')[el.dataset.field] || 0)));
+dash.draw('kpi-bk', (el) => OS.value(el, ['books_kpi'], () => OS.num(regionRow(el, 'books_kpi')[keepField(el)] || 0)));
+dash.draw('kpi-bk-usd', (el) => OS.value(el, ['books_kpi'], () => OS.usd(regionRow(el, 'books_kpi')[keepField(el)] || 0)));
 dash.draw('kpi-orph', (el) => OS.value(el, ['orphan_kpi'], () => OS.num(firstRow('orphan_kpi')[el.dataset.field] || 0)));
 dash.draw('kpi-orph-usd', (el) => OS.value(el, ['orphan_kpi'], () => OS.usd(firstRow('orphan_kpi')[el.dataset.field] || 0)));
 
@@ -305,6 +305,8 @@ OS.defTable('bk-owner-table', ['books_owner'], () => (dash.data('books_owner').d
   { f: 'arr', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.arr) },
   { f: 'emCustomers', fmt: OS.num, num: true }, { f: 'openPipe', fmt: OS.usd, num: true },
   { f: 'openRenewals', fmt: OS.num, num: true },
+  { f: 'vsMedian', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v) + '×'), num: true },
+  { f: 'balance', chip: (v) => (v === 'Heavy' ? 'bad' : v === 'Light' ? 'warn' : v ? 'ok' : '') },
 ], { key: 'owner' });
 
 OS.defTable('bk-cov-table', ['coverage'], () => (dash.data('coverage').data || []).map((r) => ({ ...r, _cls: r.salesRegion === 'All EMEA regions' ? 'os-total' : '' })), [
@@ -358,6 +360,7 @@ const personValue = (fmt) => (el) => {
 };
 dash.draw('pd-text', personValue((v) => String(v)));
 dash.draw('pd-num', personValue(OS.num));
+dash.draw('pd-pct', personValue(OS.pct));
 dash.draw('pd-usd', personValue(OS.usd));
 dash.draw('pd-day', personValue(OS.day));
 dash.draw('pd-title', (el) => { el.textContent = String(dash.params().person || '—'); });
@@ -437,3 +440,158 @@ OS.defList('palette-list', ['roster'], paletteRows, (rows) => rows.map((r) => {
   li.append(b);
   return li;
 }), { msg: () => (!(OS.queries['palette-list'] || '').trim() ? 'empty' : paletteRows().length ? null : 'nomatch') });
+
+// ===================== THIS WEEK (HOME) =====================
+OS.defList('home-started', ['people'], () => (dash.data('people').data || []).filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 6)
+  .sort((a, b) => a.daysIn - b.daysIn), (rows) => rows.map((p) => {
+  const li = OS.el('li', 'itm');
+  li.dataset.key = p.id;
+  const main = OS.el('div', 'itm-main');
+  const t = OS.el('span', 'itm-title');
+  t.append(OS.personBtn(p.sfName || p.name, p.name));
+  main.append(t, OS.el('span', 'itm-detail', [p.title, p.team, p.site].filter(Boolean).join(' · ')));
+  const meta = OS.el('div', 'itm-meta');
+  meta.append(OS.el('span', 'chip ' + statusCls(p.status), p.status), OS.el('span', null, OS.shortDay(p.startDate)));
+  li.append(OS.el('span', 'itm-dot mine'), main, meta);
+  return li;
+}));
+OS.defList('home-pooladds', ['pool_adds'], () => dash.data('pool_adds').data || [], (rows) => rows.map((r) => {
+  const li = OS.el('li', 'itm');
+  li.dataset.key = r.name;
+  const main = OS.el('div', 'itm-main');
+  const t = OS.el('span', 'itm-title');
+  t.append(OS.personBtn(r.name));
+  main.append(t, OS.el('span', 'itm-detail', r.poolNames));
+  const meta = OS.el('div', 'itm-meta');
+  meta.append(OS.el('span', 'chip', r.pools + (r.pools === 1 ? ' pool' : ' pools')), OS.el('span', null, OS.shortDay(r.addedOn)));
+  li.append(OS.el('span', 'itm-dot others'), main, meta);
+  return li;
+}));
+
+// ===================== DEALS =====================
+const flagCls = (f) => (f === 'Past due' || f === 'Commit at early stage' ? 'bad' : f === 'No next step' ? '' : 'warn');
+OS.defTable('deal-table', ['deal_list'], () => {
+  const pq = dash.params().pq === 'next' ? 'next' : 'this';
+  const flag = dash.params().dealFlag || '';
+  return (dash.data('deal_list').data || []).filter((x) => x.quarter === pq && inTeam(x) && (!flag || x.flags.split(', ').includes(flag)));
+}, [
+  { f: 'opp', wrap: true }, { f: 'owner', person: (r) => r.owner }, { f: 'stage' },
+  { f: 'closeDate', fmt: OS.shortDay }, { f: 'forecast' },
+  { f: 'arrUsd', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.arrUsd) },
+  { f: 'flags', chips: flagCls }, { f: 'risk', fmt: OS.num, num: true },
+], { key: 'oppId', limit: 100 });
+
+OS.defList('pd-deals', ['person_deals'], () => dash.data('person_deals').data || [], (rows) => rows.map((x) => {
+  const li = OS.el('li', 'itm');
+  li.dataset.key = x.oppId;
+  const main = OS.el('div', 'itm-main');
+  main.append(OS.el('span', 'itm-title', x.opp));
+  main.append(OS.el('span', 'itm-detail', [x.rt, x.stage, 'closes ' + OS.shortDay(x.closeDate), x.forecast].filter(Boolean).join(' · ')));
+  if (x.nextStep) main.append(OS.el('span', 'itm-detail', x.nextStep));
+  const flags = OS.el('span', 'itm-flags');
+  x.flags.split(', ').filter(Boolean).forEach((f) => flags.append(OS.el('span', 'chip ' + flagCls(f), f)));
+  if (x.flags) main.append(flags);
+  const meta = OS.el('div', 'itm-meta');
+  meta.append(OS.el('span', 'itm-arr', OS.usd(x.arrUsd)));
+  const cp = OS.el('button', 'ibtn');
+  cp.type = 'button';
+  cp.setAttribute('aria-label', 'Copy opportunity ID');
+  cp.dataset.copyText = x.oppId;
+  cp.appendChild(OS.icon(OS.ICON.copy));
+  meta.append(cp);
+  li.append(OS.el('span', 'itm-dot ' + (x.flags ? 'medium' : 'low')), main, meta);
+  return li;
+}));
+
+// ===================== FORECAST =====================
+const forecastRows = () => {
+  const region = OS.region();
+  const rows = dash.data('forecast').data || [];
+  if (mgrPick()) return rows.filter((r) => r.level === 'team' && r.manager === mgrPick());
+  return region === 'All' ? rows.filter((r) => r.level === 'region' && (r.won || r.pipeline)) : rows.filter((r) => r.level === 'team' && r.region === region);
+};
+OS.defTable('fc-table', ['forecast'], () => forecastRows().map((r) => ({ ...r, label: OS.region() === 'All' && !mgrPick() ? r.region : r.manager })).sort((a, b) => b.wonCommitBest - a.wonCommitBest), [
+  { f: 'label' },
+  { f: 'won', fmt: OS.usd, num: true }, { f: 'commit', fmt: OS.usd, num: true }, { f: 'bestCase', fmt: OS.usd, num: true },
+  { f: 'wonCommit', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.wonCommitBest) },
+  { f: 'wonCommitBest', fmt: OS.usd, num: true }, { f: 'pipeline', fmt: OS.usd, num: true },
+  { f: 'commitShare', fmt: OS.pct, num: true },
+], { key: 'key' });
+OS.defChart('fc-chart', ['forecast'], () => forecastRows().map((r) => ({ label: OS.region() === 'All' && !mgrPick() ? r.region : r.manager, won: r.won, commit: r.commit, best: r.bestCase, total: r.wonCommitBest }))
+  .filter((r) => r.total > 0).sort((a, b) => b.total - a.total), (box, rows) => OS.hbars(box, rows, [
+  { k: 'won', name: 'Closed won', color: dash.colors[0] },
+  { k: 'commit', name: 'Commit', color: dash.colors[1] },
+  { k: 'best', name: 'Best case', color: dash.colors[2] },
+], OS.usd));
+dash.draw('kpi-fc', (el) => OS.value(el, ['forecast'], () => OS.usd(markRow(el, 'key', pipeKey(), (dash.data('forecast').data || []).find((r) => r.key === pipeKey()))[keepField(el)] || 0)));
+
+// ===================== RENEWALS =====================
+const renewFlagCls = (f) => (f === 'Past due' || f === 'High risk rating' || f === 'Downsell' ? 'bad' : 'warn');
+OS.defTable('renew-table', ['renewal_list'], () => {
+  const pq = dash.params().pq === 'next' ? 'next' : 'this';
+  const flag = dash.params().renewFlag || '';
+  return (dash.data('renewal_list').data || []).filter((x) => x.quarter === pq && inTeam(x) && (!flag || x.flags.split(', ').includes(flag)));
+}, [
+  { f: 'opp', wrap: true }, { f: 'owner', person: (r) => r.owner }, { f: 'stage' },
+  { f: 'closeDate', fmt: OS.shortDay }, { f: 'daysToClose', fmt: OS.num, num: true, cls: (v) => (v < 0 ? 'os-bad' : v <= 30 ? 'os-warn' : '') },
+  { f: 'rating', chip: (v) => (v === 'High' ? 'bad' : v === 'Medium' ? 'warn' : v === 'Low' ? 'ok' : '') },
+  { f: 'renewingArrUsd', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.renewingArrUsd) },
+  { f: 'netChangeArrUsd', fmt: OS.usd, num: true, cls: (v) => (v < 0 ? 'os-bad' : '') },
+  { f: 'flags', chips: renewFlagCls },
+], { key: 'oppId', limit: 100 });
+
+// ===================== REP RISK =====================
+dash.draw('kpi-risk', (el) => OS.value(el, ['risk_kpi'], () => {
+  const v = regionRow(el, 'risk_kpi')[keepField(el)];
+  return el.dataset.fmt === 'usd' ? OS.usd(v || 0) : el.dataset.fmt === 'pct' ? OS.pct(v) : OS.num(v || 0);
+}));
+OS.defTable('risk-table', ['rep_risk'], () => (dash.data('rep_risk').data || []).filter(inTeam), [
+  { f: 'owner', person: (r) => r.owner }, { f: 'region' },
+  { f: 'thisPipe', fmt: OS.usd, num: true },
+  { f: 'pushedOut', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'pushedOutArr', fmt: OS.usd, num: true },
+  { f: 'repeatEdits', fmt: OS.num, num: true, cls: (v) => (v > 2 ? 'os-warn' : '') },
+  { f: 'early', fmt: OS.num, num: true }, { f: 'earlyShare', fmt: OS.pct, num: true, cls: (v) => (v != null && v >= 0.3 ? 'os-warn' : '') },
+  { f: 'noContact', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'nextOverdue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'pastDue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'stale', fmt: OS.num, num: true },
+  { f: 'score', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.score) },
+], { key: 'owner' });
+
+// ===================== PACE / BOOKINGS / RAMP =====================
+const signed = (v) => (v == null ? '—' : (v >= 0 ? '+' : '−') + d3.format('.0%')(Math.abs(v)));
+dash.draw('kpi-pace', (el) => {
+  OS.value(el, ['cr_pace'], () => signed(firstRow('cr_pace')[el.dataset.field]));
+  const v = OS.state('cr_pace') === 'ok' ? firstRow('cr_pace')[el.dataset.field] : null;
+  el.classList.toggle('os-ok', v != null && v >= 0);
+  el.classList.toggle('os-bad', v != null && v < 0);
+});
+dash.draw('kpi-pace-num', (el) => OS.value(el, ['cr_pace'], () => OS.num(firstRow('cr_pace')[el.dataset.field] || 0)));
+dash.draw('kpi-book', (el) => OS.value(el, ['bookings_kpi'], () => {
+  const v = regionRow(el, 'bookings_kpi')[keepField(el)];
+  return el.dataset.fmt === 'usd' ? OS.usd(v || 0) : el.dataset.fmt === 'pct' ? OS.pct(v) : OS.num(v || 0);
+}));
+OS.defTable('book-table', ['bookings'], () => (dash.data('bookings').data || []).filter(inTeam), [
+  { f: 'owner', person: (r) => r.owner }, { f: 'region' }, { f: 'manager' },
+  { f: 'wonThisArr', fmt: OS.usd, num: true, bar: (l) => d3.max(l, (r) => r.wonThisArr) },
+  { f: 'wonThis', fmt: OS.num, num: true }, { f: 'lostThis', fmt: OS.num, num: true },
+  { f: 'winRateThis', fmt: OS.pct, num: true }, { f: 'avgDealThis', fmt: OS.usd, num: true },
+  { f: 'wonLastArr', fmt: OS.usd, num: true }, { f: 'winRateLast', fmt: OS.pct, num: true },
+], { key: 'owner' });
+OS.defChart('lost-chart', ['lost_reasons'], () => {
+  const scope = mgrPick() ? 'M|' + mgrPick() : OS.region();
+  return (dash.data('lost_reasons').data || []).filter((r) => r.scope === scope && (r.thisOpps || r.lastOpps))
+    .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
+    .sort((a, b) => b.thisQ - a.thisQ || b.lastQ - a.lastQ);
+}, (box, rows) => OS.hbars(box, rows, [{ k: 'thisQ', name: 'This quarter', color: dash.colors[0] }], OS.num));
+const rampCls = (v) => (v === 'Ramping' || v === 'Sourcing' ? 'ok' : v === 'Not ramping' || v === 'No Salesforce user' ? 'bad' : v === 'Too early' ? 'warn' : '');
+OS.defTable('ramp-table', ['ramp'], () => (dash.data('ramp').data || [])
+  .filter((p) => (mgrPick() ? p.manager === mgrPick() : OS.region() === 'All' || p.region === OS.region()))
+  .sort((a, b) => a.daysIn - b.daysIn), [
+  { f: 'name', person: (r) => r.sfName || r.name }, { f: 'sfRole' }, { f: 'startDate', fmt: OS.day },
+  { f: 'daysIn', fmt: OS.num, num: true }, { f: 'opps', fmt: OS.num, num: true },
+  { f: 'perMonth', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v)), num: true },
+  { f: 'daysToFirst', fmt: OS.num, num: true }, { f: 'pipeThisQ', fmt: OS.usd, num: true },
+  { f: 'sourced', fmt: OS.num, num: true }, { f: 'status', chip: rampCls },
+], { key: 'id' });

@@ -8,7 +8,7 @@ def put(col, doc, data):
     os.makedirs(f'store/{col}', exist_ok=True)
     json.dump(data, open(f'store/{col}/{doc}.json', 'w'), ensure_ascii=False)
 put('dash', 'meta', {"title": "EMEA RevOps OS"})
-put('dash', 'params', {"region": "All", "pq": "this", "crm": "opps", "onlyMissing": False, "orphanReason": "", "person": "", "grWindow": 30, "gr_since": "2026-10-04", "gr_until": "2026-11-03", "grOwner": "all", "checkArea": "All"})
+put('dash', 'params', {"region": "All", "pq": "this", "crm": "opps", "onlyMissing": False, "orphanReason": "", "person": "", "grWindow": 30, "gr_since": "2026-10-04", "gr_until": "2026-11-03", "grOwner": "all", "checkArea": "All", "mgr": "", "grGroup": "meeting", "gr11": False, "dealOwnerId": "005Pn00000N96c1IAB", "dealFlag": "", "renewFlag": ""})
 for k, v in json.load(open('datasets.json')).items():
     put('datasets', k, {**v, "edit": EDIT})
 for f in ['index.html', 'os-core.js', 'os-calcs.js', 'os-draw.js']:

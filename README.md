@@ -7,9 +7,16 @@ Every number is a live connector call made with the reader's own access when the
 Data comes from **Salesforce** (including LeanData's round-robin objects, which live in Salesforce),
 **HiBob** and **Granola**. Nothing is copied into the page.
 
-The app has a sidebar (team switcher, screens with live count badges), a Home screen, screens with
-view tabs, and a person panel: click any name to see that person's pipeline, created opps, book,
-routing pools and HiBob details in one place.
+The app has a sidebar (team and manager switchers, Ctrl K search, screens with live count badges),
+a Home screen, screens with view tabs, and a person panel: click any name to see that person's
+pipeline, open deals with risk flags, created opps, book, routing pools, HiBob details and, for a
+manager, their team.
+
+**Working with it**
+- **Team / Manager**: pick a team or one manager; stats, tables and charts follow (Created trends stay all EMEA).
+- **Search (Ctrl K or /)**: jump to any person, routing pool or account book. Keys 1–7 switch screens.
+- **Copy**: every table has a copy button (paste into Sheets or Slack, as shown, sorted and searched);
+  Home has *Copy weekly summary*; action items and data checks copy as checklists.
 
 ## Screens
 
@@ -17,10 +24,10 @@ routing pools and HiBob details in one place.
 |---|---|---|
 | Home | Headline numbers, your next steps from meetings, the most urgent data checks, pipeline by team, created per week | all of the below |
 | Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), plus data checks: routing gaps, joiners with no Salesforce user, past-due opps, orphan accounts, split books | Granola `list_meetings` + `get_meetings`; the Salesforce and HiBob sources |
-| Pipeline | Open NB + Upsell pipeline, commit and best case this/next quarter by team → manager → rep; closed won this quarter; renewals at stake; past-due and stale opps | `Opportunity` |
+| Pipeline | Open NB + Upsell pipeline by team → manager → rep; **Forecast** roll-up (won, won + commit, won + commit + best case); **Top deals**: the 300 largest open deals with risk flags (past due, Commit at early stage, early stage closing this quarter, stale 30d+, no next step) and a risk score; renewals at stake | `Opportunity` |
 | Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards | `Opportunity` |
 | Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to Salesforce user and routing pools | HiBob `commons_searchEmployees`, `User`, LeanData pools |
-| Routing pools | Every EMEA LeanData pool and its members, 90-day assignments, reps missing from routing, joiners due in week 2, inactive members | `LeanData__Round_Robin_Setting__c`, `LeanData__Log__c` (counts only), `User` |
+| Routing pools | Every EMEA LeanData pool and its members, 90-day assignments and how evenly they're spread, reps missing from routing, joiners due in week 2, inactive members, members getting none | `LeanData__Round_Robin_Setting__c`, `LeanData__Log__c` (counts only), `User` |
 | Account books | Book size per rep (incl. EM book), territory coverage by Sales Region, orphan accounts with reason, split books, routing vs book mismatches | `Account`, `Opportunity`, LeanData pools |
 
 A **Team** filter (France, DACH, Southern Europe, Iberia & LATAM, Benelux, Nordics, CEE, MEA, SMB,
