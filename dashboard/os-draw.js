@@ -353,11 +353,12 @@ const lvHeld = (r) => [
   r.emCustomers ? 'Engagement Manager on ' + OS.num(r.emCustomers) + ' customer' + (r.emCustomers === 1 ? '' : 's') : '',
   r.pools ? 'a seat in ' + OS.num(r.pools) + ' LeanData pool' + (r.pools === 1 ? '' : 's') + ' (' + r.poolNames + ')' : '',
 ].filter(Boolean).join('; ');
+const lvAsk = (r) => OS.links.ask(OS.ask.data('Hand-over: ' + r.name, 'Plan the hand-over for ' + r.name + ', who has left (their Salesforce user is inactive' + (r.role ? '; role ' + r.role : '') + (r.manager && r.manager !== '(no manager)' ? '; manager ' + r.manager : '') + '). They still own: ' + lvHeld(r) + '. Propose who should take each item (people in their team first, keeping books balanced), list the Salesforce and LeanData changes, and wait for my OK before changing anything.', { kind: 'leaver', userId: r.userId, name: r.name }));
 const lvActs = (r) => {
   const box = OS.el('span', 'row-acts');
   const sf = OS.links.sf('User', r.userId);
   if (sf) box.append(sf);
-  const ask = OS.links.ask(OS.ask.data('Hand-over: ' + r.name, 'Plan the hand-over for ' + r.name + ', who has left (their Salesforce user is inactive' + (r.role ? '; role ' + r.role : '') + (r.manager && r.manager !== '(no manager)' ? '; manager ' + r.manager : '') + '). They still own: ' + lvHeld(r) + '. Propose who should take each item (people in their team first, keeping books balanced), list the Salesforce and LeanData changes, and wait for my OK before changing anything.', { kind: 'leaver', userId: r.userId, name: r.name }));
+  const ask = lvAsk(r);
   if (ask) box.append(ask);
   return box.children.length ? box : null;
 };
@@ -956,7 +957,8 @@ dash.draw('pd-act', (box) => {
   if (mail) out.push(mail);
   const sf = p && p.userId ? OS.links.sf('User', p.userId) : null;
   if (sf) out.push(sf);
-  const ask = n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book and open follow-ups with me, and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
+  const left = n && OS.state('leavers') === 'ok' ? (dash.data('leavers').data || []).find((r) => r.name === n) : null;
+  const ask = left ? lvAsk(left) : n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book and open follow-ups with me, and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
   if (ask) out.push(ask);
   box.replaceChildren(...out);
 });
