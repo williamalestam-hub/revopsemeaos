@@ -846,9 +846,9 @@ dash.calc('gr_kpi', {
 // ===================== DATA CHECKS =====================
 dash.calc('checks', {
   title: 'Data checks',
-  description: 'Problems to act on in Salesforce and LeanData: reps missing from routing or due next week, inactive users in pools, reps with past-due opps, orphan accounts by reason, split books, and reps whose Salesforce manager is no longer active.',
-  inputs: ['rr_people', 'rr_pools', 'pipe_reps', 'orphans', 'books', 'roster'],
-  fn: (rr_people, rr_pools, pipe_reps, orphans, books, roster) => {
+  description: 'Problems to act on in Salesforce and LeanData: reps missing from routing or due next week, inactive users in pools, reps with past-due opps, orphan accounts by reason, split books, reps whose Salesforce manager is no longer active, and people who left who still own open deals or renewals.',
+  inputs: ['rr_people', 'rr_pools', 'pipe_reps', 'orphans', 'books', 'roster', 'lv_opps'],
+  fn: (rr_people, rr_pools, pipe_reps, orphans, books, roster, lv_opps) => {
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
     const money = (v) => { const a = Math.abs(+v || 0); const s = a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 1e3 ? Math.round(a / 1e3) + 'K' : String(Math.round(a)); return (v < 0 ? '−$' : '$') + s; };
     const out = [];
@@ -884,8 +884,113 @@ dash.calc('checks', {
       if (u.isActive === false || !u.manager || !gone.has(u.manager) || activeNames.has(u.manager)) continue;
       out.push({ id: 'mgr:' + u.userId, area: 'Hiring', severity: 'medium', title: u.name, person: u.name, region: TEAM2[u.role] || 'Other', manager: u.manager, what: 'Reports to an inactive manager in Salesforce', meta: u.manager + ' is no longer active', screen: null });
     }
+    // people who left but still own open deals or renewals: nobody is working them
+    const day = (x) => { const d = new Date(String(x) + 'T00:00:00Z'); return Number.isNaN(+d) ? String(x) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); };
+    const lv = new Map();
+    for (const r of lv_opps) {
+      const k = String(r.ownerId || r.owner);
+      if (!lv.has(k)) lv.set(k, { ownerId: r.ownerId, owner: r.owner, role: r.role, manager: r.manager, deals: 0, dealArr: 0, renewals: 0, renewalArr: 0, next: null });
+      const o = lv.get(k);
+      if (r.rt === 'Renewal') { o.renewals += +r.opps || 0; o.renewalArr += +r.contractArrUsd || 0; }
+      else { o.deals += +r.opps || 0; o.dealArr += +r.arrUsd || 0; }
+      if (r.nextClose && (!o.next || r.nextClose < o.next)) o.next = r.nextClose;
+    }
+    for (const o of lv.values()) {
+      const held = [o.deals ? plural(o.deals, 'open deal', 'open deals') + ' (' + money(o.dealArr) + ' ARR)' : '', o.renewals ? plural(o.renewals, 'open renewal', 'open renewals') + ' (' + money(o.renewalArr) + ' contract ARR)' : ''].filter(Boolean).join(' and ');
+      out.push({ id: 'lv:' + o.ownerId, area: 'Leavers', severity: 'high', title: o.owner, person: o.owner, region: TEAM2[o.role] || 'Other', manager: o.manager || '(no manager)', what: 'Left, still owns ' + held, meta: o.next ? 'next closes ' + day(o.next) : '', screen: 'hiring', view: 'leavers' });
+    }
     const rank = { high: 0, medium: 1, low: 2 };
     return out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
+  },
+});
+
+dash.calc('checks_lv', {
+  title: 'Data checks, leads of people who left',
+  description: 'People with an EMEA role who are no longer active in Salesforce but still own open leads (neither converted nor disqualified), so nobody is working them. Urgent at 10 or more Ready or New leads.',
+  inputs: ['lv_leads', 'roster'],
+  fn: (lv_leads, roster) => {
+    const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
+    const id15 = (x) => String(x || '').slice(0, 15);
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const users = new Map(roster.map((u) => [id15(u.userId), u]));
+    const m = new Map();
+    for (const r of lv_leads) {
+      const k = id15(r.ownerId);
+      if (!m.has(k)) m.set(k, { ownerId: r.ownerId, n: 0, ready: 0, fresh: 0 });
+      const o = m.get(k), n = +r.leads || 0;
+      o.n += n;
+      if (r.status === 'Ready') o.ready += n;
+      else if (r.status === 'New') o.fresh += n;
+    }
+    return [...m.entries()].map(([k, o]) => {
+      const u = users.get(k) || {};
+      return { id: 'lvl:' + k, area: 'Leavers', severity: o.ready + o.fresh >= 10 ? 'high' : 'medium', title: u.name || 'Inactive user', person: u.name || null, region: TEAM[u.role] || 'Other', manager: u.manager || '(no manager)', what: 'Left, still owns ' + plural(o.n, 'open lead', 'open leads'), meta: [o.ready ? o.ready + ' Ready' : '', o.fresh ? o.fresh + ' New' : ''].filter(Boolean).join(', '), screen: 'hiring', view: 'leavers' };
+    });
+  },
+});
+
+dash.calc('leavers', {
+  title: 'People who left',
+  description: 'Salesforce users with an EMEA role who are no longer active but still hold something: open New Business and Upsell deals and their ARR, open renewals and their contract ARR, the next close date, open leads (neither converted nor disqualified) by status, active accounts (customer, pipeline, engaging), customers and their ARR, customers where they are Engagement Manager, and the EMEA LeanData pools they are still in. People who hold nothing are left out.',
+  inputs: ['roster', 'lv_opps', 'lv_leads', 'books_owner', 'rr_members'],
+  fn: (roster, lv_opps, lv_leads, books_owner, rr_members) => {
+    const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
+    const id15 = (x) => String(x || '').slice(0, 15);
+    const m = new Map();
+    for (const u of roster) {
+      if (u.isActive !== false) continue;
+      m.set(id15(u.userId), { userId: u.userId, name: u.name, role: u.role || null, region: TEAM[u.role] || 'Other', manager: u.manager || '(no manager)', deals: 0, dealArr: 0, renewals: 0, renewalArr: 0, nextClose: null, leads: 0, ready: 0, fresh: 0, accounts: 0, customers: 0, customerArr: 0, emCustomers: 0, pools: 0, poolNames: '' });
+    }
+    const byName = new Map([...m.values()].map((o) => [o.name, o]));
+    for (const r of lv_opps) {
+      const o = m.get(id15(r.ownerId));
+      if (!o) continue;
+      if (r.rt === 'Renewal') { o.renewals += +r.opps || 0; o.renewalArr += +r.contractArrUsd || 0; }
+      else { o.deals += +r.opps || 0; o.dealArr += +r.arrUsd || 0; }
+      if (r.nextClose && (!o.nextClose || r.nextClose < o.nextClose)) o.nextClose = r.nextClose;
+    }
+    for (const r of lv_leads) {
+      const o = m.get(id15(r.ownerId));
+      if (!o) continue;
+      const n = +r.leads || 0;
+      o.leads += n;
+      if (r.status === 'Ready') o.ready += n;
+      else if (r.status === 'New') o.fresh += n;
+    }
+    for (const b of books_owner) {
+      const o = byName.get(b.owner);
+      if (!o || b.ownerActive !== false) continue;
+      o.accounts += +b.active || 0; o.customers += +b.customers || 0; o.customerArr += +b.arr || 0; o.emCustomers += +b.emCustomers || 0;
+    }
+    const pools = new Map();
+    for (const r of rr_members) {
+      if (r.userActive !== false) continue;
+      const k = id15(r.userId);
+      if (!pools.has(k)) pools.set(k, new Set());
+      pools.get(k).add(r.poolName);
+    }
+    for (const [k, set] of pools) { const o = m.get(k); if (o) { o.pools = set.size; o.poolNames = [...set].sort().join(', '); } }
+    return [...m.values()]
+      .filter((o) => o.deals || o.renewals || o.leads || o.accounts || o.customers || o.emCustomers || o.pools)
+      .map((o) => ({ ...o, status: o.renewals || o.deals || o.customers || o.emCustomers ? 'Hand over revenue' : o.leads ? 'Reassign leads' : o.accounts ? 'Reassign accounts' : 'Remove from routing' }))
+      .sort((a, b) => (b.renewalArr + b.dealArr + b.customerArr) - (a.renewalArr + a.dealArr + a.customerArr) || b.leads - a.leads || String(a.name).localeCompare(String(b.name)));
+  },
+});
+
+dash.calc('leavers_kpi', {
+  title: 'People who left, headline',
+  description: 'People who left who still hold something and what they hold (open deals and renewals with ARR, open and Ready leads, active accounts and customer ARR, pool seats), per team, per manager ("M|<manager>") and for all EMEA.',
+  inputs: ['leavers'],
+  fn: (leavers) => {
+    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+    const managers = [...new Set(leavers.map((r) => r.manager).filter((x) => x && x !== '(no manager)'))];
+    const F = ['deals', 'dealArr', 'renewals', 'renewalArr', 'leads', 'ready', 'accounts', 'customers', 'customerArr', 'pools'];
+    return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
+      const rs = leavers.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
+      const o = { region, people: rs.length };
+      for (const f of F) o[f] = rs.reduce((s, r) => s + (+r[f] || 0), 0);
+      return o;
+    });
   },
 });
 

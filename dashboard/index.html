@@ -114,6 +114,7 @@
           <li><button class="pal-item pal-go" type="button" data-nav="hiring" data-nav-view="ramp"><span class="pal-kind">Go to</span><span class="pal-label">Hiring › Ramp</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="hiring" data-nav-view="teams"><span class="pal-kind">Go to</span><span class="pal-label">Hiring › Teams</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="hiring" data-nav-view="months"><span class="pal-kind">Go to</span><span class="pal-label">Hiring › By month</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="hiring" data-nav-view="leavers"><span class="pal-kind">Go to</span><span class="pal-label">Hiring › Leavers</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="routing" data-nav-view="people"><span class="pal-kind">Go to</span><span class="pal-label">Routing › People</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="routing" data-nav-view="pools"><span class="pal-kind">Go to</span><span class="pal-label">Routing › Pools</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="reps"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Reps</span><span class="pal-sub"></span></button></li>
@@ -218,7 +219,7 @@
               </div>
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
-            <ul class="ilist" data-draw="home-checks" data-source="checks checks_hb"></ul>
+            <ul class="ilist" data-draw="home-checks" data-source="checks checks_hb checks_lv"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-checks"></span>
               <p class="os-empty" data-msg-for="home-checks" data-msg="empty" hidden>No problems found.</p>
               <p class="os-empty" data-msg-for="home-checks" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
@@ -347,13 +348,14 @@
               <button class="fchip" type="button" data-check-area="Hiring" aria-pressed="false">Hiring</button>
               <button class="fchip" type="button" data-check-area="Pipeline" aria-pressed="false">Pipeline</button>
               <button class="fchip" type="button" data-check-area="Books" aria-pressed="false">Books</button>
+              <button class="fchip" type="button" data-check-area="Leavers" aria-pressed="false">Leavers</button>
             </div>
             <div class="tools">
               <p class="pane-note">Click a name to open the person, or the arrow to go to the screen.</p>
               <button class="btn" type="button" data-copy-checks><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
           </div>
-          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb"></ul>
+          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb checks_lv"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="check-list"></span>
               <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
               <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
@@ -1032,6 +1034,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="hiring:ramp" aria-selected="false">Ramp</button>
         <button class="vtab" role="tab" type="button" data-view-tab="hiring:teams" aria-selected="false">Teams</button>
         <button class="vtab" role="tab" type="button" data-view-tab="hiring:months" aria-selected="false">By month</button>
+        <button class="vtab" role="tab" type="button" data-view-tab="hiring:leavers" aria-selected="false">Leavers</button>
       </div>
 
       <div class="view" id="hiring-joiners" data-view-panel="hiring:joiners">
@@ -1126,6 +1129,43 @@
   <p class="os-empty" data-msg-for="hire-month-chart" data-msg="empty" hidden>No joiners in the last 12 months.</p>
   <p class="os-empty" data-msg-for="hire-month-chart" data-msg="connect" hidden>Connect HiBob in your claude.ai connectors to see this.</p>
 </div></div>
+        </div>
+      </div>
+      <div class="view" id="hiring-leavers" data-view-panel="hiring:leavers" hidden>
+        <div class="statbar">
+          <div class="stat"><span class="stat-label">People who left</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="people">—</b></span><span class="stat-sub">still holding something</span></div>
+          <div class="stat"><span class="stat-label">Renewals with no owner</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="renewalArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="renewals">—</b> open renewals, contract ARR</span></div>
+          <div class="stat"><span class="stat-label">Open deals</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="dealArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="deals">—</b> New Business and Upsell</span></div>
+          <div class="stat"><span class="stat-label">Open leads</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="leads">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="ready">—</b> Ready, nobody working them</span></div>
+          <div class="stat"><span class="stat-label">Active accounts</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="accounts">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="customerArr" data-fmt="usd">—</b> customer ARR</span></div>
+        </div>
+        <div class="pane" id="hire-leavers">
+          <div class="pane-head"><div><h2 class="pane-title">People who left</h2><p class="pane-note">Salesforce users with an EMEA role who are no longer active but still own deals, renewals, leads or accounts, or keep a seat in a LeanData pool. The sparkle asks your Claude for a hand-over plan; it proposes new owners and waits for your OK before changing anything.</p></div><button class="ibtn" type="button" data-copy-table="lv-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="leavers" data-row-key="userId">
+              <thead><tr>
+                <th data-field="name">Name</th>
+                <th data-field="region">Team</th>
+                <th data-field="manager">Manager</th>
+                <th class="num" data-field="deals">Deals</th>
+                <th class="num" data-field="dealArr">Deal ARR</th>
+                <th class="num" data-field="renewals">Renewals</th>
+                <th class="num" data-field="renewalArr">Renewal ARR</th>
+                <th data-field="nextClose">Next close</th>
+                <th class="num" data-field="leads">Leads</th>
+                <th class="num" data-field="ready">Ready</th>
+                <th class="num" data-field="accounts">Accounts</th>
+                <th class="num" data-field="customerArr">Customer ARR</th>
+                <th class="num" data-field="pools">Pools</th>
+                <th data-field="status">To do</th>
+              </tr></thead>
+              <tbody data-draw="lv-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="lv-table"></span>
+              <p class="os-empty" data-msg-for="lv-table" data-msg="empty" hidden>Nobody who left still holds anything for this team.</p>
+              <p class="os-empty" data-msg-for="lv-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see who left and what they still own.</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

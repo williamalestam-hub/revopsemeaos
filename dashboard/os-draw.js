@@ -288,12 +288,14 @@ const checkItem = (c) => {
   if (c.screen === 'routing') go.dataset.navView = c.person ? 'people' : 'pools';
   if (c.screen === 'pipeline') go.dataset.navView = 'reps';
   if (c.screen === 'hiring') go.dataset.navView = 'joiners';
+  if (c.view) go.dataset.navView = c.view;
   go.appendChild(OS.icon(OS.ICON.go));
   }
   const how = c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
     : c.area === 'Pipeline' ? ' Pull their past-due opportunities and propose a new close date, stage or closing each one.'
     : c.area === 'Books' ? ' List the accounts behind it and propose who should own them.'
-    : c.area === 'Hiring' ? ' Compare their HiBob record with their Salesforce user (role, manager, active) and propose the fix.' : '';
+    : c.area === 'Hiring' ? ' Compare their HiBob record with their Salesforce user (role, manager, active) and propose the fix.'
+    : c.area === 'Leavers' ? ' List what they still own and propose who should take each item (people in their team first, keeping books balanced), with the exact Salesforce and LeanData changes.' : '';
   const ask = OS.links.ask(OS.ask.data('Fix: ' + c.title + ' (' + c.what + ')', 'Help me fix this data check from the EMEA RevOps OS. ' + c.area + ': ' + c.title + ': ' + c.what + (c.meta ? ' (' + c.meta + ')' : '') + '.' + how,
     { kind: 'data_check', area: c.area, severity: c.severity, person: c.person, manager: c.manager }));
   if (ask) meta.append(ask);
@@ -305,7 +307,8 @@ const checkItem = (c) => {
 const allChecks = () => {
   const rank = { high: 0, medium: 1, low: 2 };
   const hb = OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [];
-  return (dash.data('checks').data || []).concat(hb)
+  const lv = OS.state('checks_lv') === 'ok' ? dash.data('checks_lv').data || [] : [];
+  return (dash.data('checks').data || []).concat(hb, lv)
     .filter((c) => (mgrPick() ? c.manager === mgrPick() : OS.region() === 'All' || c.region === OS.region()))
     .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
 };
@@ -338,6 +341,36 @@ OS.defChart('hire-month-chart', ['hire_months'], () => (dash.data('hire_months')
 OS.defTable('hire-team-table', ['hire_teams'], () => dash.data('hire_teams').data || [], [
   { f: 'team' }, { f: 'people', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.people) }, { f: 'joined90', fmt: OS.num, num: true },
 ], { key: 'team' });
+
+// people who left: what they still hold, and a hand-over request for your Claude
+dash.draw('kpi-lv', (el) => OS.value(el, ['leavers_kpi'], () => fmtBy(el, scopeRowOf(el, 'leavers_kpi')[keepField(el)] || 0)));
+const lvHeld = (r) => [
+  r.deals ? OS.num(r.deals) + ' open deal' + (r.deals === 1 ? '' : 's') + ' (' + OS.usd(r.dealArr) + ' ARR)' : '',
+  r.renewals ? OS.num(r.renewals) + ' open renewal' + (r.renewals === 1 ? '' : 's') + ' (' + OS.usd(r.renewalArr) + ' contract ARR)' : '',
+  r.nextClose ? 'the next one closes ' + OS.day(r.nextClose) : '',
+  r.leads ? OS.num(r.leads) + ' open lead' + (r.leads === 1 ? '' : 's') + (r.ready ? ' (' + OS.num(r.ready) + ' Ready)' : '') : '',
+  r.accounts ? OS.num(r.accounts) + ' active account' + (r.accounts === 1 ? '' : 's') + (r.customers ? ' (' + OS.num(r.customers) + ' customers, ' + OS.usd(r.customerArr) + ' ARR)' : '') : '',
+  r.emCustomers ? 'Engagement Manager on ' + OS.num(r.emCustomers) + ' customer' + (r.emCustomers === 1 ? '' : 's') : '',
+  r.pools ? 'a seat in ' + OS.num(r.pools) + ' LeanData pool' + (r.pools === 1 ? '' : 's') + ' (' + r.poolNames + ')' : '',
+].filter(Boolean).join('; ');
+const lvActs = (r) => {
+  const box = OS.el('span', 'row-acts');
+  const sf = OS.links.sf('User', r.userId);
+  if (sf) box.append(sf);
+  const ask = OS.links.ask(OS.ask.data('Hand-over: ' + r.name, 'Plan the hand-over for ' + r.name + ', who has left (their Salesforce user is inactive' + (r.role ? '; role ' + r.role : '') + (r.manager && r.manager !== '(no manager)' ? '; manager ' + r.manager : '') + '). They still own: ' + lvHeld(r) + '. Propose who should take each item (people in their team first, keeping books balanced), list the Salesforce and LeanData changes, and wait for my OK before changing anything.', { kind: 'leaver', userId: r.userId, name: r.name }));
+  if (ask) box.append(ask);
+  return box.children.length ? box : null;
+};
+OS.defTable('lv-table', ['leavers'], () => (dash.data('leavers').data || []).filter(inTeam), [
+  { f: 'name', person: (r) => r.name, after: (r) => lvActs(r) }, { f: 'region' }, { f: 'manager' },
+  { f: 'deals', fmt: OS.num, num: true }, { f: 'dealArr', fmt: OS.usd, num: true },
+  { f: 'renewals', fmt: OS.num, num: true }, { f: 'renewalArr', fmt: OS.usd, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
+  { f: 'nextClose', fmt: (v) => (v ? OS.day(v) : '—') },
+  { f: 'leads', fmt: OS.num, num: true }, { f: 'ready', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'accounts', fmt: OS.num, num: true }, { f: 'customerArr', fmt: OS.usd, num: true },
+  { f: 'pools', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'status', chip: (v) => (v === 'Hand over revenue' ? 'bad' : 'warn') },
+], { key: 'userId', also: ['poolNames'] });
 
 // ===================== ROUTING =====================
 dash.draw('kpi-rr', (el) => OS.value(el, ['rr_kpi'], () => OS.num(regionRow(el, 'rr_kpi')[keepField(el)] || 0)));

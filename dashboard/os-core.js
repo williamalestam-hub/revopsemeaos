@@ -26,7 +26,7 @@ const sfRows = ({ answer }) => {
   'cr_daily', 'cr_monthly', 'cr_source', 'cr_owner_q', 'cr_bdr',
   'rr_members', 'rr_assign', 'roster',
   'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'top_deals', 'top_renewals', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
-  'users_all', 'mv_outcomes', 'mv_close', 'age_stuck', 'cycle_team', 'coverage_base', 'bk_stale', 'bk_em_cover',
+  'users_all', 'mv_outcomes', 'mv_close', 'age_stuck', 'cycle_team', 'coverage_base', 'bk_stale', 'bk_em_cover', 'lv_opps', 'lv_leads',
 ].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped)', fn: sfRows }));
 
 dash.loader('hb_people', {
@@ -930,7 +930,7 @@ OS.oo = (() => {
   const checksChecklist = () => {
     const p = dash.params();
     const area = p.checkArea || 'All';
-    const all = (OS.state('checks') === 'ok' ? dash.data('checks').data || [] : []).concat(OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : []);
+    const all = (OS.state('checks') === 'ok' ? dash.data('checks').data || [] : []).concat(OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [], OS.state('checks_lv') === 'ok' ? dash.data('checks_lv').data || [] : []);
     return all.filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region) && (area === 'All' || c.area === area))
       .map((c) => `- [ ] ${c.title}: ${c.what}${c.meta ? ' (' + c.meta + ')' : ''}`).join('\n');
   };

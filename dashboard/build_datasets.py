@@ -310,6 +310,20 @@ ds("bk_em_cover", "Engagement Manager coverage",
    SUM(ARR_USD__c) arrUsd FROM Account WHERE {OWNER} AND Account_Status__c = 'Customer'
    GROUP BY Owner.Name, CSM__r.UserRole.Name, CSM__r.IsActive LIMIT 2000"""))
 
+# ---------- Leavers ----------
+ds("lv_opps", "Open deals owned by people who left",
+   "Open opportunities of every type whose owner is an inactive Salesforce user with an EMEA role, per owner and type: how many, incremental ARR and contract ARR (USD), and the next close date.",
+   SF(f"""SELECT OwnerId ownerId, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name rt,
+   COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd, SUM(Order_Form_ARR_USD__c) contractArrUsd, MIN(CloseDate) nextClose
+   FROM Opportunity WHERE IsClosed = false AND Owner.IsActive = false AND {OWNER}
+   GROUP BY OwnerId, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"""))
+ds("lv_leads", "Open leads owned by people who left",
+   "Leads that are neither converted nor disqualified whose owner is an inactive Salesforce user with an EMEA role, counted per owner and status.",
+   SF(f"""SELECT OwnerId ownerId, Status status, COUNT(Id) leads FROM Lead
+   WHERE IsConverted = false AND Status NOT IN ('Disqualified','Converted')
+   AND OwnerId IN (SELECT Id FROM User WHERE IsActive = false AND UserRole.Name IN ({ROLES}))
+   GROUP BY OwnerId, Status LIMIT 2000"""))
+
 # ---------- 1:1s ----------
 CAL_DAY = r"^\d{4}-\d{2}-\d{2}T00:00:00$"
 D["cal_events"] = {"title": "Your calendar, next 14 days",

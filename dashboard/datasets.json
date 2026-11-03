@@ -536,6 +536,30 @@
    }
   }
  },
+ "lv_opps": {
+  "title": "Open deals owned by people who left",
+  "description": "Open opportunities of every type whose owner is an inactive Salesforce user with an EMEA role, per owner and type: how many, incremental ARR and contract ARR (USD), and the next close date.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT OwnerId ownerId, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name rt, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd, SUM(Order_Form_ARR_USD__c) contractArrUsd, MIN(CloseDate) nextClose FROM Opportunity WHERE IsClosed = false AND Owner.IsActive = false AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY OwnerId, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"
+   }
+  }
+ },
+ "lv_leads": {
+  "title": "Open leads owned by people who left",
+  "description": "Leads that are neither converted nor disqualified whose owner is an inactive Salesforce user with an EMEA role, counted per owner and status.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT OwnerId ownerId, Status status, COUNT(Id) leads FROM Lead WHERE IsConverted = false AND Status NOT IN ('Disqualified','Converted') AND OwnerId IN (SELECT Id FROM User WHERE IsActive = false AND UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA')) GROUP BY OwnerId, Status LIMIT 2000"
+   }
+  }
+ },
  "cal_events": {
   "title": "Your calendar, next 14 days",
   "description": "Your Google Calendar events from today for the next 14 days (regular events only), with who is invited; the page keeps the 1:1s with a colleague.",
