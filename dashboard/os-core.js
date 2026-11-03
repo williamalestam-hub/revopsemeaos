@@ -27,6 +27,7 @@ const sfRows = ({ answer }) => {
   'rr_members', 'rr_assign', 'roster',
   'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'top_deals', 'top_renewals', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
   'users_all', 'mv_outcomes', 'mv_created', 'mv_close', 'age_stuck', 'cycle_team', 'coverage_base', 'bk_stale', 'bk_em_cover', 'lv_opps', 'lv_leads',
+  'ld_ready', 'ld_handoffs', 'ld_inflow', 'ld_open',
 ].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped)', fn: sfRows }));
 
 dash.loader('hb_people', {
@@ -337,7 +338,7 @@ window.OS = (() => {
   };
 
   // ----- tables: the tbody holds only data rows; messages go in the table's tfoot drawing -----
-  // cols: [{f, fmt?, num?, bar?: (list)=>max, chip?: (v,row)=>cls, cls?, wrap?, person?: (row)=>name}]
+  // cols: [{f, fmt?, num?, bar?: (list)=>max, chip?: (v,row)=>cls, cls?, wrap?, person?: (row)=>name (none: plain text), tip?: (row)=>title, after?: (row)=>node}]
   const tableRows = (name) => {
     const t = tables[name];
     const s = state(...t.ids);
@@ -369,8 +370,9 @@ window.OS = (() => {
           const td = el('td', c.num ? 'num' : c.wrap ? 'wrap' : null);
           const v = r[c.f];
           const txt = c.fmt ? c.fmt(v, r) : (v == null || v === '' ? '—' : String(v));
-          if (c.person && v && !/^\(/.test(String(v))) {
-            td.appendChild(personBtn(c.person(r), txt));
+          const pn = c.person && v && !/^\(/.test(String(v)) ? c.person(r) : null;
+          if (pn) {
+            td.appendChild(personBtn(pn, txt));
           } else if (c.chips) {
             String(v || '').split(', ').filter(Boolean).forEach((x, i) => { if (i) td.appendChild(el('span', 'chip-sep', ', ')); td.appendChild(el('span', 'chip ' + c.chips(x), x)); });
             if (!v) td.textContent = '—';
@@ -388,6 +390,7 @@ window.OS = (() => {
             if (c.cls) { const k = c.cls(v, r); if (k) td.classList.add(k); }
           }
           if (c.after) { const x = c.after(r); if (x) td.appendChild(x); }
+          if (c.tip) { const tt = c.tip(r); if (tt) td.title = tt; }
           tr.appendChild(td);
         });
         frag.appendChild(tr);
@@ -594,7 +597,7 @@ window.OS = (() => {
 // click; the platform asks them to confirm). The page itself never writes to Salesforce, LeanData, mail or calendars.
 OS.ask = (() => {
   let room = null, mode = 'off';
-  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act'];
+  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table'];
   const refresh = async () => {
     if (!room || typeof room.canSendToClaudeSession !== 'function') return;
     let m = 'off';
@@ -794,8 +797,8 @@ OS.oo = (() => {
 
 // ---------- App shell ----------
 (() => {
-  const SCREENS = ['home', 'actions', 'oneonone', 'pipeline', 'created', 'hiring', 'routing', 'books'];
-  const view = { actions: 'meetings', oneonone: 'upcoming', pipeline: 'teams', created: 'trend', hiring: 'joiners', routing: 'people', books: 'reps' };
+  const SCREENS = ['home', 'actions', 'oneonone', 'pipeline', 'created', 'hiring', 'routing', 'books', 'leads'];
+  const view = { actions: 'meetings', oneonone: 'upcoming', pipeline: 'teams', created: 'trend', hiring: 'joiners', routing: 'people', books: 'reps', leads: 'speed' };
   // a link ends in #screen or #screen-view
   const [hashScreen, hashView] = location.hash.slice(1).split('-');
   let screen = SCREENS.includes(hashScreen) ? hashScreen : 'home';
@@ -921,6 +924,7 @@ OS.oo = (() => {
     const rk = rowOf('risk_kpi', (r) => r.region === scope);
     const lv = rowOf('leavers_kpi', (r) => r.region === scope);
     const eng = rowOf('engagement_kpi', (r) => r.region === scope);
+    const ld = rowOf('ld_kpi', (r) => r.region === scope);
     const x = (v) => (v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '×');
     const signed = (v) => (v < 0 ? '−' : '+') + OS.usd(Math.abs(v));
     const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
@@ -935,6 +939,9 @@ OS.oo = (() => {
     if (rr) lines.push(`• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
     if (ck) lines.push(`• Data checks: ${OS.num(ck.total)} open, ${OS.num(ck.high)} urgent`);
     if (lv && lv.people) lines.push(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${[lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '', lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : ''].filter(Boolean).join(', ') || 'LeanData pool seats'}`);
+    const ldSpeed = !ld ? '' : ld.hRate != null ? `${OS.pct(ld.hRate)} of demo requests worked within 1 business day (${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)}, last 30 days)`
+      : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : scope === 'SMB' ? 'SMB speed not timed (automation moves SMB leads out of Ready)' : 'no timed demo requests in the last 30 days';
+    if (ld && (ld.handoffs || ld.readyNow)) lines.push(`• Leads: ${ldSpeed}; ${n(ld.demoOverdue, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.b21)} of them over 20 business days${ld.routingIssues ? `; ${n(ld.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`);
     if (orph && !p.mgr && (!p.region || p.region === 'All')) lines.push(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
     if (eng && eng.untouched) lines.push(`• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`);
     const mine = OS.state('gr_actions') === 'ok' ? (dash.data('gr_actions').data || []).filter((r) => r.forYou && !r.done && !OS.done.has(r)) : null;
@@ -945,7 +952,7 @@ OS.oo = (() => {
   const checksChecklist = () => {
     const p = dash.params();
     const area = p.checkArea || 'All';
-    const all = (OS.state('checks') === 'ok' ? dash.data('checks').data || [] : []).concat(OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [], OS.state('checks_lv') === 'ok' ? dash.data('checks_lv').data || [] : []);
+    const all = (OS.state('checks') === 'ok' ? dash.data('checks').data || [] : []).concat(OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [], OS.state('checks_lv') === 'ok' ? dash.data('checks_lv').data || [] : [], OS.state('checks_ld') === 'ok' ? dash.data('checks_ld').data || [] : []);
     return all.filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region) && (area === 'All' || c.area === area))
       .map((c) => `- [ ] ${c.title}: ${c.what}${c.meta ? ' (' + c.meta + ')' : ''}`).join('\n');
   };
@@ -958,7 +965,7 @@ OS.oo = (() => {
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.scope')) scopeOpen(false);
-    const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], th[data-sort]');
+    const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], [data-ld-ready], [data-ld-prob], th[data-sort]');
     if (!t) return;
     if (t.matches('[data-ask]')) {
       let data = null;
@@ -1025,6 +1032,8 @@ OS.oo = (() => {
     if (t.matches('[data-check-area]')) { dash.setParams({ checkArea: t.dataset.checkArea }); return; }
     if (t.matches('[data-deal-flag]')) { dash.setParams({ dealFlag: t.dataset.dealFlag }); return; }
     if (t.matches('[data-renew-flag]')) { dash.setParams({ renewFlag: t.dataset.renewFlag }); return; }
+    if (t.matches('[data-ld-ready]')) { dash.setParams({ ldReady: t.dataset.ldReady }); return; }
+    if (t.matches('[data-ld-prob]')) { dash.setParams({ ldProb: t.dataset.ldProb }); return; }
     if (t.matches('th[data-sort]')) {
       const tbl = t.closest('table[data-sortable]');
       if (!tbl) return;
@@ -1060,7 +1069,7 @@ OS.oo = (() => {
         return;
       }
     }
-    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-8]$/.test(e.key)) { go(SCREENS[+e.key - 1]); return; }
+    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-9]$/.test(e.key)) { go(SCREENS[+e.key - 1]); return; }
     if (e.key === 'Escape' && [...document.querySelectorAll('[data-scope-pop]')].some((p) => !p.hidden)) { scopeOpen(false); document.querySelectorAll('[data-scope-toggle]').forEach((b) => b.focus()); return; }
     if (e.key === 'Escape' && dash.params().person) closePanel();
   });
@@ -1101,6 +1110,8 @@ OS.oo = (() => {
     pressed('[data-check-area]', 'checkArea', p.checkArea || 'All');
     pressed('[data-deal-flag]', 'dealFlag', p.dealFlag || '');
     pressed('[data-renew-flag]', 'renewFlag', p.renewFlag || '');
+    pressed('[data-ld-ready]', 'ldReady', p.ldReady || '');
+    pressed('[data-ld-prob]', 'ldProb', p.ldProb || '');
     pressed('[data-gr-group]', 'grGroup', p.grGroup || 'meeting');
     document.querySelectorAll('[data-gr-11]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.gr11)));
     document.querySelectorAll('[data-gr-due]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.grDue)));
@@ -1154,6 +1165,8 @@ OS.oo = (() => {
       document.querySelectorAll('[data-copy-person-id]').forEach((b) => { b.disabled = !(row && row.userId); });
       const hasTeam = sf === 'ok' && (dash.data('person').data || []).some((r) => r.manager === p.person && r.isActive !== false && r.inRoster);
       document.querySelectorAll('[data-pd-team]').forEach((n) => { n.hidden = !hasTeam; });
+      const ldRep = OS.state('ld_reps') === 'ok' ? (dash.data('ld_reps').data || []).find((r) => r.name === p.person) : null;
+      document.querySelectorAll('[data-pd-leads]').forEach((n) => { n.hidden = !(ldRep && (ldRep.handoffs || ldRep.readyNow)); });
       // open deals: point the deals query at this person, and show the section once it has
       if (row && row.userId && p.dealOwnerId !== row.userId) dash.setParams({ dealOwnerId: row.userId });
       document.querySelectorAll('[data-pd-deals]').forEach((n) => { n.hidden = !(row && row.userId && p.dealOwnerId === row.userId); });

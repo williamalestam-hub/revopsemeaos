@@ -21,7 +21,7 @@ manager, their team (with a "Prep a 1:1" button).
   drafts the message, proposes the Salesforce or LeanData fix and waits for your OK before writing anything.
   Deals and people also open straight in Salesforce, and next steps owned by someone else get an email nudge.
   The dashboard itself never writes to Salesforce, LeanData, mail or calendars.
-- **Search (Ctrl K or /)**: jump to any person, routing pool, account book or view. Keys 1–8 switch screens,
+- **Search (Ctrl K or /)**: jump to any person, routing pool, account book or view. Keys 1–9 switch screens,
   and the link follows you (`#pipeline-deals` opens that view).
 - **Tick off next steps**: the circle in front of an action item marks it done; it leaves your lists and
   counts, and "Show ticked off" brings it back to undo. Ticks are yours alone: they are kept in your own
@@ -41,6 +41,7 @@ manager, their team (with a "Prep a 1:1" button).
 | Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to their Salesforce user (by work email, then name) and routing pools; ramp of recent joiners; selling titles without an EMEA sales role and HiBob vs Salesforce manager differences are flagged; **Leavers**: people whose Salesforce user is inactive but who still own deals, renewals, leads or accounts or keep a pool seat, with a hand-over request for your Claude | HiBob `commons_searchEmployees`, `User`, `Lead` (counts), LeanData pools |
 | Routing pools | Every EMEA LeanData pool and its members, 90-day assignments and how evenly they're spread, reps missing from routing, joiners due in week 2, inactive members, members getting none | `LeanData__Round_Robin_Setting__c`, `LeanData__Log__c` (counts only), `User` |
 | Account books | Book size per rep (incl. EM book), territory coverage by Sales Region, orphan accounts with reason, split books, routing vs book mismatches, **Engagement**: active accounts nobody has touched in 90 days (or ever) and customers without an active Engagement Manager, and **Plan moves**: suggested account moves from Heavy to Light books within each team, untouched accounts first | `Account`, `Opportunity`, LeanData pools |
+| Leads | **Speed to lead**: how fast AE and BDR hand-offs (Ready) were worked in the last 30 days, per team and rep, in business hours, with what was left out and how far to trust it; **Ready now**: who holds Ready leads, how old they are, demo requests waiting, leads routed to another region, the queue, and the next step for each owner (nudge, clean up, check region, reassign, route); **Routing**: leads stuck in LeanData routing or held by the wrong owner, LeanData speed to a person, and each source's inflow, hand-offs and backlog. Every row hands your Claude a counts-only request | `Lead` (counts and anonymous per-lead times, no names, emails, companies or Ids) |
 
 The **scope pill** (a team: France, DACH, Southern Europe, Iberia & LATAM, Benelux, Nordics, CEE, MEA, SMB,
 Engagement, BDR, Leadership; or one manager) applies across screens. Teams are worked out from the owner's
@@ -94,6 +95,23 @@ Salesforce role and changing scope never re-runs a query.
   (any type), open leads (neither converted nor disqualified), active accounts, customers as Engagement Manager, or
   a seat in an EMEA LeanData pool. Open deals and renewals are urgent data checks; leads are urgent at 10 or more
   Ready or New. Lead checks come from their own source, so a viewer without Lead access still sees the rest.
+- **Leads in scope**: leads an EMEA seller owns (any country), plus leads that are EMEA by country (`Region__c`) or
+  by LeanData routing region (`Routing_Region__c`), whoever owns them. They count for their current owner's team and
+  manager; the Marketing Queue and owners outside EMEA sales show under All EMEA only. By source is always all EMEA.
+- **Hand-off and speed**: a hand-off is a lead becoming Ready (`Ready_Since__c`); it ends when the lead first leaves
+  Ready (`First_Response_Timestamp__c`). Speed is business time between the two, Mon–Fri 09:00–18:00 Paris time, no
+  holidays. Demo requests (Inbound: Demo Request or Contact Us Email Demo Request) are due within 1 business day,
+  other hand-offs within 5. A lead still in Ready counts as missed once past due; younger ones are pending. Left out:
+  SMB-owned leads (automation moves them out of Ready), leads answered before this Ready stamp, exits within
+  2 minutes, exits with no stamp and leads with no EMEA seller. Rates and medians on fewer than 5 leads show —.
+  Checked on 3 Nov 2026: for AE and BDR owners the stamp matched the first logged rep touch on 96–98% of hand-offs.
+- **Ready now**: leads in Ready today; ages are Monday-to-Friday days since the Ready Since date (UTC), a lower
+  bound. A demo request is waiting from 2 business days; stale is over 20. No Ready date means Ready since before
+  19 May 2026 (when the field was added) or a stamping gap. `LastActivityDate` isn't used, because automation sets it.
+- **Lead routing problems**: open leads in LeanData error or not processed, Ready or New MQL leads in a queue,
+  worked leads back in a queue, and open leads of inactive users or of users outside EMEA sales (strategic and
+  partnership owners are marked review, not counted). Reached a person: LeanData's Last Routed Date at or after
+  Ready Since, within 5 minutes counts as fast.
 - **Book moves**: per AE team and SMB, active accounts to move from books at 2× the team median or more to
   books at half or less, largest gaps first, each move stopping at the median for both reps.
 - **People matching**: a HiBob person is matched to an active Salesforce user by work email (any role;
@@ -129,6 +147,11 @@ Salesforce role and changing scope never re-runs a query.
 - HiBob hides people in the Hired state from this connection, so signed-but-not-started joiners
   and open requisitions aren't visible. Both need an ATS connector or wider HiBob access.
 - LeanData vacation schedules live in a long-text JSON field; out-of-office isn't shown.
+- Lead speed covers AE and BDR hand-offs only: demo requests LeanData converts to a contact on arrival are followed
+  up on the contact, and SMB leads are moved out of Ready by automation, so neither is timed. One business calendar
+  (Paris, no holidays) for all of EMEA, so MEA and holiday weeks look slower than they are. Leads count for their
+  current owner, so a reassignment moves their history. The SLA thresholds (1 and 5 business days, 2 and 20 for the
+  backlog) are proposals to confirm with Sales and Marketing leadership.
 
 ## Repo layout
 

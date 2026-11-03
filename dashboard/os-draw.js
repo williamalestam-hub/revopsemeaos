@@ -295,7 +295,8 @@ const checkItem = (c) => {
     : c.area === 'Pipeline' ? ' Pull their past-due opportunities and propose a new close date, stage or closing each one.'
     : c.area === 'Books' ? ' List the accounts behind it and propose who should own them.'
     : c.area === 'Hiring' ? ' Compare their HiBob record with their Salesforce user (role, manager, active) and propose the fix.'
-    : c.area === 'Leavers' ? ' List what they still own and propose who should take each item (people in their team first, keeping books balanced), with the exact Salesforce and LeanData changes.' : '';
+    : c.area === 'Leavers' ? ' List what they still own and propose who should take each item (people in their team first, keeping books balanced), with the exact Salesforce and LeanData changes.'
+    : c.area === 'Leads' ? ' List the leads behind it from Salesforce with my access (count first, no prospect details in chat), find the cause in LeanData or Salesforce, and propose the fix: route, reassign, nudge the owner, or work, nurture or disqualify. Wait for my OK before changing or sending anything.' : '';
   const ask = OS.links.ask(OS.ask.data('Fix: ' + c.title + ' (' + c.what + ')', 'Help me fix this data check from the EMEA RevOps OS. ' + c.area + ': ' + c.title + ': ' + c.what + (c.meta ? ' (' + c.meta + ')' : '') + '.' + how,
     { kind: 'data_check', area: c.area, severity: c.severity, person: c.person, manager: c.manager }));
   if (ask) meta.append(ask);
@@ -303,20 +304,22 @@ const checkItem = (c) => {
   li.append(OS.el('span', 'itm-dot ' + c.severity), main, meta);
   return li;
 };
-// Salesforce and LeanData checks always; HiBob checks join them once HiBob has loaded
+// Salesforce and LeanData checks always; HiBob, leaver and lead checks join them once they have loaded
 const allChecks = () => {
   const rank = { high: 0, medium: 1, low: 2 };
   const hb = OS.state('checks_hb') === 'ok' ? dash.data('checks_hb').data || [] : [];
   const lv = OS.state('checks_lv') === 'ok' ? dash.data('checks_lv').data || [] : [];
-  return (dash.data('checks').data || []).concat(hb, lv)
+  const ld = OS.state('checks_ld') === 'ok' ? dash.data('checks_ld').data || [] : [];
+  return (dash.data('checks').data || []).concat(hb, lv, ld)
     .filter((c) => (mgrPick() ? c.manager === mgrPick() : OS.region() === 'All' || c.region === OS.region()))
     .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
 };
-OS.defList('check-list', () => ((dash.params().checkArea || 'All') === 'Hiring' ? ['checks_hb'] : ['checks']), () => {
+OS.defList('check-list', () => { const a = dash.params().checkArea || 'All'; return a === 'Hiring' ? ['checks_hb'] : a === 'Leads' ? ['checks_ld'] : ['checks']; }, () => {
   const area = dash.params().checkArea || 'All';
   return allChecks().filter((c) => area === 'All' || c.area === area);
 }, (rows) => rows.map(checkItem));
-OS.defList('home-checks', ['checks'], () => allChecks().slice(0, 7), (rows) => rows.map(checkItem));
+// Home's top 7: at most 2 lead checks, so they don't crowd out the rest
+OS.defList('home-checks', ['checks'], () => { let n = 0; return allChecks().filter((c) => c.area !== 'Leads' || n++ < 2).slice(0, 7); }, (rows) => rows.map(checkItem));
 
 // ===================== HIRING =====================
 dash.draw('kpi-hire', (el) => OS.value(el, ['hire_kpi'], () => OS.num(regionRow(el, 'hire_kpi')[keepField(el)] || 0)));
@@ -1028,3 +1031,184 @@ OS.defTable('eng-table', ['engagement'], () => (dash.data('engagement').data || 
   { f: 'emNotEm', fmt: OS.num, num: true },
   { f: 'flag', cls: (v) => (v ? 'os-warn' : '') },
 ], { key: 'owner' });
+
+
+// ===================== LEADS =====================
+// Rows carry region (the team) and manager, so inTeam() scopes them; the queue and owners outside EMEA sales have
+// region 'Queue' or 'Other' and no manager, so they show under All EMEA only. Requests to Claude carry owners, counts
+// and filters, never lead details; Claude reads the leads with the viewer's own access.
+const LD_TEAMS = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
+const ldPlural = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
+const ldHours = (v, atLeast) => (v == null ? '—' : (atLeast ? '≥ ' : '') + d3.format('.1f')(v) + ' h');
+const ldOf = (a, b) => (b ? OS.num(a) + ' of ' + OS.num(b) : '—');
+const ldRate = (v) => (v == null ? '—' : OS.pct(v));
+const ldBad = (v) => (v > 0 ? 'os-bad' : '');
+const ldWarn = (v) => (v > 0 ? 'os-warn' : '');
+const ldTeamName = (k) => (k === 'All' ? 'All EMEA' : String(k).startsWith('M|') ? String(k).slice(2) + "'s team" : k);
+const ldLeftTip = (r) => [r.notScored ? OS.num(r.notScored) + ' SMB (not scored)' : '', r.reReadied ? OS.num(r.reReadied) + ' re-readied' : '', r.automated ? OS.num(r.automated) + ' automated' : '', r.noStamp ? OS.num(r.noStamp) + ' no stamp' : ''].filter(Boolean).join(' · ');
+const ldMgr = (r) => (r.manager && r.manager !== '(no manager)' ? ', manager ' + r.manager : '');
+const ldAsk = (label, text, extra) => OS.links.ask(OS.ask.data(label, text, { kind: 'leads', ...extra }));
+const ldActs = (r, ask) => {
+  const box = OS.el('span', 'row-acts');
+  const sf = r.ownerId ? OS.links.sf('User', r.ownerId) : null;
+  if (sf) box.append(sf);
+  if (ask) box.append(ask);
+  return box.children.length ? box : null;
+};
+
+// headline tiles: the scope's row, or the All EMEA row for tiles marked data-all
+const ldRow = (el) => {
+  const key = el.hasAttribute('data-all') ? 'All' : scopeKey();
+  return markRow(el, 'region', key, (dash.data('ld_kpi').data || []).find((r) => r.region === key));
+};
+dash.draw('kpi-ld', (el) => OS.value(el, ['ld_kpi'], () => {
+  const r = ldRow(el), f = keepField(el), v = r[f], fmt = el.dataset.fmt;
+  if (fmt === 'pct') return ldRate(v);
+  if (fmt === 'hours') return ldHours(v, r[f.replace('MedianHours', 'MedianAtLeast')]);
+  if (fmt === 'min') return v == null ? '—' : d3.format('.1f')(v) + ' min';
+  if (fmt === 'day') return v ? OS.day(v) : '—';
+  return OS.num(v || 0);
+}));
+
+// ----- Speed -----
+const ldTeamAsk = (r) => ldAsk('Explain speed: ' + ldTeamName(r.region), 'Explain lead speed for ' + ldTeamName(r.region) + ' over the last 30 days, from the EMEA RevOps OS. ' + ldOf(r.hWithin, r.hEligible) + ' demo requests were worked within 1 business day'
+  + (r.hMedianHours != null ? ' (median ' + ldHours(r.hMedianHours, r.hMedianAtLeast) + ' business hours)' : '') + ', and ' + ldOf(r.lWithin, r.lEligible) + ' other hand-offs within 5 business days. '
+  + OS.num(r.leftOut) + ' hand-offs were left out (' + (ldLeftTip(r) || 'none') + '). With my Salesforce access, pull the late and still-waiting hand-offs of EMEA sellers in ' + ldTeamName(r.region)
+  + ', group them by owner, source and weekday (source and age only, no prospect details), and suggest what to change. Read only: change nothing and send nothing.', { team: r.region });
+OS.defTable('ld-team-table', ['ld_kpi'], () => {
+  const rows = dash.data('ld_kpi').data || [];
+  const cur = scopeKey();
+  const list = LD_TEAMS.map((k) => rows.find((r) => r.region === k)).filter(Boolean);
+  if (cur.startsWith('M|')) { const m = rows.find((r) => r.region === cur); if (m) list.unshift(m); }
+  return list.map((r) => ({ ...r, team: ldTeamName(r.region), hOf: ldOf(r.hWithin, r.hEligible), lOf: ldOf(r.lWithin, r.lEligible), _cls: r.region === cur ? 'os-total' : '' }));
+}, [
+  { f: 'team', after: (r) => ldTeamAsk(r) },
+  { f: 'handoffs', fmt: OS.num, num: true, tip: (r) => OS.num(r.last7) + ' in the last 7 days' },
+  { f: 'hOf', num: true }, { f: 'hRate', fmt: ldRate, num: true },
+  { f: 'hMedianHours', fmt: (v, r) => ldHours(v, r.hMedianAtLeast), num: true },
+  { f: 'hWaiting', fmt: OS.num, num: true, cls: ldBad },
+  { f: 'lOf', num: true }, { f: 'lRate', fmt: ldRate, num: true },
+  { f: 'leftOut', fmt: OS.num, num: true, tip: ldLeftTip },
+  { f: 'readyNow', fmt: OS.num, num: true },
+  { f: 'demoOverdue', fmt: OS.num, num: true, cls: ldBad },
+], { key: 'region' });
+
+const ldRepAsk = (r) => ldAsk('Speed review: ' + r.owner, 'Review lead speed for ' + r.owner + ' (' + (r.role || 'no role') + ', ' + r.region + ldMgr(r) + ') from the EMEA RevOps OS. In the last 30 days they were handed '
+  + ldPlural(r.handoffs, 'lead', 'leads') + ': ' + ldOf(r.hWithin, r.hEligible) + ' demo requests were worked within 1 business day' + (r.hMedianHours != null ? ' (median ' + ldHours(r.hMedianHours, r.hMedianAtLeast) + ' business hours)' : '')
+  + ', and ' + ldOf(r.lWithin, r.lEligible) + ' other hand-offs within 5 business days. ' + ldPlural(r.demoOverdue, 'demo request is', 'demo requests are') + ' in Ready for 2+ business days now. With my Salesforce access, list their leads (OwnerId = '
+  + r.ownerId + ') with Ready Since in the last 30 days that left Ready late or are still Ready past due. Group them by source and weekday, oldest first, and show source and age only. Say what is slowing them down and suggest one or two fixes (routing, capacity, a reminder). Read only: change nothing and send nothing.', { person: r.owner, userId: r.ownerId });
+const ldStatusCls = (v) => (v === 'Left' || v === 'Demo waiting' ? 'bad' : v === 'Slow' ? 'warn' : v === 'On time' ? 'ok' : '');
+OS.defTable('ld-rep-table', ['ld_reps'], () => (dash.data('ld_reps').data || []).filter((r) => inTeam(r) && (r.handoffs > 0 || r.readyNow > 0))
+  .map((r) => ({ ...r, hOf: ldOf(r.hWithin, r.hEligible), lOf: ldOf(r.lWithin, r.lEligible) })), [
+  { f: 'owner', person: (r) => r.owner, after: (r) => ldActs(r, ldRepAsk(r)) }, { f: 'region' }, { f: 'manager' },
+  { f: 'handoffs', fmt: OS.num, num: true, tip: (r) => OS.num(r.last7) + ' in the last 7 days' },
+  { f: 'hOf', num: true }, { f: 'hRate', fmt: ldRate, num: true },
+  { f: 'hMedianHours', fmt: (v, r) => ldHours(v, r.hMedianAtLeast), num: true },
+  { f: 'demoOverdue', fmt: OS.num, num: true, cls: ldBad, tip: (r) => (r.hWaiting ? ldPlural(r.hWaiting, 'demo hand-off', 'demo hand-offs') + ' from the last 30 days past the 1-business-day due time' : '') },
+  { f: 'lOf', num: true }, { f: 'lRate', fmt: ldRate, num: true },
+  { f: 'leftOut', fmt: OS.num, num: true, tip: ldLeftTip },
+  { f: 'readyNow', fmt: OS.num, num: true, tip: (r) => (r.b21 ? OS.num(r.b21) + ' over 20 business days' : '') + (r.elsewhere ? (r.b21 ? ' · ' : '') + OS.num(r.elsewhere) + ' routed to another region' : '') },
+  { f: 'status', chip: ldStatusCls },
+], { key: 'key', also: ['role'] });
+
+const LD_SEV = { warn: 'medium', bad: 'high', info: 'low' };
+OS.defList('ld-trust-list', ['ld_trust'], () => dash.data('ld_trust').data || [], (rows) => rows.map((t) => {
+  const li = OS.el('li', 'itm');
+  li.dataset.key = t.id;
+  const main = OS.el('div', 'itm-main');
+  const val = t.value == null ? '—' : t.fmt === 'pct' ? OS.pct(t.value) : OS.num(t.value);
+  main.append(OS.el('span', 'itm-title', t.measure + ': ' + val), OS.el('span', 'itm-detail', t.detail));
+  li.append(OS.el('span', 'itm-dot ' + (LD_SEV[t.severity] || 'low')), main);
+  return li;
+}));
+
+// ----- Ready now -----
+const ldWho = (r) => (r.kind === 'Outside EMEA sales' && r.review ? 'Strategic or partnerships' : r.kind);
+const ldWhoCls = (v) => (v === 'Left (inactive)' ? 'bad' : v === 'Outside EMEA sales' ? 'warn' : v === 'Queue' ? 'info' : '');
+const ldTodoCls = (v) => (v === 'Nudge owner' || v === 'Reassign' || v === 'Route to a person' || v === 'Fix routing' ? 'bad' : v ? 'warn' : '');
+const ldOpenTip = (r) => [r.working ? OS.num(r.working) + ' being worked' : '', r.fresh ? OS.num(r.fresh) + ' New' : '', r.nurturing ? OS.num(r.nurturing) + ' Nurturing' : ''].filter(Boolean).join(' · ');
+const ldBacklogAsk = (r) => {
+  const who = r.owner + ' (' + (r.role || 'no role') + ldMgr(r) + ')';
+  const counts = OS.num(r.ready) + ' Ready leads: ' + ldPlural(r.demoOverdue, 'demo request', 'demo requests') + ' waiting 2+ business days, ' + OS.num(r.b21) + ' waiting over 20 business days, ' + OS.num(r.noDateAll) + ' with no Ready date, and ' + OS.num(r.elsewhere) + ' routed to another region' + (r.regions ? ' (' + r.regions + ')' : '');
+  const list = "(OwnerId = " + r.ownerId + ", Status = 'Ready', IsConverted = false)";
+  const ok = ' Show the record count and the exact owner or field changes, and wait for my OK before changing anything.';
+  if (r.todo === 'Nudge owner') return ldAsk('Nudge ' + r.owner, 'Nudge ' + who + ' about Ready leads from the EMEA RevOps OS. They hold ' + counts + '. With my Salesforce access, list their Ready leads ' + list + ', demo requests first, then oldest first, with source and age only. Draft a short Slack message to ' + r.owner + (r.manager && r.manager !== '(no manager)' ? ', copying ' + r.manager + ' when a demo request has waited over 3 business days' : '') + '. Show me the message and the recipients, and wait for my OK before sending.', { person: r.owner, userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Clean up Ready') return ldAsk('Clean up Ready: ' + r.owner, 'Plan a clean-up of the Ready leads of ' + who + ' from the EMEA RevOps OS. They hold ' + counts + '. With my Salesforce access, group their Ready leads ' + list + ' by source, routing region and age (no prospect details in chat). Propose one of these per group: work now, move to Nurturing, Disqualify with a Disposed Reason, or reassign to the team of the routing region. Show the record count and the exact field changes per group as a dry run, and change nothing until I say OK.', { person: r.owner, userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Check region') return ldAsk('Check region: ' + r.owner, who + ' holds ' + OS.num(r.elsewhere) + ' Ready leads that LeanData routed outside EMEA (' + (r.regions || 'other regions') + '), out of ' + OS.num(r.ready) + ' Ready. With my Salesforce access, check how they reached an EMEA seller (owner history, LeanData log) and whether they belong to EMEA. Propose who should own the rest (the team of their routing region).' + ok, { person: r.owner, userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Reassign') return ldAsk('Reassign leads: ' + r.owner, r.owner + ' has left (inactive in Salesforce; ' + (r.role || 'no role') + ldMgr(r) + ') but still holds ' + OS.num(r.ready) + ' Ready leads and ' + OS.num(r.open) + ' open leads in all. With my Salesforce access, propose new owners from the LeanData pool of their kind and team, lightest load first, per group of leads (no prospect details in chat). Also tell me whether they still hold a pool seat.' + ok, { person: r.owner, userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Reassign or confirm') return ldAsk('Check owner: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ', outside EMEA sales) holds ' + OS.num(r.ready) + ' Ready EMEA leads (' + OS.num(r.open) + ' open). With my Salesforce access, check for each one whether it matches an account they own (LeanData account match) or was routed by mistake. Keep the account-matched ones, and propose EMEA owners from the right LeanData pool for the rest.' + ok, { userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Review') return ldAsk('Review leads: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ') holds ' + OS.num(r.ready) + ' Ready EMEA leads (' + OS.num(r.open) + ' open). Strategic and partnership owners can be right. With my Salesforce access, check whether each lead matches one of their accounts or a partner deal, and list any that should go to EMEA sales, with counts only. Read only: change nothing.', { userId: r.ownerId, todo: r.todo });
+  if (r.todo === 'Route to a person') return ldAsk('Route: ' + r.owner, OS.num(r.ready) + ' leads are Ready in ' + r.owner + ' with no person' + (r.oldestDay ? ' (oldest Ready since ' + OS.day(r.oldestDay) + ')' : '') + '. With my Salesforce access, list them (owner = ' + r.owner + ", Status = 'Ready', IsConverted = false; count and source only) and find why LeanData did not route them (segment, country, routing sub-region, flow path). Propose an owner per lead from the pool matching its segment and sub-region, keeping the round robin even." + ok, { todo: r.todo });
+  return null;
+};
+OS.defTable('ld-backlog-table', ['ld_backlog'], () => {
+  const f = dash.params().ldReady || '';
+  return (dash.data('ld_backlog').data || []).filter(inTeam)
+    .filter((r) => (f === 'demo' ? r.demoOverdue > 0 : f === 'stale' ? r.stale > 0 : f === 'region' ? r.elsewhere > 0 : f === 'notseller' ? r.kind === 'Queue' || r.kind === 'Outside EMEA sales' : true))
+    .map((r) => ({ ...r, who: ldWho(r) }));
+}, [
+  { f: 'owner', person: (r) => (r.kind === 'EMEA seller' || r.kind === 'Left (inactive)' ? r.owner : null), after: (r) => ldActs(r, ldBacklogAsk(r)) },
+  { f: 'who', chip: ldWhoCls }, { f: 'region' }, { f: 'manager' },
+  { f: 'ready', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.ready) },
+  { f: 'demo', fmt: OS.num, num: true },
+  { f: 'demoOverdue', fmt: OS.num, num: true, cls: ldBad },
+  { f: 'b1', fmt: OS.num, num: true }, { f: 'b5', fmt: OS.num, num: true }, { f: 'b20', fmt: OS.num, num: true },
+  { f: 'b21', fmt: OS.num, num: true, cls: ldWarn },
+  { f: 'noDateAll', fmt: OS.num, num: true, tip: (r) => (r.noDateAll ? OS.num(r.noDate) + ' Ready since before 19 May 2026 · ' + OS.num(r.stampGap) + ' created later with no stamp' : '') },
+  { f: 'elsewhere', fmt: OS.num, num: true, cls: ldWarn, tip: (r) => r.regions || '' },
+  { f: 'oldestDay', fmt: (v) => (v ? OS.day(v) : '—') },
+  { f: 'otherOpen', fmt: OS.num, num: true, tip: ldOpenTip },
+  { f: 'todo', chip: ldTodoCls },
+], { key: 'key', also: ['role', 'regions'] });
+
+// ----- Routing -----
+const ldSevLabel = { high: 'High', medium: 'Medium', low: 'Low' };
+const ldProbAsk = (r) => {
+  const where = r.ownerType === 'Queue' ? r.owner : r.owner + ' (' + (r.role || 'no role') + ')';
+  const ok = ' Show the record count and the exact changes, and wait for my OK before changing anything.';
+  const base = { userId: r.ownerId, problem: r.kind };
+  if (r.action === 'Fix routing') return ldAsk('Fix routing: ' + r.owner, OS.num(r.leads) + ' open leads are ' + (r.kind === 'Routing error' ? 'in LeanData routing error' : 'not processed by LeanData') + (r.ldAction ? ' (' + r.ldAction + ')' : '') + ' with ' + where + ' (' + r.statuses + (r.lastProcessed ? '; LeanData last processed ' + OS.day(r.lastProcessed) : '') + '). With my Salesforce access, find them (open; ' + (r.kind === 'Routing error' ? "LeanData__Routing_Status__c = 'error' or LeanData__Routing_Action__c starting with 'error'" : "LeanData__Routing_Status__c = 'not processed'") + '; owner ' + r.owner + '; count and source only) and read the cause in LeanData. Group them by cause and propose the fix per group: re-run routing, fill the missing field, or a named owner from the right pool.' + ok, base);
+  if (r.kind === 'Ready in a queue') return ldAsk('Route: ' + r.owner, OS.num(r.leads) + ' leads are Ready in ' + r.owner + ' with no person' + (r.oldestReadyDay ? ' (oldest Ready since ' + OS.day(r.oldestReadyDay) + ')' : '') + '. With my Salesforce access, list them (owner = ' + r.owner + ", Status = 'Ready', IsConverted = false; count and source only) and find why LeanData did not route them (segment, country, routing sub-region, flow path). Propose an owner per lead from the pool matching its segment and sub-region, keeping the round robin even." + ok, base);
+  if (r.kind === 'MQL not handed off') return ldAsk('MQLs in ' + r.owner, OS.num(r.leads) + ' leads in ' + r.owner + ' are MQLs but still New. With my Salesforce access, check why they were not marked Ready and routed (count and source only), then propose for each either Ready with an owner from the right pool, or nurture.' + ok, base);
+  if (r.kind === 'Worked lead back in the queue') return ldAsk('Worked leads in ' + r.owner, OS.num(r.leads) + ' leads in Pursuing or Engaging sit in ' + r.owner + ' with no person (' + r.statuses + '). With my Salesforce access, find who last worked them (owner history), and propose who should own them now or whether to nurture them.' + ok, base);
+  if (r.action === 'Reassign') return ldAsk('Reassign leads: ' + r.owner, r.owner + ' is inactive in Salesforce (' + (r.role || 'no role') + ldMgr(r) + ') but still holds ' + OS.num(r.leads) + ' open EMEA leads (' + r.statuses + '). With my Salesforce access, propose new owners from the right LeanData pool, lightest load first, per group of leads (no prospect details in chat).' + ok, base);
+  if (r.action === 'Reassign or confirm') return ldAsk('Check owner: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ', outside EMEA sales) holds ' + OS.num(r.leads) + ' open EMEA leads (' + r.statuses + '). With my Salesforce access, check for each one whether it matches an account they own (LeanData account match) or was routed by mistake. Keep the account-matched ones, and propose EMEA owners from the right LeanData pool for the rest.' + ok, base);
+  if (r.action === 'Review') return ldAsk('Review leads: ' + r.owner, r.owner + ' (' + (r.role || 'no role') + ') holds ' + OS.num(r.leads) + ' open EMEA leads (' + r.statuses + '). Strategic and partnership owners can be right. With my Salesforce access, check whether each lead matches one of their accounts or a partner deal, and list any that should go to EMEA sales, with counts only. Read only: change nothing.', base);
+  return null;
+};
+const ldKindCls = (v) => (/error|Ready in a queue|inactive/i.test(v) ? 'bad' : /Strategic/.test(v) ? '' : 'warn');
+OS.defTable('ld-prob-table', ['ld_problems'], () => {
+  const f = dash.params().ldProb || '';
+  return (dash.data('ld_problems').data || []).filter(inTeam)
+    .filter((r) => (f === 'routing' ? r.routing : f === 'wrong' ? r.kind === 'Owner inactive' || r.kind === 'Owner outside EMEA sales' : f === 'review' ? r.kind === 'Strategic or partnerships owner' : true))
+    .map((r) => ({ ...r, sev: ldSevLabel[r.severity] || r.severity,
+      note: [r.kind === 'Ready in a queue' && r.oldestReadyDay ? 'oldest Ready since ' + OS.day(r.oldestReadyDay) : '', r.kind === 'Ready in a queue' && r.demoRequests ? ldPlural(r.demoRequests, 'demo request', 'demo requests') : '', r.neverProcessed ? OS.num(r.neverProcessed) + ' never processed by LeanData' : '', r.leaver ? 'also under Hiring › Leavers' : ''].filter(Boolean).join(' · ') }));
+}, [
+  { f: 'sev', chip: (v, r) => (r.severity === 'high' ? 'bad' : r.severity === 'medium' ? 'warn' : '') },
+  { f: 'kind', chip: ldKindCls },
+  { f: 'owner', person: (r) => (r.ownerType === 'User' && r.region !== 'Other' ? r.owner : null), after: (r) => ldActs(r, ldProbAsk(r)) },
+  { f: 'role' }, { f: 'region' },
+  { f: 'leads', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.leads) },
+  { f: 'ready', fmt: OS.num, num: true, cls: ldWarn },
+  { f: 'statuses', wrap: true }, { f: 'ldAction' },
+  { f: 'lastProcessed', fmt: (v) => (v ? OS.day(v) : '—') },
+  { f: 'note', wrap: true },
+  { f: 'action', chip: ldTodoCls },
+], { key: 'key' });
+
+const ldSrcAsk = (r) => ldAsk('Source review: ' + r.src + ' › ' + r.detail, 'Review the ' + r.src + ' › ' + r.detail + ' leads in the EMEA RevOps OS (all EMEA): ' + OS.num(r.created) + ' created in 30 days (' + OS.num(r.inQueue) + ' in a queue, ' + OS.num(r.toPerson) + ' routed to a person, '
+  + OS.num(r.autoConverted) + ' auto-converted to a contact, ' + OS.num(r.errors) + ' routing errors); ' + OS.num(r.handoffs) + ' handed off in 30 days, ' + ldOf(r.within, r.eligible) + ' worked within ' + r.due + '; ' + OS.num(r.readyNow) + ' in Ready now, '
+  + OS.num(r.over20) + ' of them for over 20 business days. With my Salesforce access, check whether routing and follow-up for this source work (counts only, no prospect details in chat), and suggest what to change (routing rule, SLA, nurture path). Read only: change nothing.', { source: r.src, detail: r.detail });
+OS.defTable('ld-src-table', ['ld_sources'], () => (dash.data('ld_sources').data || []).map((r) => ({ ...r, inTime: ldOf(r.within, r.eligible) })), [
+  { f: 'src' }, { f: 'detail', after: (r) => ldSrcAsk(r) },
+  { f: 'created', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.created) },
+  { f: 'inQueue', fmt: OS.num, num: true },
+  { f: 'toPerson', fmt: OS.num, num: true, tip: (r) => (r.toPersonShare != null ? OS.pct(r.toPersonShare) + ' of those created' : '') },
+  { f: 'autoConverted', fmt: OS.num, num: true, tip: (r) => (r.autoShare != null ? OS.pct(r.autoShare) + ' of those created' : '') },
+  { f: 'errors', fmt: OS.num, num: true, cls: ldBad },
+  { f: 'handoffs', fmt: OS.num, num: true },
+  { f: 'inTime', num: true, tip: (r) => 'due within ' + r.due },
+  { f: 'rate', fmt: ldRate, num: true },
+  { f: 'readyNow', fmt: OS.num, num: true },
+  { f: 'over20', fmt: OS.num, num: true, cls: ldWarn },
+], { key: 'key' });

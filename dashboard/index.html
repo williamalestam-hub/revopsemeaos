@@ -81,6 +81,11 @@
         <span>Account books</span>
         <span class="app-badge" data-draw="nav-badge" data-source="orphan_kpi" data-f="accounts" data-row="0" data-fetchpriority="low">—</span>
       </button>
+      <button class="app-tab" type="button" data-nav="leads" data-nav-item id="nav-leads">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></svg>
+        <span>Leads</span>
+        <span class="app-badge" data-draw="nav-badge" data-source="ld_kpi" data-f="badge" data-where="region=All" data-by-region data-fetchpriority="low">—</span>
+      </button>
   </nav>
 
   <!-- ===================== MAIN ===================== -->
@@ -124,13 +129,16 @@
           <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="routing"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Routing vs books</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="plan"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Plan moves</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="books" data-nav-view="engage"><span class="pal-kind">Go to</span><span class="pal-label">Account books › Engagement</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="leads" data-nav-view="speed"><span class="pal-kind">Go to</span><span class="pal-label">Leads › Speed to lead</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="leads" data-nav-view="ready"><span class="pal-kind">Go to</span><span class="pal-label">Leads › Ready now (backlog)</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="leads" data-nav-view="routing"><span class="pal-kind">Go to</span><span class="pal-label">Leads › Routing and sources</span><span class="pal-sub"></span></button></li>
         </ul>
         <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="palette-list"></span>
           <p class="os-empty" data-msg-for="palette-list" data-msg="empty" hidden>Start typing a name, a pool or an account book.</p>
           <p class="os-empty" data-msg-for="palette-list" data-msg="nomatch" hidden>Nothing matches. Try part of a name.</p>
           <p class="os-empty" data-msg-for="palette-list" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to search.</p>
         </div>
-        <p class="pal-hint">↑ ↓ to move · Enter to open · Esc to close · 1–8 jump to screens</p>
+        <p class="pal-hint">↑ ↓ to move · Enter to open · Esc to close · 1–9 jump to screens</p>
       </div>
     </div>
     <p class="scope-note" data-scope-note hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Showing one manager's direct reports. Stats, tables and pipeline charts follow it; tiles marked All EMEA don't.</span><button class="more" type="button" data-clear-mgr>Show everyone</button></p>
@@ -146,6 +154,7 @@
             <button class="hpill" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="forYou" data-row="0">—</b> next steps for you</button>
             <button class="hpill" type="button" data-nav="oneonone"><b data-draw="kpi-oo" data-source="oo_kpi" data-field="today" data-row="0">—</b> 1:1s left today</button>
             <button class="hpill warn" type="button" data-nav="actions" data-nav-view="checks"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent data checks</button>
+            <button class="hpill" type="button" data-nav="leads" data-nav-view="ready"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoOverdue" data-where="region=All" data-fetchpriority="low">—</b> demo requests waiting 2+ days</button>
           </div>
           <div class="hero-acts">
             <button class="btn btn-primary" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg>Jump to anything</button>
@@ -229,7 +238,7 @@
               </div>
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
-            <ul class="ilist" data-draw="home-checks" data-source="checks checks_hb checks_lv"></ul>
+            <ul class="ilist" data-draw="home-checks" data-source="checks checks_hb checks_lv checks_ld"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-checks"></span>
               <p class="os-empty" data-msg-for="home-checks" data-msg="empty" hidden>No problems found.</p>
               <p class="os-empty" data-msg-for="home-checks" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
@@ -359,13 +368,14 @@
               <button class="fchip" type="button" data-check-area="Pipeline" aria-pressed="false">Pipeline</button>
               <button class="fchip" type="button" data-check-area="Books" aria-pressed="false">Books</button>
               <button class="fchip" type="button" data-check-area="Leavers" aria-pressed="false">Leavers</button>
+              <button class="fchip" type="button" data-check-area="Leads" aria-pressed="false">Leads</button>
             </div>
             <div class="tools">
               <p class="pane-note">Click a name to open the person, or the arrow to go to the screen.</p>
               <button class="btn" type="button" data-copy-checks><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
           </div>
-          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb checks_lv"></ul>
+          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_hb checks_lv checks_ld"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="check-list"></span>
               <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
               <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
@@ -1502,6 +1512,233 @@
       </div>
     </section>
 
+    <!-- ===== LEADS ===== -->
+    <section class="scr" id="leads" data-page="leads" hidden>
+      <header class="scr-head">
+        <div>
+          <h1>Leads</h1>
+          <p>Leads handed to EMEA sales (status Ready): how fast they are worked, what sits in Ready, and what is stuck in LeanData routing. Leads count for their current owner's team. The Marketing Queue and owners outside EMEA sales show under All EMEA.</p>
+        </div>
+      </header>
+      <div class="banner"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg><span>Speed covers AE and BDR hand-offs only. Automation moves SMB leads out of Ready, and demo requests that LeanData converts to a contact on arrival are followed up on the contact, so neither is timed here. The queries read no lead names, emails, phones, companies or record Ids.</span></div>
+      <div class="vtabs" role="tablist" aria-label="Leads views">
+        <button class="vtab" role="tab" type="button" data-view-tab="leads:speed" aria-selected="true">Speed to lead</button>
+        <button class="vtab" role="tab" type="button" data-view-tab="leads:ready" aria-selected="false">Ready now</button>
+        <button class="vtab" role="tab" type="button" data-view-tab="leads:routing" aria-selected="false">Routing</button>
+      </div>
+
+      <div class="view" id="leads-speed" data-view-panel="leads:speed">
+        <div class="statbar">
+          <div class="stat" id="stat-ld-demo"><span class="stat-label">Demo requests worked within 1 business day</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="hRate" data-fmt="pct" data-where="region=All" data-fetchpriority="high">—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="hWithin" data-where="region=All">—</b> of <b data-draw="kpi-ld" data-source="ld_kpi" data-field="hEligible" data-where="region=All">—</b> due · last 30 days · SMB not scored</span></div>
+          <div class="stat" id="stat-ld-median"><span class="stat-label">Median to work a demo request</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="hMedianHours" data-fmt="hours" data-where="region=All">—</b></span><span class="stat-sub">business hours, Mon–Fri 09:00–18:00 Paris time</span></div>
+          <div class="stat" id="stat-ld-other"><span class="stat-label">Other hand-offs worked within 5 business days</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="lRate" data-fmt="pct" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="lWithin" data-where="region=All">—</b> of <b data-draw="kpi-ld" data-source="ld_kpi" data-field="lEligible" data-where="region=All">—</b> due · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="lWaiting" data-where="region=All">—</b> still in Ready past due</span></div>
+          <div class="stat" id="stat-ld-handoffs"><span class="stat-label">Hand-offs, last 30 days</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="handoffs" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="last7" data-where="region=All">—</b> in the last 7 days · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="leftOut" data-where="region=All">—</b> left out of speed</span></div>
+        </div>
+        <p class="ld-flow"><span class="ld-flow-h">Demo requests, last 30 days <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><span><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoCreated" data-where="region=All" data-all>—</b> created</span><span class="ld-arrow" aria-hidden="true">→</span><span><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoAuto" data-where="region=All" data-all>—</b> auto-converted to a contact (followed up there, not timed)</span><span class="ld-arrow" aria-hidden="true">→</span><span><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoHandoffs" data-where="region=All" data-all>—</b> handed off on a lead</span><span class="ld-arrow" aria-hidden="true">→</span><span><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoSmb" data-where="region=All" data-all>—</b> to SMB (not scored)</span><span class="ld-arrow" aria-hidden="true">→</span><span><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoScored" data-where="region=All" data-all>—</b> timed</span><span class="ld-flow-note">Created and handed-off counts use different dates.</span></p>
+        <div class="pane" id="ld-teams">
+          <div class="pane-head"><div><h2 class="pane-title">Speed by team</h2><p class="pane-note">All EMEA and each team, last 30 days. The row in bold is the scope you picked. Rates and medians on fewer than 5 leads show —; ≥ means leads still waiting could raise the median. The sparkle asks your Claude to explain a team's speed (read only).</p></div><button class="ibtn" type="button" data-copy-table="ld-team-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="ld_kpi" data-row-key="region">
+              <thead><tr>
+                <th data-field="team">Team</th>
+                <th class="num" data-field="handoffs">Hand-offs, 30d</th>
+                <th class="num" data-field="hOf">Demo within 1 day</th>
+                <th class="num" data-field="hRate">Rate</th>
+                <th class="num" data-field="hMedianHours">Median</th>
+                <th class="num" data-field="hWaiting">Demo past due</th>
+                <th class="num" data-field="lOf">Other within 5 days</th>
+                <th class="num" data-field="lRate">Rate</th>
+                <th class="num" data-field="leftOut">Left out</th>
+                <th class="num" data-field="readyNow">Ready now</th>
+                <th class="num" data-field="demoOverdue">Demo 2+ days</th>
+              </tr></thead>
+              <tbody data-draw="ld-team-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="ld-team-table"></span>
+              <p class="os-empty" data-msg-for="ld-team-table" data-msg="empty" hidden>No lead hand-offs in the last 30 days.</p>
+              <p class="os-empty" data-msg-for="ld-team-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="ld-team-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include the lead routing fields (Ready Since, First Response, LeanData). Ask RevOps.</p>
+            </div>
+          </div>
+        </div>
+        <div class="pane" id="ld-reps">
+          <div class="pane-head">
+            <div><h2 class="pane-title">Speed by rep</h2><p class="pane-note">EMEA sellers with a hand-off in the last 30 days or a Ready lead now, people who left included. Few reps reach 5 timed demo requests a month, so read the team rows first and don't rank reps on speed. The sparkle asks your Claude for a read-only speed review.</p></div>
+            <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="ld-rep-table-search" data-search="ld-rep-table" placeholder="Search reps, teams or managers" aria-label="Search reps"></label>
+            <button class="ibtn" type="button" data-copy-table="ld-rep-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+          </div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="ld_reps" data-row-key="key" data-sortable="ld-rep-table">
+              <thead><tr>
+                <th data-field="owner" data-sort="owner"><button type="button" class="th-sort">Rep</button></th>
+                <th data-field="region" data-sort="region"><button type="button" class="th-sort">Team</button></th>
+                <th data-field="manager" data-sort="manager"><button type="button" class="th-sort">Manager</button></th>
+                <th class="num" data-field="handoffs" data-sort="handoffs"><button type="button" class="th-sort">Hand-offs, 30d</button></th>
+                <th class="num" data-field="hOf">Demo within 1 day</th>
+                <th class="num" data-field="hRate" data-sort="hRate"><button type="button" class="th-sort">Demo rate</button></th>
+                <th class="num" data-field="hMedianHours" data-sort="hMedianHours"><button type="button" class="th-sort">Demo median</button></th>
+                <th class="num" data-field="demoOverdue" data-sort="demoOverdue"><button type="button" class="th-sort">Demo waiting</button></th>
+                <th class="num" data-field="lOf">Other within 5 days</th>
+                <th class="num" data-field="lRate" data-sort="lRate"><button type="button" class="th-sort">Other rate</button></th>
+                <th class="num" data-field="leftOut" data-sort="leftOut"><button type="button" class="th-sort">Left out</button></th>
+                <th class="num" data-field="readyNow" data-sort="readyNow"><button type="button" class="th-sort">Ready now</button></th>
+                <th data-field="status" data-sort="status"><button type="button" class="th-sort">Status</button></th>
+              </tr></thead>
+              <tbody data-draw="ld-rep-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="ld-rep-table"></span>
+              <p class="os-empty" data-msg-for="ld-rep-table" data-msg="empty" hidden>No EMEA seller in this scope had a hand-off in the last 30 days or holds a Ready lead.</p>
+              <p class="os-empty" data-msg-for="ld-rep-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="ld-rep-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include the lead routing fields (Ready Since, First Response, LeanData). Ask RevOps.</p>
+              <p class="os-empty" data-msg-for="ld-rep-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="ld-rep-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
+          </div>
+          <div class="pane-foot"><p class="pane-note">Speed is business time from Ready Since to the first exit from Ready (First Response), Mon–Fri 09:00–18:00 Paris time, with no holidays. Demo requests (Inbound: Demo Request or Contact Us Email Demo Request) are due within 1 business day, other hand-offs within 5. A lead still in Ready counts as missed once it is past due; younger ones are pending and left out. Left out: SMB-owned leads (automation moves them out of Ready), leads answered before this Ready stamp (recycles, re-stamps), exits within 2 minutes, and exits with no stamp. Checked on 3 Nov 2026: for AE and BDR owners the stamp matched the first logged rep email, call, LinkedIn touch, meeting or status change on 96–98% of hand-offs.</p></div>
+        </div>
+        <div class="pane" id="ld-trust">
+          <div class="pane-head"><div><h2 class="pane-title">How far to trust these numbers</h2><p class="pane-note">Checks on the lead data behind this screen. Amber means a number above may be off.</p></div></div>
+          <div class="pane-scroll"><ul class="ilist" data-draw="ld-trust-list" data-source="ld_trust"></ul>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="ld-trust-list"></span>
+              <p class="os-empty" data-msg-for="ld-trust-list" data-msg="empty" hidden>No lead data to check.</p>
+              <p class="os-empty" data-msg-for="ld-trust-list" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+            </div></div>
+        </div>
+      </div>
+
+      <div class="view" id="leads-ready" data-view-panel="leads:ready" hidden>
+        <div class="statbar">
+          <div class="stat" id="stat-ld-ready"><span class="stat-label">Ready now</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="readyNow" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="leaverReady" data-where="region=All">—</b> with people who left · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="elsewhere" data-where="region=All">—</b> routed to another region</span></div>
+          <div class="stat" id="stat-ld-overdue"><span class="stat-label">Demo requests waiting 2+ business days</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="demoOverdue" data-where="region=All">—</b></span><span class="stat-sub">hand-raisers still in Ready</span></div>
+          <div class="stat" id="stat-ld-stale"><span class="stat-label">Waiting over 20 business days</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="b21" data-where="region=All">—</b></span><span class="stat-sub">+<b data-draw="kpi-ld" data-source="ld_kpi" data-field="noDate" data-where="region=All">—</b> Ready since before 19 May 2026 · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="stampGap" data-where="region=All">—</b> with no stamp since</span></div>
+          <div class="stat" id="stat-ld-notseller"><span class="stat-label">Ready, not with an EMEA seller <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="notSellerReady" data-where="region=All" data-all>—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="queueReady" data-where="region=All" data-all>—</b> in the Marketing Queue · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="outsideReady" data-where="region=All" data-all>—</b> with owners outside EMEA sales (<b data-draw="kpi-ld" data-source="ld_kpi" data-field="reviewReady" data-where="region=All" data-all>—</b> strategic or partnerships)</span></div>
+        </div>
+        <div class="pane" id="ld-backlog">
+          <div class="pane-head">
+            <div class="tools" role="group" aria-label="Show">
+              <button class="fchip" type="button" data-ld-ready="" aria-pressed="true">All</button>
+              <button class="fchip" type="button" data-ld-ready="demo" aria-pressed="false">Demo waiting</button>
+              <button class="fchip" type="button" data-ld-ready="stale" aria-pressed="false">Over 20 business days</button>
+              <button class="fchip" type="button" data-ld-ready="region" aria-pressed="false">Other region</button>
+              <button class="fchip" type="button" data-ld-ready="notseller" aria-pressed="false">Not with an EMEA seller</button>
+            </div>
+            <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="ld-backlog-table-search" data-search="ld-backlog-table" placeholder="Search owners, teams or managers" aria-label="Search owners"></label>
+            <button class="ibtn" type="button" data-copy-table="ld-backlog-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+          </div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="ld_backlog" data-row-key="key" data-sortable="ld-backlog-table">
+              <thead><tr>
+                <th data-field="owner" data-sort="owner"><button type="button" class="th-sort">Owner</button></th>
+                <th data-field="who" data-sort="who"><button type="button" class="th-sort">Who</button></th>
+                <th data-field="region" data-sort="region"><button type="button" class="th-sort">Team</button></th>
+                <th data-field="manager" data-sort="manager"><button type="button" class="th-sort">Manager</button></th>
+                <th class="num" data-field="ready" data-sort="ready"><button type="button" class="th-sort">Ready</button></th>
+                <th class="num" data-field="demo" data-sort="demo"><button type="button" class="th-sort">Demo requests</button></th>
+                <th class="num" data-field="demoOverdue" data-sort="demoOverdue"><button type="button" class="th-sort">Demo 2+ days</button></th>
+                <th class="num" data-field="b1" data-sort="b1"><button type="button" class="th-sort">0–1 days</button></th>
+                <th class="num" data-field="b5" data-sort="b5"><button type="button" class="th-sort">2–5</button></th>
+                <th class="num" data-field="b20" data-sort="b20"><button type="button" class="th-sort">6–20</button></th>
+                <th class="num" data-field="b21" data-sort="b21"><button type="button" class="th-sort">Over 20</button></th>
+                <th class="num" data-field="noDateAll" data-sort="noDateAll"><button type="button" class="th-sort">No Ready date</button></th>
+                <th class="num" data-field="elsewhere" data-sort="elsewhere"><button type="button" class="th-sort">Other region</button></th>
+                <th data-field="oldestDay" data-sort="oldestDay"><button type="button" class="th-sort">Oldest Ready since</button></th>
+                <th class="num" data-field="otherOpen" data-sort="otherOpen"><button type="button" class="th-sort">Other open</button></th>
+                <th data-field="todo" data-sort="todo"><button type="button" class="th-sort">To do</button></th>
+              </tr></thead>
+              <tbody data-draw="ld-backlog-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="ld-backlog-table"></span>
+              <p class="os-empty" data-msg-for="ld-backlog-table" data-msg="empty" hidden>No Ready leads for this scope and filter.</p>
+              <p class="os-empty" data-msg-for="ld-backlog-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="ld-backlog-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include the lead routing fields (Ready Since, First Response, LeanData). Ask RevOps.</p>
+              <p class="os-empty" data-msg-for="ld-backlog-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="ld-backlog-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
+          </div>
+          <div class="pane-foot"><p class="pane-note">Ready means handed to sales and not worked yet: on 3 Nov 2026 only 5 of 1,034 Ready leads had a rep email or call logged after their Ready stamp. Last activity isn't used, because automation sets it. Ages are Monday-to-Friday days since the Ready Since date (UTC), a lower bound, because a re-stamp only makes a lead look younger. A demo request counts as waiting from 2 business days. No Ready date: Ready since before 19 May 2026, when the field was added, or a stamping gap for leads created later. Other region: LeanData's routing region isn't EMEA; the lead still counts for its owner. The queue and owners outside EMEA sales show under All EMEA only, and people who left also appear under Hiring › Leavers. The sparkle hands your Claude the next step (nudge, clean up, check region, reassign or route); it reads the leads with your access and waits for your OK before changing or sending anything.</p></div>
+        </div>
+      </div>
+
+      <div class="view" id="leads-routing" data-view-panel="leads:routing" hidden>
+        <div class="statbar">
+          <div class="stat" id="stat-ld-stuck"><span class="stat-label">Stuck in routing</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="routingIssues" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="errors" data-where="region=All">—</b> LeanData errors · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="routingHigh" data-where="region=All">—</b> urgent</span></div>
+          <div class="stat" id="stat-ld-wrong"><span class="stat-label">Held by the wrong owner</span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="wrongOwner" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="inactiveLeads" data-where="region=All">—</b> with inactive users · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="outsideLeads" data-where="region=All">—</b> with <b data-draw="kpi-ld" data-source="ld_kpi" data-field="outsideOwners" data-where="region=All">—</b> people outside EMEA sales · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="reviewLeads" data-where="region=All">—</b> strategic or partnerships (review, not counted)</span></div>
+          <div class="stat" id="stat-ld-routed"><span class="stat-label">Reached a person within 5 minutes <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="routedFastShare" data-fmt="pct" data-where="region=All" data-all>—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="routedFast" data-where="region=All" data-all>—</b> of <b data-draw="kpi-ld" data-source="ld_kpi" data-field="routedAtReady" data-where="region=All" data-all>—</b> routed at Ready · median <b data-draw="kpi-ld" data-source="ld_kpi" data-field="routeMedianMin" data-fmt="min" data-where="region=All" data-all>—</b> · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="stillInQueue" data-where="region=All" data-all>—</b> still in the queue</span></div>
+          <div class="stat" id="stat-ld-created"><span class="stat-label">Created, last 30 days <span class="scope-tag" data-scope-tag hidden>All EMEA</span></span><span class="stat-value"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="created" data-where="region=All" data-all>—</b></span><span class="stat-sub"><b data-draw="kpi-ld" data-source="ld_kpi" data-field="inQueue" data-where="region=All" data-all>—</b> in the Marketing Queue · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="toPerson" data-where="region=All" data-all>—</b> routed to a person · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="autoConverted" data-where="region=All" data-all>—</b> auto-converted · <b data-draw="kpi-ld" data-source="ld_kpi" data-field="routingErrors30" data-where="region=All" data-all>—</b> errors</span></div>
+        </div>
+        <div class="pane" id="ld-problems">
+          <div class="pane-head">
+            <div class="tools" role="group" aria-label="Show">
+              <button class="fchip" type="button" data-ld-prob="" aria-pressed="true">All</button>
+              <button class="fchip" type="button" data-ld-prob="routing" aria-pressed="false">Routing</button>
+              <button class="fchip" type="button" data-ld-prob="wrong" aria-pressed="false">Wrong owner</button>
+              <button class="fchip" type="button" data-ld-prob="review" aria-pressed="false">Review</button>
+            </div>
+            <button class="ibtn" type="button" data-copy-table="ld-prob-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+          </div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="ld_problems" data-row-key="key">
+              <thead><tr>
+                <th data-field="sev">Severity</th>
+                <th data-field="kind">Problem</th>
+                <th data-field="owner">Where</th>
+                <th data-field="role">Role</th>
+                <th data-field="region">Team</th>
+                <th class="num" data-field="leads">Leads</th>
+                <th class="num" data-field="ready">Ready</th>
+                <th data-field="statuses">Statuses</th>
+                <th data-field="ldAction">LeanData action</th>
+                <th data-field="lastProcessed">LeanData last processed</th>
+                <th data-field="note">Note</th>
+                <th data-field="action">To do</th>
+              </tr></thead>
+              <tbody data-draw="ld-prob-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="ld-prob-table"></span>
+              <p class="os-empty" data-msg-for="ld-prob-table" data-msg="empty" hidden>No open leads stuck in routing or held by the wrong owner for this scope and filter.</p>
+              <p class="os-empty" data-msg-for="ld-prob-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="ld-prob-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include the lead routing fields (Ready Since, First Response, LeanData). Ask RevOps.</p>
+              <p class="os-empty" data-msg-for="ld-prob-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
+          </div>
+          <div class="pane-foot"><p class="pane-note">Stuck in routing: open leads in LeanData error (partner call-out errors included; urgent when LeanData hit them this week or the lead is Ready), not processed by LeanData, Ready or New MQL leads in a queue, and Pursuing or Engaging leads back in a queue. Wrong owner: open leads of inactive users, or of active users outside EMEA sales roles. Strategic and partnership owners are marked review and not counted, as for orphan accounts. Queue rows and owners outside EMEA sales show under All EMEA only.</p></div>
+        </div>
+        <div class="pane" id="ld-sources">
+          <div class="pane-head">
+            <div><h2 class="pane-title">By source, all EMEA</h2><p class="pane-note">Always all EMEA, whatever the scope. The sparkle asks your Claude to review a source's routing and follow-up (read only).</p></div>
+            <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="ld-src-table-search" data-search="ld-src-table" placeholder="Search sources" aria-label="Search sources"></label>
+            <button class="ibtn" type="button" data-copy-table="ld-src-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+          </div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="ld_sources" data-row-key="key" data-sortable="ld-src-table">
+              <thead><tr>
+                <th data-field="src" data-sort="src"><button type="button" class="th-sort">Source</button></th>
+                <th data-field="detail" data-sort="detail"><button type="button" class="th-sort">Detail</button></th>
+                <th class="num" data-field="created" data-sort="created"><button type="button" class="th-sort">Created, 30d</button></th>
+                <th class="num" data-field="inQueue" data-sort="inQueue"><button type="button" class="th-sort">In a queue</button></th>
+                <th class="num" data-field="toPerson" data-sort="toPerson"><button type="button" class="th-sort">Routed to a person</button></th>
+                <th class="num" data-field="autoConverted" data-sort="autoConverted"><button type="button" class="th-sort">Auto-converted</button></th>
+                <th class="num" data-field="errors" data-sort="errors"><button type="button" class="th-sort">Routing errors</button></th>
+                <th class="num" data-field="handoffs" data-sort="handoffs"><button type="button" class="th-sort">Handed off, 30d</button></th>
+                <th class="num" data-field="inTime">Worked in time</th>
+                <th class="num" data-field="rate" data-sort="rate"><button type="button" class="th-sort">Rate</button></th>
+                <th class="num" data-field="readyNow" data-sort="readyNow"><button type="button" class="th-sort">Ready now</button></th>
+                <th class="num" data-field="over20" data-sort="over20"><button type="button" class="th-sort">Over 20 days</button></th>
+              </tr></thead>
+              <tbody data-draw="ld-src-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="ld-src-table"></span>
+              <p class="os-empty" data-msg-for="ld-src-table" data-msg="empty" hidden>No leads created, handed off or in Ready.</p>
+              <p class="os-empty" data-msg-for="ld-src-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="ld-src-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include the lead routing fields (Ready Since, First Response, LeanData). Ask RevOps.</p>
+              <p class="os-empty" data-msg-for="ld-src-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+            </div>
+          </div>
+          <div class="pane-foot"><p class="pane-note">Created counts leads created in the last 30 days, handed off counts Ready Since in the last 30 days, and Ready now is today, so the columns don't add up. Reached a person: LeanData's Last Routed Date at or after Ready Since, in calendar minutes; leads already with a person when they became Ready are left out. New leads in the Marketing Queue are the marketing database, not a sales backlog. Auto-converted leads became contacts when LeanData routed them. No lead-to-opportunity rate is shown, because opportunities are created later on the contact.</p></div>
+        </div>
+      </div>
+    </section>
+
     <p class="toast" data-toast="ok" role="status" hidden>Copied to clipboard</p>
     <p class="toast" data-toast="fail" role="status" hidden>Couldn't copy. Select the text and copy it instead.</p>
     <p class="toast" data-toast="asked" role="status" hidden>Handed to Claude. Check your conversation.</p>
@@ -1592,6 +1829,16 @@
         <div><dt>Assigned, 90 days</dt><dd data-draw="pd-num" data-source="person" data-f="assignments">—</dd></div>
       </dl>
       <ul class="pd-pools" data-draw="pd-pools" data-source="person"></ul>
+    </section>
+    <section class="pd-sec" data-pd-leads hidden>
+      <h3>Leads</h3>
+      <dl class="pd-dl">
+        <div><dt>Ready now</dt><dd data-draw="pd-num" data-source="ld_reps" data-f="readyNow">—</dd></div>
+        <div><dt>Demo requests waiting 2+ days</dt><dd data-draw="pd-num" data-source="ld_reps" data-f="demoOverdue">—</dd></div>
+        <div><dt>Hand-offs, 30 days</dt><dd data-draw="pd-num" data-source="ld_reps" data-f="handoffs">—</dd></div>
+        <div><dt>Demo within 1 business day</dt><dd data-draw="pd-pct" data-source="ld_reps" data-f="hRate">—</dd></div>
+        <div><dt>Other within 5 business days</dt><dd data-draw="pd-pct" data-source="ld_reps" data-f="lRate">—</dd></div>
+      </dl>
     </section>
     <section class="pd-sec" data-pd-deals hidden>
       <h3>Open deals</h3>

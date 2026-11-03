@@ -331,6 +331,44 @@ ds("lv_leads", "Open leads owned by people who left",
    AND OwnerId IN (SELECT Id FROM User WHERE IsActive = false AND UserRole.Name IN ({ROLES}))
    GROUP BY OwnerId, Status LIMIT 2000"""))
 
+# ---------- Leads ----------
+# In scope: owned by an EMEA seller (any country), or EMEA by country (Region__c, a formula: filter only, never group)
+# or by LeanData routing region, whoever owns it (the Marketing Queue included). The owner filter uses
+# Owner.UserRole.Name IN because a semi-join inside an OR fails. No lead names, emails, phones, companies or Ids are read.
+LEAD_SCOPE = f"({OWNER} OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA')"
+LEAD_OPEN = "IsConverted = false AND Status NOT IN ('Disqualified','Converted')"
+ds("ld_ready", "Ready leads now",
+   "Leads in Ready now (not converted) that an EMEA seller owns, or that are EMEA by country or LeanData routing region whoever owns them (the Marketing Queue, other teams). Grouped per owner, LeanData routing region, lead source and detail, and the UTC day they became Ready, with the earliest created date. Counts only.",
+   SF(f"""SELECT OwnerId ownerId, Owner.Name owner, Owner.Type ownerType, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive,
+   Routing_Region__c routingRegion, LeadSource src, Lead_Source_Details__c detail, DAY_ONLY(Ready_Since__c) readyDay, COUNT(Id) leads,
+   MIN(CreatedDate) firstCreated FROM Lead WHERE Status = 'Ready' AND IsConverted = false AND {LEAD_SCOPE}
+   GROUP BY OwnerId, Owner.Name, Owner.Type, Owner.UserRole.Name, Owner.IsActive, Routing_Region__c, LeadSource, Lead_Source_Details__c,
+   DAY_ONLY(Ready_Since__c) LIMIT 2000"""))
+# one row per lead (GROUP BY Id without selecting it): exact times for business-hour speed, but no Id or prospect detail
+ds("ld_handoffs", "Lead hand-offs, last 30 days",
+   "Leads in scope whose Ready Since stamp is in the last 30 days, one row per lead but without its Id or any prospect detail: current owner (type, role, active), lead source and detail, status, converted flag, and the exact Ready Since, First Response and Last Routed (LeanData, to a person) times.",
+   SF(f"""SELECT OwnerId ownerId, Owner.Type ownerType, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive,
+   LeadSource src, Lead_Source_Details__c detail, Status status, IsConverted converted, MIN(Ready_Since__c) readyAt,
+   MIN(First_Response_Timestamp__c) respAt, MIN(Last_Assigned_Date__c) routedAt FROM Lead
+   WHERE Ready_Since__c = LAST_N_DAYS:30 AND {LEAD_SCOPE}
+   GROUP BY Id, OwnerId, Owner.Type, Owner.Name, Owner.UserRole.Name, Owner.IsActive, LeadSource, Lead_Source_Details__c, Status, IsConverted
+   ORDER BY MIN(Ready_Since__c) DESC LIMIT 2000"""))
+ds("ld_inflow", "Leads created, last 30 days",
+   "Leads in scope created in the last 30 days, by lead source and detail, owner type and role, LeanData routing sub-region, status and LeanData routing action, with how many were stamped Ready and how many LeanData routed to a person (Last Routed Date). Counts only.",
+   SF(f"""SELECT LeadSource src, Lead_Source_Details__c detail, Owner.Type ownerType, Owner.UserRole.Name ownerRole,
+   Routing_Sub_Region__c subRegion, Status status, LeanData__Routing_Action__c routing, COUNT(Id) leads,
+   COUNT(Ready_Since__c) readyStamped, COUNT(Last_Assigned_Date__c) routedToPerson FROM Lead
+   WHERE CreatedDate = LAST_N_DAYS:30 AND {LEAD_SCOPE}
+   GROUP BY LeadSource, Lead_Source_Details__c, Owner.Type, Owner.UserRole.Name, Routing_Sub_Region__c, Status,
+   LeanData__Routing_Action__c LIMIT 2000"""))
+ds("ld_open", "Open leads per owner",
+   "Open leads in scope (neither converted nor disqualified) per owner (a person or a queue), owner role and active flag, status, lifecycle stage and LeanData routing status and action, with how many and when LeanData last processed one of them. Counts only.",
+   SF(f"""SELECT OwnerId ownerId, Owner.Type ownerType, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive,
+   Status status, Lifecycle_Stage__c lifecycle, LeanData__Routing_Status__c ldStatus, LeanData__Routing_Action__c ldAction,
+   COUNT(Id) leads, MAX(LeanData__Reporting_Timestamp__c) lastProcessed FROM Lead WHERE {LEAD_OPEN} AND {LEAD_SCOPE}
+   GROUP BY OwnerId, Owner.Type, Owner.Name, Owner.UserRole.Name, Owner.IsActive, Status, Lifecycle_Stage__c,
+   LeanData__Routing_Status__c, LeanData__Routing_Action__c LIMIT 2000"""))
+
 # ---------- 1:1s ----------
 CAL_DAY = r"^\d{4}-\d{2}-\d{2}T00:00:00$"
 D["cal_events"] = {"title": "Your calendar, next 14 days",
