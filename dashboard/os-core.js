@@ -744,10 +744,11 @@ OS.done = (() => {
     document.querySelectorAll('[data-gr-done]').forEach((b) => { b.hidden = !(can && ready); });
   };
   let failTimer = null;
-  const failed = () => {
-    document.querySelectorAll('[data-toast="tickfail"]').forEach((t) => { t.hidden = false; });
+  // kind: 'tickfail' (try again) or 'tickro' (this viewer can't save ticks)
+  const failed = (kind) => {
+    document.querySelectorAll('[data-toast="tickfail"], [data-toast="tickro"]').forEach((t) => { t.hidden = t.dataset.toast !== kind; });
     clearTimeout(failTimer);
-    failTimer = setTimeout(() => document.querySelectorAll('[data-toast="tickfail"]').forEach((t) => { t.hidden = true; }), 3200);
+    failTimer = setTimeout(() => document.querySelectorAll('[data-toast="tickfail"], [data-toast="tickro"]').forEach((t) => { t.hidden = true; }), 4200);
   };
   (async () => {
     try {
@@ -756,10 +757,8 @@ OS.done = (() => {
       const [db, user] = await Promise.all([c.use('db'), c.use('user')]);
       const uid = db && user ? await user.id() : null;
       if (!uid) return;
-      // a viewer the platform says can't write data gets no ticks; null means it hasn't said, so keep them
-      let w = null;
-      try { w = typeof user.can === 'function' ? await user.can('data.write') : null; } catch (e) { w = null; }
-      if (w === false) return;
+      // ticks live in the viewer's own subtree, which has its own write rule (contributors may write there), so
+      // can('data.write') (shared documents) is not the signal: write, and a refusal turns ticks off for the visit
       ref = db.doc('data/users/' + uid + '/os-done');
       can = true;
       ref.onSnapshot((snap) => {
@@ -803,8 +802,9 @@ OS.done = (() => {
       } else {
         // not saved: undo these toggles; stop offering ticks only when writing can't work for this viewer
         for (const [k, on] of sent) if (pending.get(k) === on) pending.delete(k);
-        if (FATAL.includes(err && err.code)) can = false;
-        failed();
+        const fatal = FATAL.includes(err && err.code);
+        if (fatal) can = false;
+        failed(fatal ? 'tickro' : 'tickfail');
       }
       redraw();
     });
