@@ -257,6 +257,18 @@
   .chip-sep { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .scope-tag { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: .68rem; font-weight: var(--cds-font-weight-medium); letter-spacing: .02em; color: var(--color-fg-muted); background: color-mix(in srgb, var(--color-fg) 7%, transparent); text-transform: none; }
   .home-card .card-top > span { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+
+  /* review fixes: contrast, cut-off tabs, focus rings */
+  .app { --grad-strong: linear-gradient(135deg, color-mix(in srgb, var(--acc) 74%, var(--color-fg)), color-mix(in srgb, var(--acc2) 74%, var(--color-fg))); }
+  .btn-primary, .schip[aria-pressed="true"], .app-badge.info, .pd-avatar { background: var(--grad-strong); }
+  .app-tabs { scrollbar-width: thin; -webkit-mask-image: none; mask-image: none; }
+  .app-tabs::-webkit-scrollbar { display: block; height: 4px; }
+  @media (max-width: 1180px) { .app-tab svg.ic { display: none; } .app-tab { padding: 0 12px; } }
+  .vtabs { flex-wrap: wrap; overflow: visible; border-radius: var(--r); }
+  .itm-check.others, .itm-check.low, .itm-check.unassigned { color: var(--color-fg-muted); }
+  .app .oo-btn:focus-visible, .app .mgr-item:focus-visible, .app .nx-more:focus-visible, .app .pal-item:focus-visible { outline-offset: -2px; }
+  .oo-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+  .oo-itm { grid-template-columns: minmax(0, 1fr); }
   [data-dash-source-state=empty] { color: transparent; }
   [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
   .app b { font-weight: inherit; }
@@ -619,7 +631,7 @@
           <p class="hero-sub">Here's what needs you across EMEA pipeline, people, routing and territory.</p>
           <div class="hero-pills">
             <button class="hpill" type="button" data-nav="actions" data-nav-view="meetings" data-gr-owner="foryou"><b data-draw="kpi-gr" data-source="gr_kpi" data-field="forYou" data-row="0">—</b> next steps for you</button>
-            <button class="hpill" type="button" data-nav="oneonone"><b data-draw="kpi-oo" data-source="oo_kpi" data-field="today" data-row="0">—</b> 1:1s today</button>
+            <button class="hpill" type="button" data-nav="oneonone"><b data-draw="kpi-oo" data-source="oo_kpi" data-field="today" data-row="0">—</b> 1:1s left today</button>
             <button class="hpill warn" type="button" data-nav="actions" data-nav-view="checks"><b data-draw="kpi-checks" data-source="checks_kpi" data-field="high" data-where="region=All">—</b> urgent data checks</button>
           </div>
           <div class="hero-acts">
@@ -782,7 +794,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="actions:checks" aria-selected="false">From data checks</button>
       </div>
 
-      <div class="view" data-view-panel="actions:meetings">
+      <div class="view" id="actions-meetings" data-view-panel="actions:meetings">
         <div class="pane" id="act-meetings">
           <div class="pane-head">
             <div class="tools" role="group" aria-label="Owner">
@@ -814,7 +826,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="actions:checks" hidden>
+      <div class="view" id="actions-checks" data-view-panel="actions:checks" hidden>
         <div class="pane" id="act-checks">
           <div class="pane-head">
             <div class="tools" role="group" aria-label="Area">
@@ -843,7 +855,7 @@
       <header class="scr-head">
         <div>
           <h1>1:1s</h1>
-          <p>An agenda for each 1:1 in the next two weeks: open follow-ups from your Granola notes, then their Salesforce numbers and what to raise. For a leader, the numbers cover everyone below them.</p>
+          <p>An agenda for each 1:1 in the next two weeks: open follow-ups from your Granola notes, then their Salesforce numbers and what to raise. For a leader, the numbers cover everyone in EMEA sales below them.</p>
         </div>
         <div class="scr-actions">
           <button class="btn" type="button" data-copy-agenda><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy agenda</button>
@@ -854,7 +866,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="oneonone:team" aria-selected="false">Team scorecard</button>
       </div>
 
-      <div class="view" data-view-panel="oneonone:upcoming">
+      <div class="view" id="oneonone-upcoming" data-view-panel="oneonone:upcoming">
         <div class="oo-grid">
           <div class="pane" id="oo-upcoming">
             <div class="pane-head"><div><h2 class="pane-title">Next 14 days</h2><p class="pane-note">1:1s with a colleague in your Google Calendar. Pick one for its agenda.</p></div></div>
@@ -908,10 +920,10 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="oneonone:team" hidden>
+      <div class="view" id="oneonone-team" data-view-panel="oneonone:team" hidden>
         <div class="pane" id="oo-team">
           <div class="pane-head">
-            <div><h2 class="pane-title">Team scorecard</h2><p class="pane-note">Each direct report with the numbers of their whole team (them and everyone below them in Salesforce). Starts from you when EMEA people report to you, otherwise from the top EMEA leader.</p></div>
+            <div><h2 class="pane-title">Team scorecard</h2><p class="pane-note">Each direct report who has EMEA sales people in their team, with that team's numbers (them and everyone in EMEA sales below them in Salesforce; deals still owned by people who left count too). Starts from you when EMEA people report to you, otherwise from the top EMEA leader.</p></div>
             <div class="tools">
               <label class="app-pick">Leader
                 <select class="os-oo-root" aria-label="Leader" data-draw="oo-root" data-source="team_tree sf_me"></select>
@@ -988,7 +1000,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="pipeline:renewals" aria-selected="false">Renewals</button>
       </div>
 
-      <div class="view" data-view-panel="pipeline:teams">
+      <div class="view" id="pipeline-teams" data-view-panel="pipeline:teams">
         <div class="pane" id="pipe-by-team">
           <div class="pane-head">
             <div>
@@ -1004,7 +1016,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="pipeline:forecast" hidden>
+      <div class="view" id="pipeline-forecast" data-view-panel="pipeline:forecast" hidden>
         <div class="statbar">
           <div class="stat" id="stat-fc-won"><span class="stat-label">Closed won</span><span class="stat-value"><b data-draw="kpi-fc" data-source="forecast" data-field="won" data-where="key=All%7CAll">—</b></span><span class="stat-sub">this quarter</span></div>
           <div class="stat" id="stat-fc-commit"><span class="stat-label">Won + commit</span><span class="stat-value"><b data-draw="kpi-fc" data-source="forecast" data-field="wonCommit" data-where="key=All%7CAll">—</b></span><span class="stat-sub">the commit call</span></div>
@@ -1049,7 +1061,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="pipeline:bookings" hidden>
+      <div class="view" id="pipeline-bookings" data-view-panel="pipeline:bookings" hidden>
         <div class="statbar">
           <div class="stat" id="stat-bk-won"><span class="stat-label">Won this quarter</span><span class="stat-value"><b data-draw="kpi-book" data-fmt="usd" data-source="bookings_kpi" data-field="wonThisArr" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-book" data-source="bookings_kpi" data-field="wonThis" data-where="region=All">—</b> deals</span></div>
           <div class="stat" id="stat-bk-last"><span class="stat-label">Won last quarter</span><span class="stat-value"><b data-draw="kpi-book" data-fmt="usd" data-source="bookings_kpi" data-field="wonLastArr" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-book" data-source="bookings_kpi" data-field="wonLast" data-where="region=All">—</b> deals</span></div>
@@ -1093,7 +1105,7 @@
           </div>
         </div>
       </div>
-      <div class="view" data-view-panel="pipeline:managers" hidden>
+      <div class="view" id="pipeline-managers" data-view-panel="pipeline:managers" hidden>
         <div class="pane" id="pipe-managers">
           <div class="pane-head">
             <div>
@@ -1124,7 +1136,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="pipeline:reps" hidden>
+      <div class="view" id="pipeline-reps" data-view-panel="pipeline:reps" hidden>
         <div class="pane" id="pipe-reps">
           <div class="pane-head">
             <div>
@@ -1156,7 +1168,7 @@
           </div>
         </div>
       </div>
-      <div class="view" data-view-panel="pipeline:risk" hidden>
+      <div class="view" id="pipeline-risk" data-view-panel="pipeline:risk" hidden>
         <div class="statbar">
           <div class="stat" id="stat-risk-pushed"><span class="stat-label">Pushed out of this quarter</span><span class="stat-value"><b data-draw="kpi-risk" data-fmt="usd" data-source="risk_kpi" data-field="pushedOutArr" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-risk" data-source="risk_kpi" data-field="pushedOut" data-where="region=All">—</b> deals, last 30 days</span></div>
           <div class="stat" id="stat-risk-early"><span class="stat-label">Early stage, closing this quarter</span><span class="stat-value"><b data-draw="kpi-risk" data-fmt="usd" data-source="risk_kpi" data-field="earlyArr" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-risk" data-fmt="pct" data-source="risk_kpi" data-field="earlyShare" data-where="region=All">—</b> of this quarter's pipeline</span></div>
@@ -1197,7 +1209,7 @@
           </div>
         </div>
       </div>
-      <div class="view" data-view-panel="pipeline:renewals" hidden>
+      <div class="view" id="pipeline-renewals" data-view-panel="pipeline:renewals" hidden>
         <div class="pane" id="pipe-renewals">
           <div class="pane-head">
             <div class="tools" role="group" aria-label="Renewal risk">
@@ -1236,7 +1248,7 @@
           <div class="pane-foot"><p class="pane-note">The 300 largest open renewals closing this or next quarter (pick the quarter above), by renewing contract ARR. Risk rating is read from "Renewal Risk Rating" in Next step. Net change is the incremental ARR on the renewal.</p></div>
         </div>
       </div>
-      <div class="view" data-view-panel="pipeline:deals" hidden>
+      <div class="view" id="pipeline-deals" data-view-panel="pipeline:deals" hidden>
         <div class="pane" id="pipe-deals">
           <div class="pane-head">
             <div class="tools" role="group" aria-label="Risk">
@@ -1305,7 +1317,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="created:bdrs" aria-selected="false">BDRs</button>
       </div>
 
-      <div class="view" data-view-panel="created:trend">
+      <div class="view" id="created-trend" data-view-panel="created:trend">
         <div class="legend"><span><i class="os-sw" data-color="0"></i>New Business</span><span><i class="os-sw" data-color="1"></i>Upsell</span><span><i class="os-sw" data-color="3"></i>Renewal (manual)</span></div>
         <div class="grid2">
           <div class="pane" id="cr-weekly">
@@ -1325,7 +1337,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="created:sources" hidden>
+      <div class="view" id="created-sources" data-view-panel="created:sources" hidden>
         <div class="pane" id="cr-source">
           <div class="pane-head"><div><h2 class="pane-title">By source</h2><p class="pane-note">BDR-sourced: an originating BDR is set or a BDR created it. Expansion: upsells. Inbound: lead source Inbound. Rep-sourced: everything else. All EMEA.</p></div><button class="ibtn" type="button" data-copy-table="cr-mix-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
@@ -1348,7 +1360,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="created:reps" hidden>
+      <div class="view" id="created-reps" data-view-panel="created:reps" hidden>
         <div class="pane" id="cr-leaders">
           <div class="pane-head">
             <div><h2 class="pane-title">Rep leaderboard, this quarter</h2><p class="pane-note">Created opps by owner. BDR-sourced is how many came from a BDR. Follows the team filter.</p></div>
@@ -1377,7 +1389,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="created:bdrs" hidden>
+      <div class="view" id="created-bdrs" data-view-panel="created:bdrs" hidden>
         <div class="pane" id="cr-bdrs">
           <div class="pane-head"><div><h2 class="pane-title">BDR leaderboard <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">Opps sourced by EMEA BDRs this quarter and last, whoever owns them (including UK&amp;I and other regions).</p></div><button class="ibtn" type="button" data-copy-table="cr-bdr-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
@@ -1423,7 +1435,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="hiring:months" aria-selected="false">By month</button>
       </div>
 
-      <div class="view" data-view-panel="hiring:joiners">
+      <div class="view" id="hiring-joiners" data-view-panel="hiring:joiners">
         <div class="pane" id="hire-joiners">
           <div class="pane-head">
             <div><h2 class="pane-title">Joined in the last 90 days</h2><p class="pane-note">Matched to Salesforce by work email, then by name. Routing status uses the matched Salesforce role: leaders, partnerships and roles without a pool show as not routed, and a selling title without an EMEA sales role is flagged.</p></div>
@@ -1455,7 +1467,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="hiring:ramp" hidden>
+      <div class="view" id="hiring-ramp" data-view-panel="hiring:ramp" hidden>
         <div class="pane" id="hire-ramp">
           <div class="pane-head">
             <div><h2 class="pane-title">Ramp, last 180 days</h2><p class="pane-note">Opportunities each joiner created from their start month (as owner), their first one, open pipeline this quarter, and for BDRs the opps they sourced this quarter and last. Not ramping: 45+ days in a selling role with nothing yet.</p></div>
@@ -1484,7 +1496,7 @@
           </div>
         </div>
       </div>
-      <div class="view" data-view-panel="hiring:teams" hidden>
+      <div class="view" id="hiring-teams" data-view-panel="hiring:teams" hidden>
         <div class="pane" id="hire-teams">
           <div class="pane-head"><div><h2 class="pane-title">Headcount by team <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">HiBob team field, people on headcount today.</p></div><button class="ibtn" type="button" data-copy-table="hire-team-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
@@ -1505,7 +1517,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="hiring:months" hidden>
+      <div class="view" id="hiring-months" data-view-panel="hiring:months" hidden>
         <div class="pane" id="hire-months">
           <div class="pane-head">
             <div><h2 class="pane-title">Joiners by month <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">People still on headcount, by start month, last 12 months.</p></div>
@@ -1538,7 +1550,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="routing:pools" aria-selected="false">Pools</button>
       </div>
 
-      <div class="view" data-view-panel="routing:people">
+      <div class="view" id="routing-people" data-view-panel="routing:people">
         <div class="pane" id="rr-people">
           <div class="pane-head">
             <div class="tools">
@@ -1572,7 +1584,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="routing:pools" hidden>
+      <div class="view" id="routing-pools" data-view-panel="routing:pools" hidden>
         <div class="pane" id="rr-pools">
           <div class="pane-head">
             <div><h2 class="pane-title">Pools</h2><p class="pane-note">Pools with the same name across lead, contact, meeting and opportunity routing are shown once. Spread is the fewest to most assignments an active member got in 90 days. Follows the team or manager filter by member.</p></div>
@@ -1626,7 +1638,7 @@
         <button class="vtab" role="tab" type="button" data-view-tab="books:plan" aria-selected="false">Plan moves</button>
       </div>
 
-      <div class="view" data-view-panel="books:reps">
+      <div class="view" id="books-reps" data-view-panel="books:reps">
         <div class="pane" id="bk-owners">
           <div class="pane-head">
             <div><h2 class="pane-title">Book size per rep</h2><p class="pane-note">Accounts the rep owns. EM book is customers where they are the Engagement Manager. Open pipeline is all open New Business and Upsell, any close date. vs team: active accounts against the team median for AE and SMB reps (Heavy at 2× or more, Light at half or less).</p></div>
@@ -1660,7 +1672,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="books:coverage" hidden>
+      <div class="view" id="books-coverage" data-view-panel="books:coverage" hidden>
         <div class="pane" id="bk-coverage">
           <div class="pane-head"><div><h2 class="pane-title">Territory coverage</h2><p class="pane-note">Active accounts in each EMEA sales region by who owns them. Unassigned is System User or a user with no role. Strategic is the global strategic team.</p></div><button class="ibtn" type="button" data-copy-table="bk-cov-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
@@ -1687,7 +1699,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="books:orphans" hidden>
+      <div class="view" id="books-orphans" data-view-panel="books:orphans" hidden>
         <div class="pane" id="bk-orphans">
           <div class="pane-head">
             <div class="tools">
@@ -1728,7 +1740,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="books:books" hidden>
+      <div class="view" id="books-books" data-view-panel="books:books" hidden>
         <div class="pane" id="bk-books">
           <div class="pane-head"><div><h2 class="pane-title">Account books</h2><p class="pane-note">Books by Territory ID. Split: the main owner holds under 80% of the book's accounts. Follows the team or manager filter by main owner.</p></div>
             <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="bk-book-search" data-search="bk-book-table" placeholder="Search books or owners" aria-label="Search account books"></label>
@@ -1755,7 +1767,7 @@
         </div>
       </div>
 
-      <div class="view" data-view-panel="books:routing" hidden>
+      <div class="view" id="books-routing" data-view-panel="books:routing" hidden>
         <div class="pane" id="bk-pool-book">
           <div class="pane-head"><div><h2 class="pane-title">Routing vs books</h2><p class="pane-note">AE and SMB reps whose book and routing don't line up: a book but no pool, pools but no book, or neither.</p></div><button class="ibtn" type="button" data-copy-table="bk-pool-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
@@ -1777,7 +1789,7 @@
           </div>
         </div>
       </div>
-      <div class="view" data-view-panel="books:plan" hidden>
+      <div class="view" id="books-plan" data-view-panel="books:plan" hidden>
         <div class="pane" id="bk-plan">
           <div class="pane-head"><div><h2 class="pane-title">Suggested moves</h2><p class="pane-note">A starting point for territory planning. Within each AE team and SMB, active accounts to move from Heavy books (2× the team median or more) to Light ones (half or less), so both reps end up nearer the median. Pick the accounts themselves in Salesforce.</p></div><button class="ibtn" type="button" data-copy-table="bk-plan-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
@@ -1795,7 +1807,7 @@
               <tbody data-draw="bk-plan-table"></tbody>
             </table>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="bk-plan-table"></span>
-              <p class="os-empty" data-msg-for="bk-plan-table" data-msg="empty" hidden>Every book in this team is within half to twice the team median, so there is nothing to move.</p>
+              <p class="os-empty" data-msg-for="bk-plan-table" data-msg="empty" hidden>No book in this team is at twice the team median or more, so there is nothing to move.</p>
               <p class="os-empty" data-msg-for="bk-plan-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
               <p class="os-empty" data-msg-for="bk-plan-table" data-msg="limit" hidden>Showing the first 400.</p>
             </div>
@@ -1930,6 +1942,8 @@
     </div>
     <p class="toast" data-toast="ok" role="status" hidden>Copied to clipboard</p>
     <p class="toast" data-toast="fail" role="status" hidden>Couldn't copy. Select the text and copy it instead.</p>
+    <p class="toast" data-toast="asked" role="status" hidden>Handed to Claude. Check your conversation.</p>
+    <p class="toast" data-toast="askfail" role="status" hidden>Couldn't reach Claude. Open the chat beside the dashboard and try again.</p>
   </aside>
   </div>
 </div>

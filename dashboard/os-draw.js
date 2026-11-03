@@ -722,11 +722,12 @@ OS.defList('oo-list', ['oo_upcoming'], () => dash.data('oo_upcoming').data || []
     if (r.email === cur) b.setAttribute('aria-current', 'true');
     const txt = OS.el('span', 'oo-txt');
     txt.append(OS.el('span', 'oo-name', r.name), OS.el('span', 'oo-title', r.title));
+    const chips = OS.el('span', 'oo-chips');
+    if (r.recurring) chips.append(OS.el('span', 'chip', 'Recurring'));
+    if (!r.sfName) chips.append(OS.el('span', 'chip', 'Not in Salesforce'));
+    if (chips.children.length) txt.append(chips);
     b.append(OS.el('span', 'oo-time', timeTxt || ''), txt);
-    const meta = OS.el('div', 'itm-meta');
-    if (r.recurring) meta.append(OS.el('span', 'chip', 'Recurring'));
-    if (!r.sfName) meta.append(OS.el('span', 'chip', 'Not in Salesforce'));
-    li.append(b, meta);
+    li.append(b);
     out.push(li);
   }
   return out;
@@ -822,7 +823,7 @@ dash.draw('oo-root', (sel) => {
   const rows = s === 'ok' ? (dash.data('team_tree').data || []).filter((r) => r.isLeader) : [];
   const me = ooRows('sf_me')[0];
   const list = rows.slice().sort((a, b) => (me && b.name === me.name) - (me && a.name === me.name) || b.emeaPeople - a.emeaPeople || a.name.localeCompare(b.name));
-  sel.replaceChildren(...(s === 'ok' ? list.map((r) => new Option(r.name + ' (' + r.emeaPeople + ')', r.name)) : [new Option(s === 'loading' ? 'Loading leaders…' : 'Leaders unavailable', '')]));
+  sel.replaceChildren(...(s === 'ok' ? list.map((r) => new Option(r.name + (r.active === false ? ' (inactive)' : '') + ' (' + r.emeaPeople + ')', r.name)) : [new Option(s === 'loading' ? 'Loading leaders…' : 'Leaders unavailable', '')]));
   sel.value = ooRoot();
   sel.disabled = s !== 'ok';
 });

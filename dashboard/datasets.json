@@ -371,13 +371,13 @@
  },
  "top_deals": {
   "title": "Largest open deals",
-  "description": "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and its date, and last activity.",
+  "description": "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and its date, last activity, days in the current stage and age.",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Id oppId, Name opp, Account.Name account, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND RecordType.Name != 'Renewal' AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Id, Name, Account.Name, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate, DAY_ONLY(CreatedDate) ORDER BY SUM(Finance_ARR_USD__c) DESC NULLS LAST LIMIT 300"
+    "q": "SELECT Id oppId, Name opp, Account.Name account, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, MAX(LastStageChangeInDays) daysInStage, MAX(AgeInDays) ageDays, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND RecordType.Name != 'Renewal' AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Id, Name, Account.Name, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate, DAY_ONLY(CreatedDate) ORDER BY SUM(Finance_ARR_USD__c) DESC NULLS LAST LIMIT 300"
    }
   }
  },
@@ -401,7 +401,7 @@
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Id oppId, Name opp, Account.Name account, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, SUM(Finance_ARR_USD__c) arrUsd, SUM(Order_Form_ARR_USD__c) contractArrUsd FROM Opportunity WHERE IsClosed = false AND OwnerId = {{dealOwnerId}} GROUP BY Id, Name, Account.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate ORDER BY CloseDate ASC LIMIT 200"
+    "q": "SELECT Id oppId, Name opp, Account.Name account, StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, MAX(LastStageChangeInDays) daysInStage, SUM(Finance_ARR_USD__c) arrUsd, SUM(Order_Form_ARR_USD__c) contractArrUsd FROM Opportunity WHERE IsClosed = false AND OwnerId = {{dealOwnerId}} GROUP BY Id, Name, Account.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate ORDER BY CloseDate ASC LIMIT 200"
    },
    "rules": {
     "dealOwnerId": {
@@ -437,6 +437,102 @@
      "type": "string",
      "pattern": "^20[0-9]{2}-[01][0-9]-[0-3][0-9]$"
     }
+   }
+  }
+ },
+ "mv_outcomes": {
+  "title": "Won and lost, last 7 days",
+  "description": "EMEA New Business and Upsell deals closed won or lost in the last 7 days (by the date actually closed), per owner, in incremental ARR (USD).",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, IsWon won, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND IsClosed = true AND Actual_Close_Date__c = LAST_N_DAYS:7 GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, IsWon LIMIT 2000"
+   }
+  }
+ },
+ "mv_close": {
+  "title": "Created and re-dated, last 7 days",
+  "description": "EMEA New Business and Upsell opportunity history in the last 7 days, per owner and from/to fiscal quarter: opportunities created (no previous close date) and open deals whose close date moved out of or into this quarter. ARR is the deal's current incremental ARR (USD).",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Opportunity.Owner.Name owner, Opportunity.Owner.UserRole.Name role, Opportunity.Owner.Manager.Name manager, FISCAL_YEAR(PrevCloseDate) fromFY, FISCAL_QUARTER(PrevCloseDate) fromFQ, FISCAL_YEAR(CloseDate) toFY, FISCAL_QUARTER(CloseDate) toFQ, COUNT(Id) n, COUNT_DISTINCT(OpportunityId) opps, SUM(Opportunity.Finance_ARR_USD__c) arr FROM OpportunityHistory WHERE CreatedDate = LAST_N_DAYS:7 AND Opportunity.RecordType.Name IN ('New Business','Upsell') AND Opportunity.Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND (PrevCloseDate = null OR (Opportunity.IsClosed = false AND Opportunity.CreatedDate < LAST_N_DAYS:7 AND ((PrevCloseDate = THIS_FISCAL_QUARTER AND CloseDate > THIS_FISCAL_QUARTER) OR ((PrevCloseDate > THIS_FISCAL_QUARTER OR PrevCloseDate < THIS_FISCAL_QUARTER) AND CloseDate = THIS_FISCAL_QUARTER)))) GROUP BY Opportunity.Owner.Name, Opportunity.Owner.UserRole.Name, Opportunity.Owner.Manager.Name, FISCAL_YEAR(PrevCloseDate), FISCAL_QUARTER(PrevCloseDate), FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"
+   }
+  }
+ },
+ "mv_fields": {
+  "title": "Stage and Commit changes, last 7 days",
+  "description": "Stage and rep forecast category changes in the last 7 days on open EMEA New Business and Upsell deals created before the window, one row per change, with the deal's owner and current incremental ARR (USD).",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT OpportunityId, Opportunity.OwnerId, Opportunity.Finance_ARR_USD__c, Field, OldValue, NewValue, CreatedDate FROM OpportunityFieldHistory WHERE CreatedDate = LAST_N_DAYS:7 AND Field IN ('StageName','Rep_Forecast_Category__c') AND Opportunity.IsClosed = false AND Opportunity.CreatedDate < LAST_N_DAYS:7 AND Opportunity.RecordType.Name IN ('New Business','Upsell') AND Opportunity.Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') ORDER BY OpportunityId, CreatedDate, Id LIMIT 2000"
+   }
+  }
+ },
+ "age_stuck": {
+  "title": "Stuck deals by rep",
+  "description": "Open EMEA New Business and Upsell deals closing this or next quarter that have sat in their stage longer than about twice the usual time (stage 0: 35 days, 1: 55, 2: 60, 3: 40, 4: 30, 5: 45, 6: 40), per owner and stage.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, StageName stage, COUNT(Id) stuckOpps, SUM(Finance_ARR_USD__c) stuckArrUsd, AVG(LastStageChangeInDays) avgDaysInStage, MAX(LastStageChangeInDays) maxDaysInStage FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND RecordType.Name IN ('New Business','Upsell') AND ((StageName = '0 - Qualification' AND LastStageChangeInDays > 35) OR (StageName = '1 - Solution agreement' AND LastStageChangeInDays > 55) OR (StageName = '2 - Scope agreement' AND LastStageChangeInDays > 60) OR (StageName = '3 - Pilot Validation' AND LastStageChangeInDays > 40) OR (StageName = '4 - Commercial agreement' AND LastStageChangeInDays > 30) OR (StageName = '5 - Vendor assessment' AND LastStageChangeInDays > 45) OR (StageName = '6 - Opt-out' AND LastStageChangeInDays > 40)) AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName LIMIT 2000"
+   }
+  }
+ },
+ "cycle_team": {
+  "title": "Sales cycle by team",
+  "description": "EMEA New Business and Upsell deals won in the last 4 completed quarters per owner role, manager and type, with the average and longest days from creation to close.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name rt, COUNT(Id) wonOpps, AVG(Days_from_Created_to_Close_Date__c) avgCycleDays, MAX(Days_from_Created_to_Close_Date__c) maxCycleDays, SUM(Finance_ARR_USD__c) wonArrUsd FROM Opportunity WHERE IsWon = true AND RecordType.Name IN ('New Business','Upsell') AND Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"
+   }
+  }
+ },
+ "coverage_base": {
+  "title": "Bookings history and open pipeline",
+  "description": "EMEA New Business and Upsell won and lost in the last 4 completed quarters and this one (admin merges left out of lost), and open pipeline this and next quarter, per owner role, manager and fiscal quarter, in incremental ARR (USD).",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, IsClosed closed, IsWon won, FISCAL_YEAR(Actual_Close_Date__c) fy, FISCAL_QUARTER(Actual_Close_Date__c) fq, SUM(Finance_ARR_USD__c) arr, COUNT(Id) n FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND (IsClosed = false OR IsWon = true OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup')) AND (Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER OR Actual_Close_Date__c = NEXT_FISCAL_QUARTER) GROUP BY Owner.UserRole.Name, Owner.Manager.Name, IsClosed, IsWon, FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c) LIMIT 2000"
+   }
+  }
+ },
+ "bk_stale": {
+  "title": "Untouched active accounts",
+  "description": "Active accounts (customer, pipeline, engaging) of EMEA owners with no logged activity in 90 days or ever, per owner and status, with how many were ever touched and how many have an Engagement Manager.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Account_Status__c status, COUNT(Id) accounts, COUNT(LastActivityDate) everTouched, COUNT(CSM__c) withEm, SUM(ARR_USD__c) arrUsd FROM Account WHERE Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND Account_Status__c IN ('Customer','Pipeline','Engaging') AND (LastActivityDate < LAST_N_DAYS:90 OR LastActivityDate = null) GROUP BY Owner.Name, Account_Status__c LIMIT 2000"
+   }
+  }
+ },
+ "bk_em_cover": {
+  "title": "Engagement Manager coverage",
+  "description": "Customers of EMEA owners grouped by their Engagement Manager's role and whether that user is active (blank when there is none), with customer ARR (USD).",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, CSM__r.UserRole.Name emRole, CSM__r.IsActive emActive, COUNT(Id) customers, COUNT(CSM__c) withEm, SUM(ARR_USD__c) arrUsd FROM Account WHERE Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND Account_Status__c = 'Customer' GROUP BY Owner.Name, CSM__r.UserRole.Name, CSM__r.IsActive LIMIT 2000"
    }
   }
  },

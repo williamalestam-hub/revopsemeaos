@@ -214,10 +214,11 @@ ds("pipe_nocontact", "Deals with no contact role",
 
 # ---------- Deals (record level, for inspection) ----------
 ds("top_deals", "Largest open deals",
-   "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and its date, and last activity.",
+   "The 300 largest open EMEA New Business and Upsell opportunities closing this or next quarter, with owner, stage, close date, forecast category, next step and its date, last activity, days in the current stage and age.",
    SF(f"""SELECT Id oppId, Name opp, Account.Name account, Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager,
    StageName stage, RecordType.Name rt, CloseDate closeDate, Rep_Forecast_Category__c forecast, NextStep nextStep,
-   Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity
+   Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, DAY_ONLY(CreatedDate) createdDate, MAX(LastStageChangeInDays) daysInStage,
+   MAX(AgeInDays) ageDays, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity
    WHERE {OPEN_WINDOW} AND RecordType.Name != 'Renewal' AND {OWNER}
    GROUP BY Id, Name, Account.Name, Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName, RecordType.Name, CloseDate,
    Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate, DAY_ONLY(CreatedDate)
@@ -233,8 +234,8 @@ ds("top_renewals", "Largest open renewals",
 D["deals"] = {"title": "Open deals of one person",
   "description": "Every open opportunity (any type and close date, up to 200) owned by the person open in the person panel.",
   "source": {"kind": "query", **SF("""SELECT Id oppId, Name opp, Account.Name account, StageName stage, RecordType.Name rt, CloseDate closeDate,
-   Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, SUM(Finance_ARR_USD__c) arrUsd,
-   SUM(Order_Form_ARR_USD__c) contractArrUsd FROM Opportunity WHERE IsClosed = false AND OwnerId = {{dealOwnerId}}
+   Rep_Forecast_Category__c forecast, NextStep nextStep, Next_Steps_Date__c nextStepDate, LastActivityDate lastActivity, MAX(LastStageChangeInDays) daysInStage,
+   SUM(Finance_ARR_USD__c) arrUsd, SUM(Order_Form_ARR_USD__c) contractArrUsd FROM Opportunity WHERE IsClosed = false AND OwnerId = {{dealOwnerId}}
    GROUP BY Id, Name, Account.Name, StageName, RecordType.Name, CloseDate, Rep_Forecast_Category__c, NextStep, Next_Steps_Date__c, LastActivityDate
    ORDER BY CloseDate ASC LIMIT 200"""),
    "rules": {"dealOwnerId": {"type": "string", "pattern": "^005[A-Za-z0-9]{12}([A-Za-z0-9]{3})?$"}}}}
@@ -249,6 +250,65 @@ D["gr_notes"] = {"title": "Granola meeting notes",
              "max_participants": 3, "limit": 200},
     "rules": {"gr_since": {"type": "string", "pattern": DATE}, "gr_until": {"type": "string", "pattern": DATE}}}}
 
+
+# ---------- Movement, aging, coverage, engagement ----------
+NB_UP = "RecordType.Name IN ('New Business','Upsell')"
+# days in stage past which an open deal counts as stuck: about 2x the open-deal median per stage, rounded to 5, at least 30
+STUCK = ("((StageName = '0 - Qualification' AND LastStageChangeInDays > 35) OR (StageName = '1 - Solution agreement' AND LastStageChangeInDays > 55)"
+         " OR (StageName = '2 - Scope agreement' AND LastStageChangeInDays > 60) OR (StageName = '3 - Pilot Validation' AND LastStageChangeInDays > 40)"
+         " OR (StageName = '4 - Commercial agreement' AND LastStageChangeInDays > 30) OR (StageName = '5 - Vendor assessment' AND LastStageChangeInDays > 45)"
+         " OR (StageName = '6 - Opt-out' AND LastStageChangeInDays > 40))")
+ds("mv_outcomes", "Won and lost, last 7 days",
+   "EMEA New Business and Upsell deals closed won or lost in the last 7 days (by the date actually closed), per owner, in incremental ARR (USD).",
+   SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, IsWon won, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr
+   FROM Opportunity WHERE {NB_UP} AND {OWNER} AND IsClosed = true AND Actual_Close_Date__c = LAST_N_DAYS:7
+   GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, IsWon LIMIT 2000"""))
+ds("mv_close", "Created and re-dated, last 7 days",
+   "EMEA New Business and Upsell opportunity history in the last 7 days, per owner and from/to fiscal quarter: opportunities created (no previous close date) and open deals whose close date moved out of or into this quarter. ARR is the deal's current incremental ARR (USD).",
+   SF(f"""SELECT Opportunity.Owner.Name owner, Opportunity.Owner.UserRole.Name role, Opportunity.Owner.Manager.Name manager,
+   FISCAL_YEAR(PrevCloseDate) fromFY, FISCAL_QUARTER(PrevCloseDate) fromFQ, FISCAL_YEAR(CloseDate) toFY, FISCAL_QUARTER(CloseDate) toFQ,
+   COUNT(Id) n, COUNT_DISTINCT(OpportunityId) opps, SUM(Opportunity.Finance_ARR_USD__c) arr FROM OpportunityHistory
+   WHERE CreatedDate = LAST_N_DAYS:7 AND Opportunity.{NB_UP} AND Opportunity.{OWNER}
+   AND (PrevCloseDate = null OR (Opportunity.IsClosed = false AND Opportunity.CreatedDate < LAST_N_DAYS:7
+   AND ((PrevCloseDate = THIS_FISCAL_QUARTER AND CloseDate > THIS_FISCAL_QUARTER)
+   OR ((PrevCloseDate > THIS_FISCAL_QUARTER OR PrevCloseDate < THIS_FISCAL_QUARTER) AND CloseDate = THIS_FISCAL_QUARTER))))
+   GROUP BY Opportunity.Owner.Name, Opportunity.Owner.UserRole.Name, Opportunity.Owner.Manager.Name, FISCAL_YEAR(PrevCloseDate),
+   FISCAL_QUARTER(PrevCloseDate), FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"""))
+ds("mv_fields", "Stage and Commit changes, last 7 days",
+   "Stage and rep forecast category changes in the last 7 days on open EMEA New Business and Upsell deals created before the window, one row per change, with the deal's owner and current incremental ARR (USD).",
+   SF(f"""SELECT OpportunityId, Opportunity.OwnerId, Opportunity.Finance_ARR_USD__c, Field, OldValue, NewValue, CreatedDate
+   FROM OpportunityFieldHistory WHERE CreatedDate = LAST_N_DAYS:7 AND Field IN ('StageName','Rep_Forecast_Category__c')
+   AND Opportunity.IsClosed = false AND Opportunity.CreatedDate < LAST_N_DAYS:7 AND Opportunity.{NB_UP} AND Opportunity.{OWNER}
+   ORDER BY OpportunityId, CreatedDate, Id LIMIT 2000"""))
+ds("age_stuck", "Stuck deals by rep",
+   "Open EMEA New Business and Upsell deals closing this or next quarter that have sat in their stage longer than about twice the usual time (stage 0: 35 days, 1: 55, 2: 60, 3: 40, 4: 30, 5: 45, 6: 40), per owner and stage.",
+   SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, StageName stage, COUNT(Id) stuckOpps,
+   SUM(Finance_ARR_USD__c) stuckArrUsd, AVG(LastStageChangeInDays) avgDaysInStage, MAX(LastStageChangeInDays) maxDaysInStage FROM Opportunity
+   WHERE {OPEN_WINDOW} AND {NB_UP} AND {STUCK} AND {OWNER}
+   GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, StageName LIMIT 2000"""))
+ds("cycle_team", "Sales cycle by team",
+   "EMEA New Business and Upsell deals won in the last 4 completed quarters per owner role, manager and type, with the average and longest days from creation to close.",
+   SF(f"""SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name rt, COUNT(Id) wonOpps, AVG(Days_from_Created_to_Close_Date__c) avgCycleDays,
+   MAX(Days_from_Created_to_Close_Date__c) maxCycleDays, SUM(Finance_ARR_USD__c) wonArrUsd FROM Opportunity
+   WHERE IsWon = true AND {NB_UP} AND Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 AND {OWNER}
+   GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"""))
+ds("coverage_base", "Bookings history and open pipeline",
+   "EMEA New Business and Upsell won and lost in the last 4 completed quarters and this one (admin merges left out of lost), and open pipeline this and next quarter, per owner role, manager and fiscal quarter, in incremental ARR (USD).",
+   SF(f"""SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, IsClosed closed, IsWon won, FISCAL_YEAR(Actual_Close_Date__c) fy,
+   FISCAL_QUARTER(Actual_Close_Date__c) fq, SUM(Finance_ARR_USD__c) arr, COUNT(Id) n FROM Opportunity
+   WHERE {NB_UP} AND {OWNER} AND (IsClosed = false OR IsWon = true OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup'))
+   AND (Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER OR Actual_Close_Date__c = NEXT_FISCAL_QUARTER)
+   GROUP BY Owner.UserRole.Name, Owner.Manager.Name, IsClosed, IsWon, FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c) LIMIT 2000"""))
+ds("bk_stale", "Untouched active accounts",
+   "Active accounts (customer, pipeline, engaging) of EMEA owners with no logged activity in 90 days or ever, per owner and status, with how many were ever touched and how many have an Engagement Manager.",
+   SF(f"""SELECT Owner.Name owner, Account_Status__c status, COUNT(Id) accounts, COUNT(LastActivityDate) everTouched, COUNT(CSM__c) withEm,
+   SUM(ARR_USD__c) arrUsd FROM Account WHERE {OWNER} AND Account_Status__c IN ('Customer','Pipeline','Engaging')
+   AND (LastActivityDate < LAST_N_DAYS:90 OR LastActivityDate = null) GROUP BY Owner.Name, Account_Status__c LIMIT 2000"""))
+ds("bk_em_cover", "Engagement Manager coverage",
+   "Customers of EMEA owners grouped by their Engagement Manager's role and whether that user is active (blank when there is none), with customer ARR (USD).",
+   SF(f"""SELECT Owner.Name owner, CSM__r.UserRole.Name emRole, CSM__r.IsActive emActive, COUNT(Id) customers, COUNT(CSM__c) withEm,
+   SUM(ARR_USD__c) arrUsd FROM Account WHERE {OWNER} AND Account_Status__c = 'Customer'
+   GROUP BY Owner.Name, CSM__r.UserRole.Name, CSM__r.IsActive LIMIT 2000"""))
 
 # ---------- 1:1s ----------
 CAL_DAY = r"^\d{4}-\d{2}-\d{2}T00:00:00$"

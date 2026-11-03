@@ -57,7 +57,7 @@ dash.loader('hb_people', {
 
 // Google Calendar: list_events answers a page of events with nextPageToken; up to four pages are read.
 dash.loader('cal_events', {
-  description: 'Calendar events as rows (following next pages, up to four): start, end, title, your response, whether it repeats, and the invited people (meeting rooms left out) as a count and their emails',
+  description: 'Calendar events as rows (following next pages, up to four): start, end, title, whether you organise it, whether it repeats, the calendar owner, and every invitee unwrapped as email, self, room, response, optional and display name',
   fn: async ({ answer, call, args }) => {
     const parse = (a) => {
       if (Array.isArray(a) && a.length && a[0] && a[0].type === 'text') a = a.map((c) => c.text).join('');
@@ -67,17 +67,13 @@ dash.loader('cal_events', {
       if (!a || !Array.isArray(a.events)) throw new Error(String((a && (a.message || (a.error && (a.error.message || a.error)))) || 'Google Calendar answer had no events list'));
       return a;
     };
-    const columns = ['id', 'start', 'end', 'allDay', 'title', 'status', 'myResponse', 'organizerSelf', 'recurring', 'link', 'selfEmail', 'people', 'emails', 'names'];
+    const columns = ['id', 'start', 'end', 'allDay', 'title', 'status', 'organizerSelf', 'recurring', 'link', 'calendar', 'attendees'];
     const rows = [];
     let page = parse(answer);
     let cut = false;
     for (let n = 0; ; n++) {
       for (const e of page.events) {
         const att = Array.isArray(e.attendees) ? e.attendees : [];
-        const humans = att.filter((x) => x && !x.resource && x.email);
-        const self = humans.find((x) => x.self) || null;
-        const others = humans.filter((x) => !x.self);
-        const selfEmail = (self && self.email) || (e.organizer && e.organizer.self && e.organizer.email) || (e.creator && e.creator.self && e.creator.email) || page.summary || '';
         rows.push({
           id: String(e.id || ''),
           start: (e.start && (e.start.dateTime || e.start.date)) || null,
@@ -85,19 +81,17 @@ dash.loader('cal_events', {
           allDay: !!(e.start && e.start.date && !e.start.dateTime),
           title: e.summary || '',
           status: e.status || null,
-          myResponse: self ? self.responseStatus || null : null,
           organizerSelf: !!(e.organizer && e.organizer.self),
           recurring: !!e.recurringEventId,
           link: e.htmlLink || null,
-          selfEmail: String(selfEmail).toLowerCase() || null,
-          people: humans.length,
-          emails: others.map((x) => String(x.email).toLowerCase()).join(', '),
-          names: others.map((x) => x.displayName || '').join(' | '),
+          calendar: String(page.summary || '').toLowerCase() || null,
+          // each invitee as email|self|room|response|optional|name, separated by ';'
+          attendees: att.filter((x) => x && x.email).map((x) => [String(x.email).toLowerCase(), x.self ? 'self' : '', x.resource ? 'room' : '', x.responseStatus || '', x.optionalAttendee ? 'optional' : '', String(x.displayName || '').replace(/[|;]/g, ' ')].join('|')).join(';'),
         });
       }
       if (!page.nextPageToken) break;
       if (n >= 3) { cut = true; break; }
-      page = parse(await call('list_events', { ...args, pageToken: page.nextPageToken }));
+      try { page = parse(await call('list_events', { ...args, pageToken: page.nextPageToken })); } catch (e) { cut = true; break; }
     }
     return { columns, rows, cut };
   },
@@ -164,7 +158,8 @@ dash.loader('gr_notes', {
         const kp = block.match(/<known_participants(\s[^>]*)?>([\s\S]*?)<\/known_participants>/);
         const total = kp && kp[1] ? attr(kp[1], 'total') : null;
         const emails = kp ? [...kp[2].matchAll(/\(([^()\s]+@[^()\s]+)\)/g)].map((m) => dec(m[1]).toLowerCase()) : [];
-        meetings.set(id, { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: attr(head, 'captured_by_me') === 'true', participants: total != null ? +total : emails.length || null, emails: emails.join(', ') });
+        const listed = kp ? kp[2].split(/,(?![^()]*\))/).map((t) => t.trim()).filter(Boolean).length : 0;
+        meetings.set(id, { id, meeting: attr(head, 'title'), meetingAt: attr(head, 'meeting_at'), url: attr(head, 'url'), capturedByMe: attr(head, 'captured_by_me') === 'true', participants: total != null ? +total : listed || emails.length || null, emails: emails.join(', ') });
         if (!myName && me) {
           const end = block.indexOf('</meeting>');
           for (const m of block.slice(0, end < 0 ? block.length : end).matchAll(/([^\n<>()]+?)\s*\(note creator\)[^\n]*?\(([^()\s]+@[^()\s]+)\)/g)) {
@@ -642,12 +637,23 @@ OS.links = (() => {
 // Each viewer's ticks live in their own private part of this dashboard's database (data/users/<their id>/os-done),
 // keyed by the meeting and the item's wording. Without a database or an id here, nothing can be ticked.
 OS.done = (() => {
-  const keys = new Map();
-  let ref = null, can = false, ready = false, writing = Promise.resolve();
-  const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 120);
-  const keyOf = (r) => (r && r.meetingId && r.item ? r.meetingId + '|' + norm(r.item) : '');
+  // what the database last said, plus toggles not yet confirmed by a write; ticking waits for the stored list
+  const stored = new Map();
+  const pending = new Map();
+  let ref = null, can = false, ready = false, writing = Promise.resolve(), cur = new Map();
+  const today = () => new Date().toISOString().slice(0, 10);
+  // a stable key that keeps no note text: the meeting, plus a hash of the owner and the item's wording
+  const norm = (t) => String(t || '').toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const hash = (t) => { let h = 2166136261 >>> 0; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); };
+  const keyOf = (r) => (r && r.meetingId && r.item ? r.meetingId + '|' + hash(norm(r.owner || '') + '|' + norm(r.item)) : '');
+  const merged = () => { const m = new Map(stored); for (const [k, on] of pending) { if (on) m.set(k, m.get(k) || today()); else m.delete(k); } return m; };
   const DRAWS = ['act-list', 'home-actions', 'oo-follow', 'kpi-gr', 'nav-badge'];
-  const redraw = () => { DRAWS.forEach((n) => dash.draw(n)); dash.draw('msg'); };
+  const redraw = () => {
+    cur = merged();
+    DRAWS.forEach((n) => dash.draw(n));
+    dash.draw('msg');
+    document.querySelectorAll('[data-gr-done]').forEach((b) => { b.hidden = !(can && ready); });
+  };
   (async () => {
     try {
       const c = window.claude;
@@ -658,30 +664,44 @@ OS.done = (() => {
       ref = db.doc('data/users/' + uid + '/os-done');
       can = true;
       ref.onSnapshot((snap) => {
-        keys.clear();
+        stored.clear();
         const d = snap && snap.exists ? snap.data() : null;
-        for (const e of (d && Array.isArray(d.items) ? d.items : [])) if (e && typeof e.k === 'string') keys.set(e.k, typeof e.at === 'string' ? e.at : '');
-        ready = true;
+        for (const x of (d && Array.isArray(d.items) ? d.items : [])) if (x && typeof x.k === 'string') stored.set(x.k, typeof x.at === 'string' ? x.at : '');
+        if (!snap || !snap.metadata || snap.metadata.fromCache !== true) ready = true;
         redraw();
       }, () => { can = false; redraw(); });
-      redraw();
     } catch (e) { can = false; ref = null; }
   })();
-  const save = () => {
-    const cut = new Date(Date.now() - 200 * 864e5).toISOString().slice(0, 10);
-    const items = [...keys].filter(([, at]) => !at || at >= cut).map(([k, at]) => ({ k, at }));
-    writing = writing.then(() => ref.set({ items })).catch(() => { can = false; redraw(); });
+  // one write at a time; each builds its list when it is sent, from the stored list and every open toggle
+  const write = () => {
+    writing = writing.then(async () => {
+      const sent = new Map(pending);
+      if (!sent.size) return;
+      const cut = new Date(Date.now() - 200 * 864e5).toISOString().slice(0, 10);
+      const items = [...merged()].filter(([, at]) => !at || at >= cut).map(([k, at]) => ({ k, at }));
+      try {
+        await ref.set({ items });
+        for (const [k, on] of sent) {
+          if (on) stored.set(k, stored.get(k) || today()); else stored.delete(k);
+          if (pending.get(k) === on) pending.delete(k);
+        }
+      } catch (e) {
+        // refused (a view-only viewer, say): undo what was not saved and stop offering ticks
+        for (const k of sent.keys()) pending.delete(k);
+        can = false;
+      }
+      redraw();
+    });
   };
   return {
     keyOf,
-    has: (r) => keys.has(keyOf(r)),
-    can: () => can && !!ref,
-    ready: () => ready,
+    has: (r) => cur.has(keyOf(r)),
+    can: () => can && ready && !!ref,
     toggle: (k) => {
-      if (!ref || !can || !k) return;
-      if (keys.has(k)) keys.delete(k); else keys.set(k, new Date().toISOString().slice(0, 10));
-      save();
+      if (!ref || !can || !ready || !k) return;
+      pending.set(k, !cur.has(k));
       redraw();
+      write();
     },
   };
 })();
@@ -918,7 +938,14 @@ OS.oo = (() => {
     if (t.matches('[data-region]')) { dash.setParams({ region: t.dataset.region || 'All', mgr: '' }); return; }
     if (t.matches('[data-mgr]')) { dash.setParams({ mgr: t.dataset.mgr || '' }); scopeOpen(false); return; }
     if (t.matches('[data-scope-reset]')) { dash.setParams({ region: 'All', mgr: '' }); scopeOpen(false); return; }
-    if (t.matches('[data-done-key]')) { OS.done.toggle(t.dataset.doneKey); syncCopyList(); return; }
+    if (t.matches('[data-done-key]')) {
+      const list = t.closest('ul');
+      const i = list ? [...list.querySelectorAll('[data-done-key]')].indexOf(t) : -1;
+      OS.done.toggle(t.dataset.doneKey);
+      if (screen === 'actions') syncCopyList();
+      if (list && i >= 0) requestAnimationFrame(() => { const b = list.querySelectorAll('[data-done-key]'); const nx = b[Math.min(i, b.length - 1)]; if (nx) nx.focus(); });
+      return;
+    }
     if (t.matches('[data-oo-who]')) { dash.setParams({ ooWho: t.dataset.ooWho }); if (screen !== 'oneonone' || view.oneonone !== 'upcoming') go('oneonone', 'upcoming'); return; }
     if (t.matches('[data-prep-oo]')) { const n = dash.params().person; if (n) { dash.setParams({ ooWho: 'n:' + n, person: '' }); go('oneonone', 'upcoming'); } return; }
     if (t.matches('[data-copy-agenda]')) { const text = OS.oo.text(); if (text) copy(text, t); else toast(false, t); return; }
@@ -1038,7 +1065,7 @@ OS.oo = (() => {
     document.querySelectorAll('[data-gr-due]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.grDue)));
     document.querySelectorAll('[data-gr-done]').forEach((b) => { b.setAttribute('aria-pressed', String(!!p.grShowDone)); b.hidden = !OS.done.can(); });
     // 1:1s: which fixed sentences show, only while that screen is open (reading its data loads it)
-    if (screen === 'oneonone') {
+    if (screen === 'oneonone' && view.oneonone === 'upcoming') {
       const who = OS.oo.who();
       const ready = OS.state('oo_upcoming') !== 'loading';
       const booked = who && !who.startsWith('n:') ? OS.oo.nextFor(who) : null;
@@ -1047,7 +1074,7 @@ OS.oo = (() => {
         const k = n.dataset.ooNote;
         n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast));
       });
-      document.querySelectorAll('[data-copy-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:'); });
+      document.querySelectorAll('[data-copy-agenda], [data-ask-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:'); });
     }
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
     document.querySelectorAll('[data-scope-tag]').forEach((n) => { n.hidden = !(p.mgr || (p.region && p.region !== 'All')); });
