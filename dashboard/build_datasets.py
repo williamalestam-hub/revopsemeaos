@@ -439,8 +439,9 @@ CV_STAMPS = ", ".join([f"COUNT(IRO_Stage_{k}_Date_Stamp__c) s{k}" for k in range
 CV_REAL = "(IsWon = true OR Closed_Reason__c = null OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup'))"
 CV_DAYS = ", ".join(f"MAX(Days_in_Stage_{k}__c) d{k}" for k in range(7))
 CV_CLOSE_WINDOW = "(Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER)"
-# the team that closed a deal is SMB: its role at close, or the owner's role today when none was stamped
-CV_NOT_SMB = "(Closed_Owner_Role__c != 'SMB-EMEA' AND (Closed_Owner_Role__c != null OR Owner.UserRole.Name != 'SMB-EMEA'))"
+# the team that closed a deal is SMB: its role at close when that is an EMEA sales role, else the owner's role today
+# (none stamped, or a role at close outside EMEA sales such as another region's or RevOps), as the calcs read it
+CV_NOT_SMB = f"(Closed_Owner_Role__c != 'SMB-EMEA' AND (Closed_Owner_Role__c IN ({ROLES}) OR Owner.UserRole.Name != 'SMB-EMEA'))"
 ds("cv_open", "Open opps by created quarter",
    "Open EMEA New Business and Upsell opportunities of any age, by type, the quarter they were created in (in your Salesforce time zone), owner role and the owner's manager: how many, their incremental ARR (USD), how many carry each stage entry date (stage 0 to 6; a skipped stage is dated too) and how many were marked Closed Won or Closed Lost before and reopened. Counts and sums only.",
    SF(f"""SELECT RecordType.Name rt, FISCAL_YEAR(convertTimezone(CreatedDate)) fy, FISCAL_QUARTER(convertTimezone(CreatedDate)) fq,

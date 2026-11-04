@@ -90,11 +90,13 @@ Salesforce role and changing scope never re-runs a query.
     (your Salesforce time zone) and what has become of them (leaks, cohorts, old deals). Closed in the last 4 quarters:
     New Business closed won or lost in the last 4 completed quarters by Actual Close Date (win rate, where losses
     leave, reasons, sources). Time in stage: wins of the last 90 days (SMB: 30). Close Date is never used for closed deals.
-  - *Team, segment and manager*: closed deals count as above (the team that closed them; a deal since moved to someone in
-    another role also for its manager at close, otherwise today's manager), deals EMEA closed that are owned outside EMEA
-    today included; open deals for the owner today. SMB = SMB-EMEA, Field = everything else. With a manager picked,
-    leaks, cohorts and time in stage cover their direct reports; win rate, losses and sources (queried per team) show the
-    team most of their reports are in, and the note says so (— until it is known, never All EMEA's figures).
+  - *Team, segment and manager*: closed deals count as above (the team that closed them: the owner's role at close when
+    that is an EMEA sales role, else the current owner's, so a role at close such as another region's or RevOps moves no
+    deal; a deal since moved to someone in another role also for its manager at close, otherwise today's manager), deals
+    EMEA closed that are owned outside EMEA today included; open deals for the owner today. SMB = SMB-EMEA, Field =
+    everything else. With a manager picked, leaks, cohorts and time in stage cover their direct reports; win rate, losses
+    and sources (queried per team) show the team most of their reports are in, and the note says so (— until it is
+    known, never All EMEA's figures).
   - *Stage reached*: from the IRO stage entry dates, matched by stage number (the stage-3 rename doesn't matter). Every
     created deal reached stage 0, a later stage implies the earlier ones (a skipped stage is dated too) and a won deal
     passed every stage, so the funnel never widens; it is recorded progress, not stages worked. Stage history isn't read.
@@ -108,9 +110,14 @@ Salesforce role and changing scope never re-runs a query.
     counts only deals that have left the stage, from 20; grey while a quarter or more are still in it.
   - *Peers*: one motion, same created quarters, each quarter's peer rate weighted by the team's own deals: an AE team
     against the other AE teams; a manager or leader with 80%+ of their deals in AE teams or SMB against the rest of that
-    motion. BDR-, Engagement- and Leadership-owned deals are never compared or part of anyone's peers. A leak is a step
+    motion. BDR-, Engagement- and Leadership-owned deals are never compared or part of anyone's peers, so a manager
+    compared within a motion is shown on their deals in it (cohorts, leaks, the tiles, the weekly line and the Monday
+    summary say "AE-team deals: k of n" when they hold other deals too), as their 1:1 agenda is; when those never reach
+    20 in a comparable quarter but all their deals do, all their deals show, not compared. A leak is a step
     5+ points below, beyond twice the normal swing (z ≤ −2), from 20 settled deals, 3+ deals behind (how many more would
-    have moved on at the peers' rate); with many teams, managers and steps a few differences pass by chance.
+    have moved on at the peers' rate); with many teams, managers and steps a few differences pass by chance. A scope
+    with peers but no step with the deals to compare says so ("too few deals have left each stage to compare"), never
+    "None flagged". At All EMEA the step table lists SMB once (the segment and the team are the same deals).
   - *Win rate*: won ÷ (won + lost), New Business by count over the last 4 completed quarters (by ARR beside it; after
     qualification leaves out stage-0 losses). Coverage's win rate is by ARR for New Business and Upsell and Bookings' by
     count for this quarter and last; all three count closed deals for the team that closed them, and the weekly summary
@@ -124,7 +131,9 @@ Salesforce role and changing scope never re-runs a query.
     everywhere; Why deals are lost can leave the quarter out and the win-rate tile's tooltip gives the rate without it.
   - *Sources* (closed in the last 4 quarters, plus open today): as in Created opps › Sources (BDR-sourced, Inbound,
     Rep-sourced), by lead source (retired Inbound Webform and Apollo as Inbound and Outbound), by origin (BDR-originated:
-    an EMEA BDR, as on the BDR leaderboard) and by who created it; win rate by count and ARR, average won deal, won ARR
+    an EMEA BDR, as on the BDR leaderboard) and by who created it (the creator's role today; a deal closed in an EMEA
+    sales role and now owned outside EMEA sales by someone in its creator's role today counts under its role at close:
+    its creator most likely closed it and has changed roles since); win rate by count and ARR, average won deal, won ARR
     per closed deal, average days to win over all wins, open now; SMB and Field columns compare a source within each
     segment only.
   - *Time in stage*: wins of the last 90 days (SMB: 30, so SMB carries about a third of its weight in All EMEA). Same-day
@@ -137,8 +146,12 @@ Salesforce role and changing scope never re-runs a query.
     a data check per team and manager (5 or more) and an agenda point.
   - *Agendas*: leaders only (someone with EMEA sales people below them), except one whose deals are mostly BDR-owned: one
     numbers line and up to 2 talking points (a leaking step, below peers, old deals at stage 0–1, a drop on the quarter
-    before; for the top EMEA leader, SMB against its own quarter before). They join when they load; while they load, or
-    when they couldn't, the copied agenda says so. The 1:1 agendas of RevOps people don't wait for conversion checks.
+    before; for the top EMEA leader, SMB against its own quarter before). A team whose deals in its motion never reach 20
+    in a comparable quarter gets the whole team's share, not compared, and still the old-deals point. They join when
+    they load; while they load, or when they couldn't, the copied agenda says so. The RevOps work of a 1:1 agenda leaves
+    the conversion checks out of its Data checks line, so it neither waits for nor loads them.
+  - *How far to trust*: lost reasons on two lists, the stage-3 label and losses after a win count the last 4 quarters
+    and this one (and say so); the tables beside them cover the 4 completed quarters.
 - **Created**: owner-scoped; renewals auto-created by Flow (`Upsell_Renewal_Created_By__c = 'Flow'`) excluded.
   BDR-sourced counts only `BDR-EMEA` / `DIR-BDR-EMEA` originating BDRs, by the role stamped on the deal or, when
   none was stamped, the BDR's current role.

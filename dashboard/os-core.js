@@ -739,11 +739,12 @@ OS.links = (() => {
 // Salesforce values the pipeline logic depends on (checks_cfg) and conversion (checks_conv, checks_conv_lost, checks_conv_days).
 // Each is its own calc, so one failing leaves the rest.
 OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg', 'checks_conv', 'checks_conv_lost', 'checks_conv_days'];
-OS.checkRows = (sc) => {
-  // sc: { mgr, region } to read another scope than the scope pill's (the 1:1 agendas read all EMEA)
+OS.checkRows = (sc, ids) => {
+  // sc: { mgr, region } to read another scope than the scope pill's (the 1:1 agendas read all EMEA); ids: the check
+  // sources to read, OS.CHECKS unless given (the 1:1 agendas' RevOps work leaves the conversion checks out)
   const p = sc || dash.params();
   const rank = { high: 0, medium: 1, low: 2 };
-  return OS.CHECKS.filter((id) => OS.state(id) === 'ok').flatMap((id) => dash.data(id).data || [])
+  return (ids || OS.CHECKS).filter((id) => OS.state(id) === 'ok').flatMap((id) => dash.data(id).data || [])
     .filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region))
     .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
 };
@@ -1170,6 +1171,8 @@ OS.oo = (() => {
   const rowOf = (id, pick) => (OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
   // the sources the weekly summary reads; Home loads them while it is open, and the copy button waits for them
   const SUMMARY = ['pipe_team', 'pipe_cover', 'conv_cohorts', 'conv_steps', 'conv_close', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi', 'gr_actions'];
+  // the checks a 1:1 agenda's RevOps work counts: all but the conversion ones, so it neither waits for nor loads them
+  const OPS_CHECKS = OS.CHECKS.filter((id) => !/^checks_conv/.test(id));
   const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
   // The weekly summary as lines, each with what it is about. Home's Copy summary reads it for the scope pill; the 1:1
   // agendas of RevOps people (your manager, your reports, RevOps colleagues) read it for all EMEA.
@@ -1217,9 +1220,11 @@ OS.oo = (() => {
           const prev = cvh.prevY2q != null ? `${cvh.prevCohort} ${OS.pct(cvh.prevY2q)}` : '';
           if (scope === 'All') parts.push(`of deals created in ${cvh.y2qCohort}, SMB won ${OS.pct(cvh.smbY2q)} within 2 quarters${cvh.smbPrevY2q != null ? ` (${cvh.prevCohort} ${OS.pct(cvh.smbPrevY2q)})` : ''} and Field ${OS.pct(cvh.fieldY2q)}${cvh.fieldPrevY2q != null ? ` (${cvh.prevCohort} ${OS.pct(cvh.fieldPrevY2q)})` : ''}, ${OS.pct(cvh.smbY2qOpen)} and ${OS.pct(cvh.fieldY2qOpen)} still open at 2 quarters (Field deals take longer: compare each segment with its own earlier quarters)`);
           else if (cvh.trendNote === 'mix') parts.push(`${OS.pct(cvh.y2q)} of deals created in ${cvh.y2qCohort} won within 2 quarters (motions mixed: not compared)`);
-          else parts.push(`${OS.pct(cvh.y2q)} of the team's deals created in ${cvh.y2qCohort} won within 2 quarters${prev || cvh.peerY2q != null ? ` (${[prev, cvh.peerLabel && cvh.peerY2q != null ? `${cvh.peerLabel} ${OS.pct(cvh.peerY2q)}` : ''].filter(Boolean).join('; ')})` : ''}`);
+          else if (cvh.trendNote === 'few') parts.push(`${OS.pct(cvh.y2q)} of deals created in ${cvh.y2qCohort} won within 2 quarters (too few ${cvh.fewWhat} to compare: ${OS.num(cvh.fewN)} of ${OS.num(cvh.y2qN)})`);
+          // a manager compared within one motion: the share of the deals compared, as their 1:1 agenda gives it
+          else parts.push(`${OS.pct(cvh.y2q)} of the team's ${cvh.cmpWhat ? `${cvh.cmpWhat} created in ${cvh.y2qCohort} (${OS.num(cvh.y2qN)} of the ${OS.num(cvh.y2qAllN)} created)` : `deals created in ${cvh.y2qCohort}`} won within 2 quarters${prev || cvh.peerY2q != null ? ` (${[prev, cvh.peerLabel && cvh.peerY2q != null ? `${cvh.peerLabel} ${OS.pct(cvh.peerY2q)}` : ''].filter(Boolean).join('; ')})` : ''}`);
         }
-        if (cvs && cvs.leakBand) parts.push(`leaks most at ${cvs.leakLabel.replace(/^S/, 's')} (${OS.pct(cvs.leakRate)} vs ${OS.pct(cvs.leakExp)}, about ${n(cvs.leakBehind, 'deal', 'deals')} behind)`);
+        if (cvs && cvs.leakBand) parts.push(`leaks most at ${cvs.leakLabel.replace(/^S/, 's')} (${cvs.cmpWhat ? `${cvs.cmpWhat}: ` : ''}${OS.pct(cvs.leakRate)} vs ${OS.pct(cvs.leakExp)}, about ${n(cvs.leakBehind, 'deal', 'deals')} behind)`);
         if (cvh.staleOpen) parts.push(`${n(cvh.staleOpen, 'deal', 'deals')} created 3+ quarters ago still at stage 0–1`);
         const miss = [!mgr && failedSrc('conv_close') ? 'win rate' : '', failedSrc('conv_steps') ? 'leaks' : ''].filter(Boolean).join(' and ');
         if (parts.length || miss) add('conv', `• Conversion: ${parts.join('; ') || 'nothing to compare yet'}${miss ? ` (${miss} not available)` : ''}`);
@@ -1233,9 +1238,10 @@ OS.oo = (() => {
     else add('stuck', na('Stuck in stage', 'risk_kpi'));
     if (rr) add('routing', `• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
     else add('routing', na('Routing', 'rr_kpi'));
-    if (OS.CHECKS.some((id) => OS.state(id) === 'ok')) {
-      const cs = OS.checkRows({ mgr, region: reg });
-      const partial = OS.CHECKS.some((id) => failedSrc(id));
+    const chk = sc && sc.mine === false ? OPS_CHECKS : OS.CHECKS;
+    if (chk.some((id) => OS.state(id) === 'ok')) {
+      const cs = OS.checkRows({ mgr, region: reg }, chk);
+      const partial = chk.some((id) => failedSrc(id));
       add('checks', `• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`);
     } else add('checks', na('Data checks', 'checks'));
     if (lv) {
@@ -1280,7 +1286,7 @@ OS.oo = (() => {
   };
   // what each part of a 1:1 agenda's RevOps sections reads (the summary without your own action items)
   OS.summary = { lines: summaryLines, SOURCES: SUMMARY, NUM: ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi'],
-    OPS: ['risk_kpi', 'rr_kpi', ...OS.CHECKS.filter((id) => !/^checks_conv/.test(id)), 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi'] };
+    OPS: ['risk_kpi', 'rr_kpi', ...OPS_CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi'] };
   const checksChecklist = () => {
     const area = dash.params().checkArea || 'All';
     return OS.checkRows().filter((c) => area === 'All' || c.area === area)

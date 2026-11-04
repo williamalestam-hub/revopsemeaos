@@ -4,10 +4,13 @@
 // every calc that needs them:
 // - Teams by Salesforce role (TEAM). SMB is its own segment, everything else is Field. The motion (CLASS) decides who
 //   is compared with whom: an AE team with the other AE teams, a manager with the rest of their motion (AE teams or
-//   SMB) when 80% or more of their deals are in it; BDR-, Engagement- and Leadership-owned deals with nobody.
-// - A closed deal counts for the team that closed it: the owner's role at close (the current role when it isn't
-//   stamped). One that has since moved to someone in another role also counts for its manager at close (no manager
-//   when that isn't stamped); otherwise for today's manager, as in Bookings and Coverage. Open deals: the owner today.
+//   SMB) when 80% or more of their deals are in it; BDR-, Engagement- and Leadership-owned deals with nobody. A manager
+//   compared within a motion is shown on the deals compared (their deals in that motion), so a rate and its verdict
+//   always describe the same deals; cmpWhat and allN say so when they hold other deals too.
+// - A closed deal counts for the team that closed it: the owner's role at close when that is an EMEA sales role, else
+//   the current owner's (not stamped, or a role at close such as another region's or RevOps). One that has since moved
+//   to someone in another role also counts for its manager at close (no manager when that isn't stamped); otherwise for
+//   today's manager, as in Bookings and Coverage. Open deals: the owner today.
 // - Stages are read by number from the stage entry dates, never by name (stage 3 was renamed on 3 Nov 2026).
 // - Quarters are fiscal quarters (calendar quarters here); "this quarter" is today's UTC date, as in Coverage.
 
@@ -35,7 +38,7 @@ dash.calc('conv_mgr', {
 
 dash.calc('conv_cohorts', {
   title: 'Conversion by cohort',
-  description: 'New Business and Upsell opportunities created in each of the last 4 completed quarters and this one (in your Salesforce time zone), admin merges left out, for all EMEA, SMB, Field, each team and each manager (direct reports): how many were created, how many reached each stage (stage entry dates; a skipped stage is dated too, a later stage implies the earlier ones and a win passed every stage), how many are won, lost or still open, and the share won within 2 quarters: won by the end of the quarter after the one they were created in, the same age for every quarter, shown once that following quarter has ended and from 20 created, with the share still open at 2 quarters (Field deals take longer than SMB\'s, so each segment is compared with its own earlier quarters). An AE team is compared with the other AE teams, and a manager with the rest of their motion (AE teams or SMB) when 80% or more of the New Business they hold is in it, in the same quarter (30+ created on each side, 5+ points and twice the normal swing); BDR-, Engagement- and Leadership-owned deals are never compared and never part of anyone\'s peers. Each is also compared with its own quarter before, except All EMEA and managers whose deals mix motions, whose totals move with the mix. A closed deal counts for the team that closed it, also when it is owned outside EMEA today; one since moved to someone in another role counts for its manager at close, otherwise for today\'s manager. Won of those closed so far is context only: wins come faster than losses, so it reads high for young quarters. Also open New Business created 3 or more quarters ago (older ones included) that never reached stage 2. Upsell shows outcomes only (its stages changed during 2026).',
+  description: 'New Business and Upsell opportunities created in each of the last 4 completed quarters and this one (in your Salesforce time zone), admin merges left out, for all EMEA, SMB, Field, each team and each manager (direct reports): how many were created, how many reached each stage (stage entry dates; a skipped stage is dated too, a later stage implies the earlier ones and a win passed every stage), how many are won, lost or still open, and the share won within 2 quarters: won by the end of the quarter after the one they were created in, the same age for every quarter, shown once that following quarter has ended and from 20 created, with the share still open at 2 quarters (Field deals take longer than SMB\'s, so each segment is compared with its own earlier quarters). An AE team is compared with the other AE teams, and a manager with the rest of their motion (AE teams or SMB) when 80% or more of the New Business they hold is in it, in the same quarter (30+ created on each side, 5+ points and twice the normal swing); BDR-, Engagement- and Leadership-owned deals are never compared and never part of anyone\'s peers. Such a manager\'s rows are their deals in that motion, the ones compared (cmpWhat names them when they hold other deals too; allN counts all of them); when those never reach 20 in a comparable quarter but all their deals do, the scope shows all their deals, not compared. Each is also compared with its own quarter before, except All EMEA and managers whose deals mix motions, whose totals move with the mix. A closed deal counts for the team that closed it: its owner\'s role at close when that is an EMEA sales role (also when the deal is owned outside EMEA today), else the current owner\'s; one since moved to someone in another role counts for its manager at close, otherwise for today\'s manager. Won of those closed so far is context only: wins come faster than losses, so it reads high for young quarters. Also open New Business created 3 or more quarters ago (older ones included) that never reached stage 2. Upsell shows outcomes only (its stages changed during 2026).',
   inputs: ['cv_open', 'cv_closed'],
   fn: (cv_open, cv_closed) => {
     const MIN_N = 20;
@@ -50,9 +53,11 @@ dash.calc('conv_cohorts', {
     const MONTHS = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'];
     const qStart = (i) => Date.UTC(Math.floor(i / 4), (i % 4) * 3, 1);
     const dayTxt = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-    // who a closed deal counts for: the team that closed it; its manager at close when it has since moved to another role
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
-    const moved = (r) => !!(r.closedRole && r.closedRole !== r.role);
+    // who a closed deal counts for: the team that closed it (its role at close when that is an EMEA sales role, else the
+    // owner's today); its manager at close when it has since moved to someone in another role, else today's manager
+    const closedBy = (r) => (TEAM[r.closedRole] ? r.closedRole : null);
+    const closeTeam = (r) => TEAM[closedBy(r) || r.role] || 'Other';
+    const moved = (r) => !!(closedBy(r) && closedBy(r) !== r.role);
     const closeMgr = (r) => (moved(r) ? r.closedManager || null : r.manager || '(no manager)');
     // the scopes a row adds to, each once; 'S|AE' (the AE peer pool) and 'M|<manager>#<motion>' are internal
     const keysOf = (team, mgr) => { const ks = ['All', 'S|' + SEG(team), team]; if (CLASS(team) === 'AE') ks.push('S|AE'); if (mgr && mgr !== '(no manager)') ks.push('M|' + mgr, 'M|' + mgr + '#' + CLASS(team)); return [...new Set(ks)]; };
@@ -63,9 +68,10 @@ dash.calc('conv_cohorts', {
     // stage reached from the stage entry dates: every deal reached stage 0, a later stage implies the earlier ones, a win passed every stage
     const env = (r, won) => { const n = +r.n || 0, raw = [0, 1, 2, 3, 4, 5, 6].map((k) => +r['s' + k] || 0), s = new Array(7).fill(n); if (!won) for (let k = 6; k >= 1; k--) s[k] = Math.min(n, Math.max(raw[k], k < 6 ? s[k + 1] : 0)); return { n, raw, s, fix: won ? 0 : s.slice(1).reduce((a, v, i) => a + v - raw[i + 1], 0) }; };
     const cells = new Map(), stale = new Map(), tal = new Map();
+    const fresh = (k, rt, q) => ({ k, rt, q, n: 0, arr: 0, open: 0, openArr: 0, won: 0, wonArr: 0, lost: 0, lostArr: 0, s: [0, 0, 0, 0, 0, 0, 0], y2qWon: 0, y2qLost: 0, y2qWonArr: 0, openWonBefore: 0, openLostBefore: 0, wonAfterLoss: 0, lostAfterWin: 0, backdated: 0, orderFixed: 0, noS0: 0 });
     const cell = (k, rt, q) => {
       const id = k + '|' + rt + '|' + q;
-      if (!cells.has(id)) cells.set(id, { k, rt, q, n: 0, arr: 0, open: 0, openArr: 0, won: 0, wonArr: 0, lost: 0, lostArr: 0, s: [0, 0, 0, 0, 0, 0, 0], y2qWon: 0, y2qLost: 0, y2qWonArr: 0, openWonBefore: 0, openLostBefore: 0, wonAfterLoss: 0, lostAfterWin: 0, backdated: 0, orderFixed: 0, noS0: 0 });
+      if (!cells.has(id)) cells.set(id, fresh(k, rt, q));
       return cells.get(id);
     };
     const add = (r, team, mgr, st, age) => {
@@ -100,10 +106,14 @@ dash.calc('conv_cohorts', {
     const segOf = (k) => (k === 'All' ? null : k.startsWith('S|') ? k.slice(2) : k.startsWith('M|') ? (mot.get(k.slice(2)) ? (mot.get(k.slice(2)).main === 'SMB' ? 'SMB' : 'Field') : null) : SEG(k));
     const get = (k, rt, q) => cells.get(k + '|' + rt + '|' + q) || null;
     const dayOfQ = Math.floor((now.getTime() - qStart(cur)) / 864e5) + 1, daysInQ = Math.round((qStart(cur + 1) - qStart(cur)) / 864e5);
+    const cmpName = (k) => (mot.get(k.slice(2)) || {}).main === 'SMB' ? 'SMB deals' : 'AE-team deals';
     const out = [];
-    for (const c of cells.values()) {
-      if (internal(c.k)) continue;
-      const ageQ = cur - c.q, comparable = ageQ >= 2, nb = c.rt === 'New Business', ok = comparable && c.n >= MIN_N, P = peerOf(c.k);
+    for (const c0 of cells.values()) {
+      if (internal(c0.k)) continue;
+      // a manager compared within one motion shows the deals compared ('M|<manager>#<motion>'): a rate of all their deals
+      // would sit beside a verdict on part of them. allN keeps all their deals; cmpWhat names the part when it is smaller.
+      const P = peerOf(c0.k), own = P ? P[0] : c0.k, c = own === c0.k ? c0 : get(own, c0.rt, c0.q) || fresh(own, c0.rt, c0.q);
+      const ageQ = cur - c.q, comparable = ageQ >= 2, nb = c.rt === 'New Business', ok = comparable && c.n >= MIN_N;
       let peerN = null, peerY2q = null, y2qZ = null, y2qVerdict = null;
       if (P && comparable) {
         const mine = get(P[0], c.rt, c.q), pool = get(P[1], c.rt, c.q);
@@ -111,12 +121,13 @@ dash.calc('conv_cohorts', {
         peerN = pn; peerY2q = pn >= MIN_N ? pw / pn : null;
         if (mine && mine.n > 0 && pn > 0) { y2qZ = z2(mine.y2qWon, mine.n, pw, pn); y2qVerdict = verdict(mine.y2qWon, mine.n, pw, pn); }
       }
-      const mixed = noTrend(c.k);
-      const prev = comparable ? get(c.k, c.rt, c.q - 1) : null;
+      const mixed = noTrend(c0.k);
+      const prev = comparable ? get(own, c.rt, c.q - 1) : null;
       const prevY2q = prev && prev.n >= MIN_N ? prev.y2qWon / prev.n : null;
       const [y2qLo, y2qHi] = ok ? wilson(c.y2qWon, c.n) : [null, null];
       const o = {
-        key: c.k + '|' + c.rt + '|' + c.q, kind: 'cohort', scope: c.k, level: levelOf(c.k), segment: segOf(c.k), peerLabel: P ? P[2] : '', rt: c.rt,
+        key: c0.k + '|' + c.rt + '|' + c.q, kind: 'cohort', scope: c0.k, level: levelOf(c0.k), segment: segOf(c0.k), peerLabel: P ? P[2] : '', rt: c.rt,
+        allN: c0.n, cmpWhat: own !== c0.k && c.n !== c0.n ? cmpName(c0.k) : null,
         cohort: c.q, label: label(c.q), months: MONTHS[c.q % 4], ageQ, comparable, compAfter: dayTxt(qStart(c.q + 2) - 864e5),
         status: c.n < MIN_N ? 'Too few' : comparable ? 'Comparable' : ageQ === 0 ? 'This quarter' : 'So far', isCurrent: ageQ === 0,
         dayOfQ: ageQ === 0 ? dayOfQ : null, daysInQ: ageQ === 0 ? daysInQ : null,
@@ -146,12 +157,21 @@ dash.calc('conv_cohorts', {
         key: id, kind: 'scope', scope, level: levelOf(scope), segment: segOf(scope), peerLabel: P ? P[2] : '', rt,
         y2q: L ? L.y2q : null, y2qWon: L ? L.y2qWon : null, y2qN: L ? L.n : null, y2qLo: L ? L.y2qLo : null, y2qHi: L ? L.y2qHi : null,
         y2qArr: L ? L.y2qArr : null, y2qOpen: L ? L.y2qOpen : null, y2qLost: L ? L.y2qLost : null, y2qCohort: L ? L.label : null,
+        y2qAllN: L ? L.allN : null, cmpWhat: L ? L.cmpWhat : P && P[0] !== scope && m && m.mainShare < 1 ? cmpName(scope) : null,
         peerY2q: L ? L.peerY2q : null, peerN: L ? L.peerN : null, y2qVerdict: L ? L.y2qVerdict : null, prevCohort: L ? L.prevCohort : null,
         prevY2q: L ? L.prevY2q : null, trend: L ? L.trend : null, trendNote: noTrend(scope) ? 'mix' : null,
         staleOpen: rt === 'New Business' ? stale.get(scope) || 0 : null, staleFrom: label(cur - 3),
         curCreated: cc ? cc.n : 0, curWon: cc ? cc.won : 0, curLost: cc ? cc.lost : 0, curOpen: cc ? cc.open : 0,
         mainClass: m ? m.main : null, mainShare: m ? m.mainShare : null, mixed: m ? m.mixed : null,
       };
+      // a manager compared within a motion whose deals in it never reach 20 in a comparable quarter, while all their deals
+      // do: all their deals, not compared (as their 1:1 agenda), with how many were in the motion (fewN)
+      const q0 = !L && P && P[0] !== scope ? [cur - 2, cur - 3, cur - 4].find((q) => (get(scope, rt, q) || { n: 0 }).n >= MIN_N) : undefined;
+      if (q0 != null) {
+        const a = get(scope, rt, q0), [lo, hi] = wilson(a.y2qWon, a.n);
+        Object.assign(o, { y2q: a.y2qWon / a.n, y2qWon: a.y2qWon, y2qN: a.n, y2qLo: lo, y2qHi: hi, y2qArr: a.y2qWonArr / a.n, y2qOpen: (a.n - a.y2qWon - a.y2qLost) / a.n,
+          y2qLost: a.y2qLost, y2qCohort: label(q0), y2qAllN: a.n, cmpWhat: null, trendNote: 'few', fewWhat: cmpName(scope), fewN: (get(P[0], rt, q0) || { n: 0 }).n });
+      }
       if (scope === 'All' && rt === 'New Business' && L) {
         const s = row('S|SMB', rt, L.cohort), f = row('S|Field', rt, L.cohort), sp = row('S|SMB', rt, L.cohort - 1), ap = row('All', rt, L.cohort - 1);
         Object.assign(o, { smbY2q: s ? s.y2q : null, fieldY2q: f ? f.y2q : null, smbArr: s ? s.y2qArr : null, fieldArr: f ? f.y2qArr : null,
@@ -166,7 +186,7 @@ dash.calc('conv_cohorts', {
 
 dash.calc('conv_steps', {
   title: 'Where deals leak',
-  description: 'New Business created in the three most recent quarters whose following quarter has ended, pooled, for all EMEA, SMB, Field, each team and each manager (direct reports): how many reached each stage and what has happened to them since (won, lost, still open), and five steps: stage 0 → 1, 1 → 2, 2 → 3, 3 → 4 and stages 4–6 → won (most moves out of stages 5 and 6 are same-day paperwork, so the three are rated together). A step\'s rate counts only deals that have left the stage (moved on, or lost there), with the range if every deal still in it were lost or moved on; it shows from 20 such deals and is early while more than a quarter of the deals that reached the stage are still in it. An AE team is compared with the other AE teams, and a manager with the rest of their motion (AE teams or SMB) when 80% or more of the New Business they hold is in it, on the same created quarters (each quarter\'s peer rate, weighted by the team\'s own deals): a leak is a step 5 or more points below that, beyond twice the normal swing, with 3 or more deals behind; deals behind is how many more would have moved on at the peers\' rate. All EMEA, SMB, Field, the BDR, Engagement and Leadership teams (other motions, never anyone\'s peers) and managers whose deals mix motions have no peers and show their lowest step. A closed deal counts for the team that closed it; one since moved to someone in another role counts for its manager at close, otherwise for today\'s manager. Also the share won within 2 quarters, pooled, against the same peers.',
+  description: 'New Business created in the three most recent quarters whose following quarter has ended, pooled, for all EMEA, SMB, Field, each team and each manager (direct reports): how many reached each stage and what has happened to them since (won, lost, still open), and five steps: stage 0 → 1, 1 → 2, 2 → 3, 3 → 4 and stages 4–6 → won (most moves out of stages 5 and 6 are same-day paperwork, so the three are rated together). A step\'s rate counts only deals that have left the stage (moved on, or lost there), with the range if every deal still in it were lost or moved on; it shows from 20 such deals and is early while more than a quarter of the deals that reached the stage are still in it. An AE team is compared with the other AE teams, and a manager with the rest of their motion (AE teams or SMB) when 80% or more of the New Business they hold is in it, on the same created quarters (each quarter\'s peer rate, weighted by the team\'s own deals): a leak is a step 5 or more points below that, beyond twice the normal swing, with 3 or more deals behind; deals behind is how many more would have moved on at the peers\' rate. cmpSteps counts the steps that could be compared (a rate, settled, a peer rate): with none, nothing can be flagged. Such a manager is rated on their deals in that motion, the ones compared (cmpWhat names them when they hold other deals too; allCreated counts all of them). All EMEA, SMB, Field, the BDR, Engagement and Leadership teams (other motions, never anyone\'s peers) and managers whose deals mix motions have no peers and show their lowest step. A closed deal counts for the team that closed it (its owner\'s role at close when that is an EMEA sales role, else the current owner\'s); one since moved to someone in another role counts for its manager at close, otherwise for today\'s manager. Also the share won within 2 quarters, pooled, against the same peers.',
   inputs: ['cv_open', 'cv_closed'],
   fn: (cv_open, cv_closed) => {
     const MIN_DEC = 20, SETTLED = 0.25, GAP = 0.05, Z = 2, MIN_BEHIND = 3, MIN_PEER_Q = 10;
@@ -178,8 +198,10 @@ dash.calc('conv_steps', {
     const cur = now.getUTCFullYear() * 4 + Math.floor(now.getUTCMonth() / 3);
     const qi = (fy, fq) => (fy == null || fq == null ? null : +fy * 4 + (+fq - 1));
     const label = (i) => 'Q' + ((i % 4) + 1) + ' ' + Math.floor(i / 4);
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
-    const moved = (r) => !!(r.closedRole && r.closedRole !== r.role);
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closedBy = (r) => (TEAM[r.closedRole] ? r.closedRole : null);
+    const closeTeam = (r) => TEAM[closedBy(r) || r.role] || 'Other';
+    const moved = (r) => !!(closedBy(r) && closedBy(r) !== r.role);
     const closeMgr = (r) => (moved(r) ? r.closedManager || null : r.manager || '(no manager)');
     const keysOf = (team, mgr) => { const ks = ['All', 'S|' + SEG(team), team]; if (CLASS(team) === 'AE') ks.push('S|AE'); if (mgr && mgr !== '(no manager)') ks.push('M|' + mgr, 'M|' + mgr + '#' + CLASS(team)); return [...new Set(ks)]; };
     const internal = (k) => k === 'S|AE' || k.includes('#');
@@ -244,16 +266,20 @@ dash.calc('conv_steps', {
       return d ? { exp: e / d, gap: (m - e) / d, z: v > 0 ? (m - e) / Math.sqrt(v) : 0, behind: e - m } : null;
     };
     const rank = { all: 0, segment: 1, team: 2, manager: 3 };
+    const pooled = (byQ) => [...byQ.values()].reduce((o, c) => addC(o, c, 1), blank());
     const out = [];
     for (const [k, byQ] of cells) {
       if (internal(k)) continue;
       const level = k === 'All' ? 'all' : k.startsWith('S|') ? 'segment' : k.startsWith('M|') ? 'manager' : 'team';
       const m = level === 'manager' ? mot.get(k.slice(2)) || null : null, P = peerOf(k);
-      const T = [...byQ.values()].reduce((o, c) => addC(o, c, 1), blank()), n = created(T);
+      // a manager compared within one motion is rated on the deals compared ('M|<manager>#<motion>'): rates, flags and
+      // deals behind all describe the same deals. allCreated counts all their deals; cmpWhat names the part when smaller.
+      const own = P ? P[0] : k, all = created(pooled(byQ)), T = own === k ? pooled(byQ) : pooled(cells.get(own) || new Map()), n = created(T);
       const o = {
         key: k, level, label: k === 'All' ? 'All EMEA' : level === 'segment' || level === 'manager' ? k.slice(2) : k,
         segment: level === 'all' ? null : level === 'segment' ? k.slice(2) : level === 'team' ? SEG(k) : m ? (m.main === 'SMB' ? 'SMB' : 'Field') : null,
         peerLabel: P ? P[2] : '', poolFrom: label(POOL[0]), poolTo: label(POOL[2]), created: n, won: T.won.n, lost: T.lost.n, open: T.open.n,
+        allCreated: all, cmpWhat: own !== k && n !== all ? (m && m.main === 'SMB' ? 'SMB deals' : 'AE-team deals') : null,
         arr: T.won.arr + T.lost.arr + T.open.arr, wonArr: T.won.arr, y2q: n >= MIN_DEC ? T.y2qWon / n : null, orderFixed: T.orderFixed, noS0: T.noS0,
         mainClass: m ? m.main : null, mainShare: m ? m.mainShare : null, mixed: m ? m.mixed : null,
       };
@@ -271,8 +297,10 @@ dash.calc('conv_steps', {
       const leaks = BANDS.filter(([id]) => o[id + 'Flag'] === 'leak').sort((a, b) => o[b[0] + 'Behind'] - o[a[0] + 'Behind']);
       const L = leaks[0] || null, S = BANDS.find(([id]) => o[id + 'Flag'] === 'strong') || null;
       const low = BANDS.filter(([id]) => o[id + 'Settled'] && o[id + 'Rate'] != null).sort((a, b) => o[a[0] + 'Rate'] - o[b[0] + 'Rate'])[0] || null;
+      // the steps actually compared with the peers (a rate, settled and a peer rate): with none, nothing can be flagged
+      const cmpSteps = BANDS.filter(([id]) => o[id + 'Rate'] != null && o[id + 'Settled'] && o[id + 'Exp'] != null).length;
       Object.assign(o, { leakBand: L ? L[0] : null, leakLabel: L ? L[2] : null, leakNames: L ? L[3] : null, leakRate: L ? o[L[0] + 'Rate'] : null, leakExp: L ? o[L[0] + 'Exp'] : null,
-        leakBehind: L ? Math.round(o[L[0] + 'Behind']) : null, leakDecided: L ? o[L[0] + 'Decided'] : null, leaks: leaks.length, strongBand: S ? S[0] : null,
+        leakBehind: L ? Math.round(o[L[0] + 'Behind']) : null, leakDecided: L ? o[L[0] + 'Decided'] : null, leaks: leaks.length, strongBand: S ? S[0] : null, cmpSteps: P ? cmpSteps : null,
         lowBand: low ? low[0] : null, lowLabel: low ? low[2] : null, lowNames: low ? low[3] : null, lowRate: low ? o[low[0] + 'Rate'] : null });
       out.push(o);
     }
@@ -282,7 +310,7 @@ dash.calc('conv_steps', {
 
 dash.calc('conv_close', {
   title: 'Win rate and where losses leave',
-  description: 'New Business closed in the last 4 completed quarters (by the date actually closed; admin merges left out), for all EMEA, SMB, Field and each team (the team that closed the deal: the owner\'s role at close, also when the deal is owned outside EMEA today; the current owner\'s role when that wasn\'t stamped): won, lost, the win rate by count and by ARR, per quarter; the win rate after qualification (losses at stage 0 left out); where losses left from (the last stage before Closed Lost, by number: 0, 1, 2, 3, 4–6) and their ARR; wins closed straight from stage 0; and this quarter so far. An AE team is compared with the other AE teams on the win rate and the share lost at stage 4–6 (30+ deals each side, 5+ points and twice the normal swing); SMB, BDR, Engagement and Leadership aren\'t compared. The same figures without a clean-up quarter are in conv_closeout.',
+  description: 'New Business closed in the last 4 completed quarters (by the date actually closed; admin merges left out), for all EMEA, SMB, Field and each team (the team that closed the deal: the owner\'s role at close when that is an EMEA sales role, also when the deal is owned outside EMEA today; the current owner\'s role when that wasn\'t stamped or is another region\'s, RevOps or the like): won, lost, the win rate by count and by ARR, per quarter; the win rate after qualification (losses at stage 0 left out); where losses left from (the last stage before Closed Lost, by number: 0, 1, 2, 3, 4–6) and their ARR; wins closed straight from stage 0; and this quarter so far. An AE team is compared with the other AE teams on the win rate and the share lost at stage 4–6 (30+ deals each side, 5+ points and twice the normal swing); SMB, BDR, Engagement and Leadership aren\'t compared. The same figures without a clean-up quarter are in conv_closeout.',
   inputs: ['cv_window'],
   fn: (cv_window) => {
     const MIN_N = 20;
@@ -294,8 +322,10 @@ dash.calc('conv_close', {
     const cur = now.getUTCFullYear() * 4 + Math.floor(now.getUTCMonth() / 3);
     const qi = (fy, fq) => (fy == null || fq == null ? null : +fy * 4 + (+fq - 1));
     const label = (i) => 'Q' + ((i % 4) + 1) + ' ' + Math.floor(i / 4);
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
-    const moved = (r) => !!(r.closedRole && r.closedRole !== r.role);
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closedBy = (r) => (TEAM[r.closedRole] ? r.closedRole : null);
+    const closeTeam = (r) => TEAM[closedBy(r) || r.role] || 'Other';
+    const moved = (r) => !!(closedBy(r) && closedBy(r) !== r.role);
     const ADMIN = /^(merged with global pilot|record cleanup)$/i;
     // the last stage before close by its number: '3 - Pilot Validation' and '3 - Validation' are both 3
     const stageNo = (v) => { if (!v) return null; if (/^closed won/i.test(v)) return 'W'; const n = parseInt(v, 10); return n >= 0 && n <= 6 ? n : null; };
@@ -315,7 +345,8 @@ dash.calc('conv_close', {
       const won = r.won === true, n = +r.n || 0, arr = +r.arr || 0, team = closeTeam(r);
       const keys = [...new Set(['All', 'S|' + SEG(team), team].concat(CLASS(team) === 'AE' ? ['S|AE'] : []))];
       if (!won && ADMIN.test(r.reason || '')) { for (const k of keys) { const o = get(k); o.admin += n; o.adminArr += arr; o.adminByQ[label(q)] = (o.adminByQ[label(q)] || 0) + n; } continue; }
-      // who closed it, on All: the role that owns it today, another role since (outside EMEA sales too), or not stamped
+      // who closed it, on All: the role that owns it today, another role since (outside EMEA sales too), not stamped, or a
+      // role at close outside EMEA sales (another region's, RevOps), which counts for the owner today
       const a = get('All');
       if (moved(r) && !TEAM[r.role]) a.attrLeft += n;
       if (qx >= 0) { if (!r.closedRole) a.attrBlank += n; else if (!TEAM[r.closedRole]) a.attrOutside += n; else if (!moved(r)) a.attrClosing += n; else a.attrMoved += n; }
@@ -373,7 +404,8 @@ dash.calc('conv_reasons', {
     const now = new Date();
     const cur = now.getUTCFullYear() * 4 + Math.floor(now.getUTCMonth() / 3);
     const qi = (fy, fq) => (fy == null || fq == null ? null : +fy * 4 + (+fq - 1));
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closeTeam = (r) => TEAM[(TEAM[r.closedRole] ? r.closedRole : null) || r.role] || 'Other';
     const ADMIN = /^(merged with global pilot|record cleanup)$/i;
     const stageNo = (v) => { if (!v) return null; if (/^closed won/i.test(v)) return 'W'; const n = parseInt(v, 10); return n >= 0 && n <= 6 ? n : null; };
     // the reason list changed on 3 Nov 2026: the same map as lost_reasons (Pipeline › Bookings)
@@ -434,7 +466,8 @@ dash.calc('conv_closeout', {
     const cur = now.getUTCFullYear() * 4 + Math.floor(now.getUTCMonth() / 3);
     const qi = (fy, fq) => (fy == null || fq == null ? null : +fy * 4 + (+fq - 1));
     const label = (i) => 'Q' + ((i % 4) + 1) + ' ' + Math.floor(i / 4);
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closeTeam = (r) => TEAM[(TEAM[r.closedRole] ? r.closedRole : null) || r.role] || 'Other';
     const ADMIN = /^(merged with global pilot|record cleanup)$/i;
     const stageNo = (v) => { if (!v) return null; if (/^closed won/i.test(v)) return 'W'; const n = parseInt(v, 10); return n >= 0 && n <= 6 ? n : null; };
     const REASON = { 'Qualified Out': 'Not a fit', 'Timing': 'Deferred', 'Technical/Functional Gap': 'Product fit', 'Lost to Competitor': 'Chose an alternative',
@@ -538,29 +571,34 @@ dash.calc('conv_closeout', {
 
 dash.calc('conv_sources', {
   title: 'How sources convert',
-  description: 'New Business closed won or lost in the last 4 completed quarters (by the date actually closed; admin merges left out), plus what is open today, for all EMEA, SMB, Field and each team (the team that closed a deal, also when it is owned outside EMEA today; the owner\'s team for open deals), by source four ways: as in Created opps › Sources (BDR-sourced: an originating BDR is set or a BDR created it; Inbound: lead source Inbound; Rep-sourced: the rest), by lead source (retired Inbound Webform and Apollo counted as Inbound and Outbound), by origin (an EMEA BDR originated it, by the role stamped on the deal or, when none was stamped, the BDR\'s role today, as on Created opps › BDRs) and by who created it. Per source: closed, won, the win rate by count and by ARR, the average won deal, won ARR per closed deal, the average days from creation to the win over all wins, how many are open now and the share still open, with the same source\'s win rate within SMB and within Field beside it. A source is marked when its win rate is 10+ points from the rest of the team, beyond twice the normal swing, with 20+ closed on each side; never at All EMEA, which mixes SMB and Field. Also the checks on source data for How far to trust.',
+  description: 'New Business closed won or lost in the last 4 completed quarters (by the date actually closed; admin merges left out), plus what is open today, for all EMEA, SMB, Field and each team (the team that closed a deal: its owner\'s role at close when that is an EMEA sales role, also when it is owned outside EMEA today, else the current owner\'s; the owner\'s team for open deals), by source four ways: as in Created opps › Sources (BDR-sourced: an originating BDR is set or a BDR created it; Inbound: lead source Inbound; Rep-sourced: the rest), by lead source (retired Inbound Webform and Apollo counted as Inbound and Outbound), by origin (an EMEA BDR originated it, by the role stamped on the deal or, when none was stamped, the BDR\'s role today, as on Created opps › BDRs) and by who created it (the creator\'s role today; a deal closed in an EMEA sales role and now owned outside EMEA sales by someone in its creator\'s role today counts under its role at close, since its creator most likely closed it and has changed roles since). Per source: closed, won, the win rate by count and by ARR, the average won deal, won ARR per closed deal, the average days from creation to the win over all wins, how many are open now and the share still open, with the same source\'s win rate within SMB and within Field beside it. A source is marked when its win rate is 10+ points from the rest of the team, beyond twice the normal swing, with 20+ closed on each side; never at All EMEA, which mixes SMB and Field. Also the checks on source data for How far to trust.',
   inputs: ['cv_source'],
   fn: (cv_source) => {
     const MIN_N = 20;
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const SEG = (t) => (t === 'SMB' ? 'SMB' : 'Field');
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closeTeam = (r) => TEAM[(TEAM[r.closedRole] ? r.closedRole : null) || r.role] || 'Other';
     const z2 = (x1, n1, x2, n2) => { if (!(n1 > 0 && n2 > 0)) return null; const p = (x1 + x2) / (n1 + n2), se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2)); return se > 0 ? (x1 / n1 - x2 / n2) / se : 0; };
     const BDRS = ['BDR-EMEA', 'DIR-BDR-EMEA'];
+    // the creator's role is today's: a deal closed in an EMEA sales role and now owned outside EMEA sales by someone in
+    // the creator's role today was created by the person who closed it, who has changed roles since; it counts under
+    // the role at close, not as Other or system
+    const creatorAt = (r) => (r.closed === true && TEAM[r.closedRole] && !TEAM[r.role] && r.creatorRole && r.creatorRole === r.role ? r.closedRole : r.creatorRole || '');
     const GROUPS = [
       ['As in Sources', ['BDR-sourced', 'Inbound', 'Rep-sourced'], (r) => (r.bdrRole || /^(BDR-|DIR-BDR-)/.test(r.creatorRole || '') ? 'BDR-sourced' : r.src === 'Inbound' ? 'Inbound' : 'Rep-sourced')],
       ['Lead source', ['Inbound', 'Referral', 'Event', 'Outbound', 'Other', 'Not set'], (r) => (!r.src ? 'Not set' : r.src === 'Inbound' || r.src === 'Inbound Webform' ? 'Inbound' : r.src === 'Outbound' || r.src === 'Apollo' ? 'Outbound' : r.src === 'Referral' || r.src === 'Event' ? r.src : 'Other')],
       ['Origin', ['BDR-originated', 'Not BDR-originated'], (r) => (BDRS.includes(r.bdrRole) || (!r.bdrRole && BDRS.includes(r.bdrNow)) ? 'BDR-originated' : 'Not BDR-originated')],
-      ['Created by', ['BDR', 'SMB rep', 'Field AE or sales leader', 'Engagement', 'Other or system'], (r) => { const v = r.creatorRole || ''; return /^(BDR-|DIR-BDR-)/.test(v) ? 'BDR' : /^SMB-/.test(v) ? 'SMB rep' : /^(AE-|AD-|MGR-SALES-|DIR-SALES-|VP-SALES-|HEAD-STRAT-)/.test(v) ? 'Field AE or sales leader' : /^(EM-|DIR-EM-)/.test(v) ? 'Engagement' : 'Other or system'; }],
+      ['Created by', ['BDR', 'SMB rep', 'Field AE or sales leader', 'Engagement', 'Other or system'], (r) => { const v = creatorAt(r); return /^(BDR-|DIR-BDR-)/.test(v) ? 'BDR' : /^SMB-/.test(v) ? 'SMB rep' : /^(AE-|AD-|MGR-SALES-|DIR-SALES-|VP-SALES-|HEAD-STRAT-)/.test(v) ? 'Field AE or sales leader' : /^(EM-|DIR-EM-)/.test(v) ? 'Engagement' : 'Other or system'; }],
     ];
     const sums = new Map();
     const blank = () => ({ won: 0, lost: 0, wonArr: 0, lostArr: 0, cyc: 0, cycN: 0, open: 0, openArr: 0 });
     const S = (k, g, v) => { const id = k + '|' + g + '|' + v; if (!sums.has(id)) sums.set(id, blank()); return sums.get(id); };
-    const t = { blank: 0, blankOpen: 0, retired: 0, bdrSet: 0, noCreator: 0, closed: 0 };
+    const t = { blank: 0, blankOpen: 0, retired: 0, bdrSet: 0, noCreator: 0, creatorMoved: 0, closed: 0 };
     for (const r of cv_source) {
       const closed = r.closed === true, won = r.won === true, n = +r.n || 0, arr = +r.arr || 0;
       const team = closed ? closeTeam(r) : TEAM[r.role] || 'Other';
-      if (closed) { t.closed += n; if (!r.src) t.blank += n; if (r.bdrRole || BDRS.includes(r.bdrNow)) t.bdrSet += n; if (!r.creatorRole) t.noCreator += n; } else if (!r.src) t.blankOpen += n;
+      if (closed) { t.closed += n; if (!r.src) t.blank += n; if (r.bdrRole || BDRS.includes(r.bdrNow)) t.bdrSet += n; if (!r.creatorRole) t.noCreator += n; if (creatorAt(r) !== (r.creatorRole || '')) t.creatorMoved += n; } else if (!r.src) t.blankOpen += n;
       if (r.src === 'Inbound Webform' || r.src === 'Apollo') t.retired += n;
       for (const k of [...new Set(['All', 'S|' + SEG(team), team])]) {
         for (const [g, , f] of GROUPS.concat([['All', null, () => 'All closed']])) {
@@ -613,7 +651,8 @@ dash.calc('conv_sources', {
       { key: 'trust|bdr', kind: 'trust', id: 'bdr', measure: 'Originating BDR', value: t.closed ? t.bdrSet / t.closed : null, fmt: 'pct', severity: 'info',
         detail: (t.closed ? pct(t.bdrSet / t.closed) : '—') + ' of closed New Business deals have an Originating BDR role stamped or an EMEA BDR set (about 11% of those closed in Q4 2025 and 26% in Q3 2026 when this was built), so older BDR deals sit under Rep-sourced or Inbound unless a BDR created them. BDR-originated counts EMEA BDRs only, as the BDR leaderboard does; BDR-sourced also counts deals a BDR created and any originating BDR, as in Created opps › Sources.' },
       { key: 'trust|creator', kind: 'trust', id: 'creator', measure: 'Created by users with no role', value: t.noCreator, fmt: 'n', severity: 'info',
-        detail: num(t.noCreator) + ' closed deals were created by users with no role (system or integration users); they show under Other or system.' },
+        detail: num(t.noCreator) + ' closed deals were created by users with no role (system or integration users); they show under Other or system.'
+          + (t.creatorMoved ? ' ' + num(t.creatorMoved) + ' were closed in an EMEA sales role and are now owned outside EMEA sales by someone in their creator\'s role today: most likely the person who created and closed them has changed roles since, so Created by counts them under the role at close.' : '') },
       { key: 'trust|srcCap', kind: 'trust', id: 'srcCap', measure: 'Sources data near the 2,000-row limit', value: rows, fmt: 'n', severity: rows >= 2000 ? 'bad' : rows >= 1600 ? 'warn' : 'info',
         detail: 'Sources ' + num(rows) + ' rows' + (rows >= 2000 ? ' (cut: totals too low)' : '') + '.' });
     return out;
@@ -628,8 +667,10 @@ dash.calc('conv_time', {
     const MIN = 10, MIN_SHARE = 20;
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const SEG = (t) => (t === 'SMB' ? 'SMB' : 'Field');
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
-    const moved = (r) => !!(r.closedRole && r.closedRole !== r.role);
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closedBy = (r) => (TEAM[r.closedRole] ? r.closedRole : null);
+    const closeTeam = (r) => TEAM[closedBy(r) || r.role] || 'Other';
+    const moved = (r) => !!(closedBy(r) && closedBy(r) !== r.role);
     const closeMgr = (r) => (moved(r) ? r.closedManager || null : r.manager || '(no manager)');
     const NAME = ['Qualification', 'Solution agreement', 'Scope agreement', 'Validation', 'Commercial agreement', 'Vendor assessment', 'Opt-out'];
     const SLOTS = ['0', '1', '2', '3', '46'];
@@ -695,7 +736,7 @@ dash.calc('conv_time', {
 
 dash.calc('oo_points_conv', {
   title: '1:1 numbers and talking points, conversion',
-  description: 'For each leader (someone with EMEA sales people below them), the conversion lines of their 1:1 agenda over the New Business their team holds (everyone below them; a closed deal counts for the team that closed it, and for its manager at close when it has since moved to someone in another role): one numbers line (the share of their latest comparable quarter won within 2 quarters, against the quarter before and their peers) and up to 2 talking points: a step where the team\'s deals leak against its peers on the same created quarters, a share won within 2 quarters below the peers, old open deals still at stage 0–1, a drop on the quarter before, and for the top EMEA leader SMB against its own quarter before. Comparisons stay within one motion: the team\'s deals in AE teams against the other AE teams, or its SMB deals against the rest of SMB, and only when 80% or more of its deals are in that motion; a team that mixes motions gets its numbers without comparisons, and a leader whose deals are mostly BDR-owned gets no conversion lines (BDR-sourced deals are in How sources convert). Teams with fewer than 20 deals created in a finished quarter get nothing; nobody who isn\'t a leader gets conversion lines. Its own calc, so agendas still build when conversion can\'t be read, and then say so; the agenda merges it in after the core, routing and activity points of the same severity.',
+  description: 'For each leader (someone with EMEA sales people below them), the conversion lines of their 1:1 agenda over the New Business their team holds (everyone below them; a closed deal counts for the team that closed it, by its owner\'s role at close when that is an EMEA sales role, else the current owner\'s, and for its manager at close when it has since moved to someone in another role): one numbers line (the share of their latest comparable quarter won within 2 quarters, against the quarter before and their peers) and up to 2 talking points: a step where the team\'s deals leak against its peers on the same created quarters, a share won within 2 quarters below the peers, old open deals still at stage 0–1, a drop on the quarter before, and for the top EMEA leader SMB against its own quarter before. Comparisons stay within one motion: the team\'s deals in AE teams against the other AE teams, or its SMB deals against the rest of SMB, and only when 80% or more of its deals are in that motion; a team that mixes motions, or whose deals in its motion never reach 20 in a comparable quarter, gets its numbers without comparisons (old open deals still count), and a leader whose deals are mostly BDR-owned gets no conversion lines (BDR-sourced deals are in How sources convert). Teams with fewer than 20 deals created in a finished quarter get nothing; nobody who isn\'t a leader gets conversion lines. Its own calc, so agendas still build when conversion can\'t be read, and then say so; the agenda merges it in after the core, routing and activity points of the same severity.',
   inputs: ['team_tree', 'cv_open', 'cv_closed'],
   fn: (team_tree, cv_open, cv_closed) => {
     const MIN_N = 20, MIN_CMP = 30, GAP = 0.05, Z = 2, MAX_TALK = 2, MIXED = 0.8, MIN_PEER_Q = 10;
@@ -706,8 +747,10 @@ dash.calc('oo_points_conv', {
     const cur = now.getUTCFullYear() * 4 + Math.floor(now.getUTCMonth() / 3);
     const qi = (fy, fq) => (fy == null || fq == null ? null : +fy * 4 + (+fq - 1));
     const label = (i) => 'Q' + ((i % 4) + 1) + ' ' + Math.floor(i / 4);
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
-    const moved = (r) => !!(r.closedRole && r.closedRole !== r.role);
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closedBy = (r) => (TEAM[r.closedRole] ? r.closedRole : null);
+    const closeTeam = (r) => TEAM[closedBy(r) || r.role] || 'Other';
+    const moved = (r) => !!(closedBy(r) && closedBy(r) !== r.role);
     const closeMgr = (r) => (moved(r) ? r.closedManager || null : r.manager || '(no manager)');
     const env = (r, won) => { const n = +r.n || 0, raw = [0, 1, 2, 3, 4, 5, 6].map((k) => +r['s' + k] || 0), s = new Array(7).fill(n); if (!won) for (let k = 6; k >= 1; k--) s[k] = Math.min(n, Math.max(raw[k], k < 6 ? s[k + 1] : 0)); return { n, s }; };
     const z2 = (x1, n1, x2, n2) => { if (!(n1 > 0 && n2 > 0)) return null; const p = (x1 + x2) / (n1 + n2), se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2)); return se > 0 ? (x1 / n1 - x2 / n2) / se : 0; };
@@ -759,6 +802,8 @@ dash.calc('oo_points_conv', {
       let n = 0;
       const push = (section, sev, text, extra) => out.push({ key: L.email + '|' + section + '|conv|' + n, email: L.email, name: L.name, section, sev, order: 3e6 + n++, text, screen: 'created', view: 'conversion', conv: true, ...(extra || {}) });
       const stale = old.filter((r) => r.mgr && sub.has(r.mgr)).reduce((a, r) => a + r.n, 0);
+      // old open deals are worth closing whatever the motion, so every leader with lines can get this point
+      const staleLine = stale >= 5 ? [stale >= 20 ? 'medium' : 'low', num(stale) + ' open New Business deals created in ' + label(cur - 3) + ' or before are still at stage 0–1: progress or close them, so conversion and pipeline read true.', { screen: 'actions', view: 'checks' }] : null;
       // 3) comparisons, within one motion only
       const comp = mine.filter((r) => r.cls === main), C = byQ(comp), peersRecs = recs.filter((r) => r.cls === main && !(r.mgr && sub.has(r.mgr))), PQ = byQ(peersRecs);
       const peerPool = pool(PQ).n, canCmp = !L.isTop && !mixed && (main === 'AE' || main === 'SMB') && peerPool >= MIN_CMP;
@@ -776,9 +821,14 @@ dash.calc('oo_points_conv', {
         const segs = [s, f].filter(Boolean).join(' and '), opens = [s ? so : null, f ? fo : null].filter(Boolean).join(' and ');
         if (L.isTop) push('numbers', '', 'Conversion, all EMEA New Business created in ' + label(tq) + ': ' + pc(tc.y2qWon / tc.n) + ' won within 2 quarters' + (segs ? '; ' + segs + ', ' + opens + ' still open at 2 quarters. Field deals take longer: compare each segment with its own earlier quarters.' : '.') + ' Win rate and losses are on Created opps › Conversion.');
         else push('numbers', '', 'Team conversion, New Business created in ' + label(tq) + ': ' + pc(tc.y2qWon / tc.n) + ' won within 2 quarters (' + num(tc.y2qWon) + ' of ' + num(tc.n) + ')' + (segs ? '; ' + segs + ', ' + opens + ' still open at 2 quarters' : '') + '. Not compared: the team\'s deals mix motions, and Field deals take longer, so compare each with its own earlier quarters.');
+      } else if (latest(C)[0] == null) {
+        // the team has a comparable quarter with 20+ created, but its deals in its motion never reach 20 in one: the whole
+        // team's share, not compared (as the Conversion view shows a manager in this case)
+        push('numbers', '', 'Team conversion, New Business created in ' + label(lq) + ': ' + pc(lc.y2qWon / lc.n) + ' won within 2 quarters (' + num(lc.y2qWon) + ' of ' + num(lc.n) + '). Not compared: too few of '
+          + what + ' (' + num((C.get(lq) || { n: 0 }).n) + ' created in ' + label(lq) + ').');
+        if (staleLine) lines.push(staleLine);
       } else {
         const [cq, cc] = latest(C);
-        if (cq == null) continue;
         const prev = C.get(cq - 1), prevOk = prev && prev.n >= MIN_N && cq - 1 >= cur - 4;
         const peer = PQ.get(cq), peerN = peer ? peer.n : 0;
         const cnt = all1 ? '' : ' (' + num(cc.n) + ' of ' + num((M.get(cq) || { n: cc.n }).n) + ' created)';
@@ -807,10 +857,10 @@ dash.calc('oo_points_conv', {
           if (best) lines.push([best.behind >= 10 ? 'medium' : 'low', 'Deals leak at ' + best.lbl + ' (' + best.names + '): ' + pc(best.rate) + ' of ' + what + ' that left the stage moved on, against ' + pc(best.exp) + ' for ' + peerLabel + ' on the same created quarters, about ' + num(best.behind) + ' deals behind (' + label(POOL[0]) + '–' + label(POOL[2]) + '). What stops them there?']);
           if (peerN && verdict(cc.y2qWon, cc.n, peer.y2qWon, peerN) === 'below') lines.push(['medium', pc(cc.y2qWon / cc.n) + ' of ' + what + ' created in ' + label(cq) + ' was won within 2 quarters, against ' + pc(peer.y2qWon / peerN) + ' for ' + peerLabel + ' (' + num(cc.n) + ' created).']);
         }
-        if (stale >= 5) lines.push([stale >= 20 ? 'medium' : 'low', num(stale) + ' open New Business deals created in ' + label(cur - 3) + ' or before are still at stage 0–1: progress or close them, so conversion and pipeline read true.', { screen: 'actions', view: 'checks' }]);
+        if (staleLine) lines.push(staleLine);
         if (prevOk && verdict(cc.y2qWon, cc.n, prev.y2qWon, prev.n) === 'below') lines.push(['low', 'Won within 2 quarters fell from ' + pc(prev.y2qWon / prev.n) + ' (' + label(cq - 1) + ') to ' + pc(cc.y2qWon / cc.n) + ' (' + label(cq) + ') for ' + what + '.']);
       }
-      if (L.isTop || mixed) { if (stale >= 5) lines.push([stale >= 20 ? 'medium' : 'low', num(stale) + ' open New Business deals created in ' + label(cur - 3) + ' or before are still at stage 0–1: progress or close them, so conversion and pipeline read true.', { screen: 'actions', view: 'checks' }]); }
+      if ((L.isTop || mixed) && staleLine) lines.push(staleLine);
       if (L.isTop) {
         // SMB against its own quarter before, never against Field
         const [sq, sc] = latest(allSmb), sp = sq != null ? allSmb.get(sq - 1) : null;
@@ -844,7 +894,7 @@ dash.calc('conv_trust_cohort', {
     const NB = (r) => r.rt === 'New Business';
     const byQ = new Map();
     const Q = (q) => { if (!byQ.has(q)) byQ.set(q, { n: 0, open: 0 }); return byQ.get(q); };
-    let created = 0, fixed = 0, noS0 = 0, openWonBefore = 0, wonAfterLoss = 0, lostAfterWin = 0, closed = 0, movedN = 0, left = 0, noMgr = 0, blank = 0;
+    let created = 0, fixed = 0, noS0 = 0, openWonBefore = 0, wonAfterLoss = 0, lostAfterWin = 0, closed = 0, movedN = 0, left = 0, noMgr = 0, blank = 0, outside = 0;
     for (const r of cv_open) {
       if (!NB(r) || !inWin(r)) continue;
       const e = env(r, false);
@@ -857,7 +907,9 @@ dash.calc('conv_trust_cohort', {
       created += e.n; fixed += e.fix; noS0 += e.n - e.raw[0]; closed += e.n;
       if (won) wonAfterLoss += +r.clStamp || 0; else lostAfterWin += +r.cwStamp || 0;
       Q(qi(r.fy, r.fq)).n += e.n;
+      // the team that closed it: the role at close when that is an EMEA sales role, else the owner's today
       if (!r.closedRole) blank += e.n;
+      else if (!TEAM[r.closedRole]) outside += e.n;
       else if (r.closedRole !== r.role) { movedN += e.n; if (!TEAM[r.role]) left += e.n; if (!r.closedManager) noMgr += e.n; }
     }
     const young = [cur - 1, cur].map((q) => {
@@ -872,7 +924,7 @@ dash.calc('conv_trust_cohort', {
         detail: 'Cohorts: deals created ' + label(cur - 4) + '–' + label(cur) + ' in your Salesforce time zone. Rates and steps compare the quarters whose following quarter has ended (' + label(cur - 4) + '–' + label(cur - 2) + '); younger ones show so far. Deals created before October 2025 were migrated into Salesforce (stage history starts in August 2025) and never enter the window; they still count in the old-deals check.' },
       { ...sev('young', 'info'), measure: 'Quarters not yet comparable', value: 2, fmt: 'n', detail: young.join('; ') + '. Their won so far is shown, never compared.' },
       { ...sev('owner', closed && movedN / closed > 0.05 ? 'warn' : 'info'), measure: 'Closed deals counted for the team that closed them', value: movedN, fmt: 'n',
-        detail: num(movedN) + ' of ' + num(closed) + ' closed New Business deals in these quarters now sit with someone in another role (' + num(left) + ' of them outside EMEA sales) and count for the team that closed them and its manager at close (' + num(noMgr) + ' with no closing manager stamped count for no manager); ' + num(blank) + ' closed before about April 2026 have no closing role and count for the owner\'s team today. A closed deal still in the same role counts for today\'s manager, so a re-org moves a team\'s history to its new manager. Bookings and Coverage count closed deals the same way.' },
+        detail: num(movedN) + ' of ' + num(closed) + ' closed New Business deals in these quarters now sit with someone in another role (' + num(left) + ' of them outside EMEA sales) and count for the team that closed them and its manager at close (' + num(noMgr) + ' with no closing manager stamped count for no manager); ' + num(blank) + ' closed before about April 2026 have no closing role and count for the owner\'s team today' + (outside ? '; ' + num(outside) + ' carry a role at close outside EMEA sales (another region\'s, RevOps or the like), which moves no deal: they count for the owner\'s team today too' : '') + '. A closed deal still in the same role counts for today\'s manager, so a re-org moves a team\'s history to its new manager. Bookings and Coverage count closed deals the same way.' },
       { ...sev('stamps', created && fixed > 0.02 * created ? 'warn' : 'info'), measure: 'Stage reached comes from stage entry dates', value: fixed, fmt: 'n',
         detail: 'Stages are matched by number (stage 3 was renamed on 3 Nov 2026). A skipped stage is dated too, so a deal walked through every stage in an hour reaches each one; a won deal counts as passing every stage. ' + num(noS0) + ' deals were created past stage 0 and count there anyway; ' + num(fixed) + ' stage counts were raised so the funnel never widens (if this grows, the stamping automation may have changed). The stage history is not used: it doesn\'t narrow, keeps the old stage-3 name and starts in August 2025.' },
       { ...sev('reopen', 'info'), measure: 'Reopened deals', value: openWonBefore, fmt: 'n',
@@ -899,7 +951,7 @@ dash.calc('conv_trust_close', {
     const NEW = ['Chose an alternative', 'Product fit', 'Price and budget', 'Buyer engagement', 'Deferred', 'Not a fit', 'Customer experience and support', 'Other'];
     const usd = (v) => { const a = Math.abs(+v || 0); return '$' + (a >= 999500 ? (a / 1e6).toFixed(a >= 9.95e6 ? 0 : 1) + 'M' : a >= 999.5 ? Math.round(a / 1e3) + 'K' : String(Math.round(a))); };
     const num = (v) => Math.round(v).toLocaleString('en');
-    let merges = 0, mergesArr = 0, old = 0, nw = 0, blank = 0, unl = 0, vnp = 0, s3old = 0, s3new = 0, atWin = 0, from0 = 0, closed4 = 0, moved4 = 0, blank4 = 0, closedAll = 0, left = 0, lost = 0;
+    let merges = 0, mergesArr = 0, old = 0, nw = 0, blank = 0, unl = 0, vnp = 0, s3old = 0, s3new = 0, atWin = 0, from0 = 0, closed4 = 0, moved4 = 0, blank4 = 0, outside4 = 0, closedAll = 0, left = 0, lost = 0;
     const mq = {};
     for (const r of cv_window) {
       const q = qi(r.fy, r.fq);
@@ -907,8 +959,10 @@ dash.calc('conv_trust_close', {
       const n = +r.n || 0, won = r.won === true, raw = r.reason || '';
       if (!won && ADMIN.test(raw)) { merges += n; mergesArr += +r.arr || 0; mq[label(q)] = (mq[label(q)] || 0) + n; continue; }
       closedAll += n;
-      if (r.closedRole && r.closedRole !== r.role && !TEAM[r.role]) left += n;
-      if (q < cur) { closed4 += n; if (!r.closedRole) blank4 += n; else if (r.closedRole !== r.role) moved4 += n; }
+      // the team that closed it: the role at close when that is an EMEA sales role, else the owner's today
+      const c = TEAM[r.closedRole] ? r.closedRole : null;
+      if (c && c !== r.role && !TEAM[r.role]) left += n;
+      if (q < cur) { closed4 += n; if (!r.closedRole) blank4 += n; else if (!c) outside4 += n; else if (c !== r.role) moved4 += n; }
       if (won) { if (/^0/.test(r.lastStage || '')) from0 += n; continue; }
       lost += n;
       if (!raw) blank += n; else if (REASON[raw]) old += n; else if (NEW.includes(raw)) nw += n; else unl += n;
@@ -921,10 +975,10 @@ dash.calc('conv_trust_close', {
     const T = (id, measure, value, severity, detail, fmt) => ({ key: 'trust|' + id, id, measure, value, fmt: fmt || 'n', detail, severity });
     return [
       T('merges', 'Admin merges left out', merges, 'info', num(merges) + ' New Business deals closed as Merged with Global Pilot or Record cleanup in the last 4 quarters and this one' + (peak ? ' (' + peak[0] + ': ' + num(peak[1]) + '; ' + usd(mergesArr) + ' ARR in all)' : '') + '; left out of every number here, still counted in Created opps\' totals.'),
-      T('reasons', 'Lost reasons on two lists', old, unl > 0 || (lost && blank / lost >= 0.05) ? 'warn' : 'info', num(old) + ' losses use the list retired on 3 Nov 2026 and are counted under their new name; ' + num(nw) + ' use the new list; ' + num(blank) + ' have no reason; ' + num(unl) + ' use a value on neither list. Value not perceived (' + num(vnp) + ') has no clear new equivalent and stays apart as "Value not perceived (old list)".'),
-      T('stage3', 'Stage 3 renamed', s3old + s3new, 'info', 'Last Stage Before Close keeps "3 - Pilot Validation" on ' + num(s3old) + ' losses and says "3 - Validation" on ' + num(s3new) + '; both count as stage 3.'),
-      T('atwin', 'Lost after a win, won from Qualification', atWin + from0, 'info', num(atWin) + ' losses had Closed Won as their last stage (won, reopened, then lost); ' + num(from0) + ' wins had stage 0 as their last stage, often logged at signature. They count as losses and wins.'),
-      T('owner', 'Counted for the team that closed the deal', moved4, 'info', num(moved4) + ' of ' + num(closed4) + ' deals closed in the last 4 quarters now sit with someone in another role and count for the team that closed them; ' + num(blank4) + ' closed before about April 2026 count for the owner\'s team today.'),
+      T('reasons', 'Lost reasons on two lists', old, unl > 0 || (lost && blank / lost >= 0.05) ? 'warn' : 'info', 'In the last 4 quarters and this one, ' + num(old) + ' New Business losses use the list retired on 3 Nov 2026 and are counted under their new name; ' + num(nw) + ' use the new list; ' + num(blank) + ' have no reason; ' + num(unl) + ' use a value on neither list. Value not perceived (' + num(vnp) + ') has no clear new equivalent and stays apart as "Value not perceived (old list)". Why deals are lost shows the 4 completed quarters.'),
+      T('stage3', 'Stage 3 renamed', s3old + s3new, 'info', 'In the last 4 quarters and this one, Last Stage Before Close keeps "3 - Pilot Validation" on ' + num(s3old) + ' losses and says "3 - Validation" on ' + num(s3new) + '; both count as stage 3.'),
+      T('atwin', 'Lost after a win, won from Qualification', atWin + from0, 'info', 'In the last 4 quarters and this one, ' + num(atWin) + ' losses had Closed Won as their last stage (won, reopened, then lost); ' + num(from0) + ' wins had stage 0 as their last stage, often logged at signature. They count as losses and wins.'),
+      T('owner', 'Counted for the team that closed the deal', moved4, 'info', num(moved4) + ' of ' + num(closed4) + ' deals closed in the last 4 quarters now sit with someone in another role and count for the team that closed them; ' + num(blank4) + ' closed before about April 2026 count for the owner\'s team today' + (outside4 ? '; so do ' + num(outside4) + ' whose role at close is outside EMEA sales (another region\'s, RevOps or the like)' : '') + '.'),
       T('left', 'Closed by EMEA, owned outside EMEA today', left, closedAll && left / closedAll > 0.02 ? 'warn' : 'info', num(left) + ' New Business deals an EMEA seller closed in the last 4 quarters and this one now sit with an owner outside EMEA sales (strategic, another region, partnerships, RevOps or no role); they count for the team that closed them. Deals that moved outside EMEA after closing before about April 2026, when no closing role was stamped, can\'t be seen.'),
       T('windowCap', 'Win-rate data near the 2,000-row limit', rows, rows >= 2000 ? 'bad' : rows >= 1600 ? 'warn' : 'info', 'Last 4 quarters ' + num(rows) + ' rows' + (rows >= 2000 ? ' (cut: totals too low)' : '') + '.'),
     ];
@@ -1014,7 +1068,8 @@ dash.calc('checks_conv_lost', {
     const qi = (fy, fq) => (fy == null || fq == null ? null : +fy * 4 + (+fq - 1));
     const qStart = (i) => Date.UTC(Math.floor(i / 4), (i % 4) * 3, 1);
     const dayTxt = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closeTeam = (r) => TEAM[(TEAM[r.closedRole] ? r.closedRole : null) || r.role] || 'Other';
     const ADMIN = /^(merged with global pilot|record cleanup)$/i;
     const OLD = ['Qualified Out', 'Timing', 'Technical/Functional Gap', 'Lost to Competitor', 'No Champion', 'Budget', 'Value not perceived'];
     const NEW = ['Chose an alternative', 'Product fit', 'Price and budget', 'Buyer engagement', 'Deferred', 'Not a fit', 'Customer experience and support', 'Other'];
@@ -1049,7 +1104,8 @@ dash.calc('checks_conv_days', {
   inputs: ['cv_days'],
   fn: (cv_days) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
-    const closeTeam = (r) => TEAM[r.closedRole || r.role] || 'Other';
+    // the team that closed a deal: its role at close when that is an EMEA sales role, else the owner's today
+    const closeTeam = (r) => TEAM[(TEAM[r.closedRole] ? r.closedRole : null) || r.role] || 'Other';
     const num = (v) => Math.round(v).toLocaleString('en');
     const m = new Map();
     for (const r of cv_days) {
