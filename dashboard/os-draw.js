@@ -921,11 +921,14 @@ const ooOpsRow = (r, talk) => {
   const li = OS.el('li', talk ? 'ag-pt' : null);
   li.dataset.key = r.key;
   if (!talk) { li.textContent = r.text; return li; }
-  li.append(OS.el('span', 'itm-dot ' + (r.na ? 'low' : r.key === 'checks' || r.key === 'routing' ? 'high' : 'medium')), OS.el('span', 'ag-txt', r.text));
+  li.append(OS.el('span', 'itm-dot ' + (r.sev || 'low')), OS.el('span', 'ag-txt', r.text));
   const go = OS.el('button', 'ibtn');
   go.type = 'button';
   go.dataset.nav = r.screen;
   go.dataset.navView = r.view;
+  // the line counts all of EMEA, so the view opens for all of EMEA (and all data-check areas)
+  go.dataset.navScope = 'All';
+  if (r.key === 'checks') go.dataset.navArea = 'All';
   go.setAttribute('aria-label', 'Open in the app');
   go.appendChild(OS.icon(OS.ICON.go));
   li.append(OS.el('span', 'ag-acts'), go);
@@ -1085,8 +1088,8 @@ dash.draw('pd-act', (box) => {
 });
 dash.draw('oo-mail', (box) => {
   const w = OS.oo.who();
-  // no email link until the agenda's sources have loaded: a half-built agenda would go out as if complete
-  const loading = ['oo_points', 'oo_points_rr', 'oo_followups'].some((id) => OS.state(id) === 'loading');
+  // no email link until the agenda's sources have loaded (as Copy and Send): a half-built agenda would go out as if complete
+  const loading = !!w && OS.oo.loading(w);
   const text = w && !w.startsWith('n:') && !loading ? OS.oo.text() : '';
   const name = w ? OS.oo.nameOf(w) : '';
   const a = text ? OS.links.mail(w, '1:1 agenda', text) : null;

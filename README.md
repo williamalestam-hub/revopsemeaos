@@ -81,9 +81,14 @@ Salesforce role and changing scope never re-runs a query.
   "Last time" is the latest meeting of two or three people with them; its topics are the headings of that note's
   summary (up to six; generic ones such as Next steps or Action items left out; private notes are never read for this).
   A leader's numbers add up everyone below them in Salesforce's manager chain, their own included. Who they are to
-  you comes from Salesforce: your manager (getUserInfo), people whose manager is you, and RevOps by role (REVOPS);
-  EMEA sales means the agenda has Salesforce numbers for them. A colleague's email is matched to an active Salesforce
-  user, except an integration user that shares it (no role, no manager, a name unlike theirs).
+  you comes from Salesforce: your manager (getUserInfo; when it can't be read, your own user found by your calendar's
+  or Granola's email), people whose manager is you, and RevOps by role (REVOPS); EMEA sales means the agenda has
+  Salesforce numbers for them. The EMEA update and RevOps work go to RevOps colleagues, and to your manager and your
+  reports when you are in RevOps (a sales manager's reports get their own numbers, not the all-EMEA view). RevOps work
+  lists only what needs action, coloured by how urgent it is. A colleague's email is matched to an active Salesforce
+  user: never one whose name says it isn't a person (integration, API, sync, bot), and when several share the email,
+  the one whose name matches it or the calendar name, then one with a role or manager. Copy, Send and Email all wait
+  until everything the agenda shows has loaded.
 - **This week (movement)**: the last 7 days, New Business and Upsell, per current owner and at the deal's current
   ARR. Won and lost count by the date actually closed; admin merges and record clean-ups are left out of lost.
   Created counts opportunities created in the window (and they still count as won or lost if they closed). Pushed is

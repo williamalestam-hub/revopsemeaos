@@ -1510,10 +1510,28 @@ dash.calc('team_rr', {
 
 dash.calc('oo_upcoming', {
   title: 'Your upcoming 1:1s',
-  description: 'Events in your calendar from now to 14 days ahead that are a 1:1: one colleague with your email domain besides you (meeting rooms aside), with you invited or organising, not all-day or cancelled, and declined by neither of you. The colleague is matched to an active Salesforce user by email, unless that user has no role, no manager and a name unlike the colleague\'s (an integration user sharing their email).',
+  description: 'Events in your calendar from now to 14 days ahead that are a 1:1: one colleague with your email domain besides you (meeting rooms aside), with you invited or organising, not all-day or cancelled, and declined by neither of you. The colleague is matched to an active Salesforce user by email; a user whose name says it isn\'t a person (integration, API, sync, bot) is never a match, and when several users share the email the one whose name matches the email or calendar name wins, then one with a role or manager.',
   inputs: ['cal_events', 'users_all'],
   fn: (cal_events, users_all) => {
-    const byEmail = new Map(users_all.map((u) => [String(u.email || '').toLowerCase(), u]));
+    // the user behind an email: of the active users with it, not one whose name says it isn't a person (integration,
+    // API, sync); prefer a name matching the email or the calendar name, then one with a role or a manager
+    const fold = (x) => String(x || '').replace(/[øØ]/g, 'o').replace(/[æÆ]/g, 'ae').replace(/ß/g, 'ss').replace(/[łŁ]/g, 'l').replace(/[đĐ]/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const toks = (x) => fold(x).split(/[^a-z]+/).filter(Boolean);
+    const SYSTEM = /\b(integration|api|sync|bot|automation|service|system)\b/i;
+    const byEmail = new Map();
+    for (const u of users_all) {
+      const e = String(u.email || '').toLowerCase();
+      if (!e || SYSTEM.test(u.name || '')) continue;
+      if (!byEmail.has(e)) byEmail.set(e, []);
+      byEmail.get(e).push(u);
+    }
+    const userOf = (email, display) => {
+      const rows = byEmail.get(email) || [];
+      if (rows.length <= 1) return rows[0] || null;
+      const known = toks(email.split('@')[0]).concat(toks(display));
+      const score = (u) => (toks(u.name).some((w) => known.includes(w)) ? 2 : 0) + (u.role || u.manager ? 1 : 0);
+      return rows.slice().sort((a, b) => score(b) - score(a) || String(a.userId || '').localeCompare(String(b.userId || '')))[0];
+    };
     const dom = (x) => String(x || '').split('@')[1] || '';
     const now = Date.now();
     const out = [];
@@ -1529,11 +1547,7 @@ dash.calc('oo_upcoming', {
       const end = Date.parse(e.end || e.start || '');
       if (!Number.isNaN(end) && end < now) continue;
       const guess = o.email.split('@')[0].split(/[._-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
-      // an integration user can share a person's email (no role, no manager, a name unlike theirs): not a match
-      const toks = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z]+/).filter(Boolean);
-      const known = toks(guess).concat(toks(o.name));
-      const hit = byEmail.get(o.email) || null;
-      const u = hit && !hit.role && !hit.manager && !toks(hit.name).some((w) => known.includes(w)) ? null : hit;
+      const u = userOf(o.email, o.name);
       out.push({ key: e.id, start: e.start, end: e.end, at: Date.parse(e.start || '') || null, title: e.title, email: o.email, name: u ? u.name : (String(o.name || '').trim() || guess), sfName: u ? u.name : null, role: u ? u.role || null : null, recurring: !!e.recurring, link: e.link });
     }
     return out.sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -1542,7 +1556,7 @@ dash.calc('oo_upcoming', {
 
 dash.calc('oo_followups', {
   title: 'Follow-ups per colleague',
-  description: 'Open action items from your Granola notes for each colleague: items from meetings of up to three people they attended, and items they own from any meeting (by full name, or by first name when they were one of the meeting\'s listed attendees), marked when they come from your private notes. Also the latest meeting of two or three people with them, as "last time", with the headings of its summary as the topics it covered (up to six; generic ones such as Next steps or Action items left out, private notes never read for this).',
+  description: 'Open action items from your Granola notes for each colleague: items from meetings of up to three people they attended, and items they own from any meeting (by full name, or by first name when they were one of the meeting\'s listed attendees), marked when they come from your private notes. Also the latest meeting of two or three people with them, as "last time", with the headings of its summary as the topics it covered (up to six; generic headings, action headings such as Next steps or Action points and the owner groups under them left out, private notes never read for this).',
   inputs: ['gr_actions', 'gr_notes', 'users_all'],
   fn: (gr_actions, gr_notes, users_all) => {
     const toks = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
@@ -1565,11 +1579,15 @@ dash.calc('oo_followups', {
       }
     }
     // what the last meeting covered: the headings of its summary (not private notes), in order, generic ones left out
-    const GENERIC = /^(next steps?|action items?|actions?|follow[- ]?ups?|to[- ]?dos?|tasks?|summary|overview|notes?|key (takeaways|points)|takeaways|attendees|participants|agenda|private notes)$/i;
+    const GENERIC = /^(summary|overview|notes?|key (takeaways|points)|takeaways|attendees|participants|agenda|private notes)$/i;
+    // action headings (and the owner groups under them) are follow-ups, read the way gr_actions reads them
+    const ACTION = /\b(next steps?|action items?|action points?|actions?|follow[- ]?ups?|to[- ]?dos?|tasks?)\b/i;
+    const NOT_ACTION = /\b(questions?|taken|completed|done|force|discussed)\b/i;
+    const isAction = (x) => !!x && ACTION.test(x) && !NOT_ACTION.test(x);
     const topics = new Map();
     for (const r of gr_notes) {
       const h = String(r.section || '').trim();
-      if (r.source !== 'summary' || !h || GENERIC.test(h)) continue;
+      if (r.source !== 'summary' || !h || GENERIC.test(h) || isAction(h) || isAction(r.parentSection)) continue;
       if (!topics.has(r.meetingId)) topics.set(r.meetingId, []);
       const t = topics.get(r.meetingId);
       if (!t.includes(h)) t.push(h);
