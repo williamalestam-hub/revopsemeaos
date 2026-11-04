@@ -584,8 +584,9 @@ dash.draw('mgr-list', (ul) => {
   };
   if (s0 !== 'ok') { ul.replaceChildren(); ul.classList.toggle('dash-skeleton', s0 === 'loading'); return; }
   ul.classList.remove('dash-skeleton');
-  // a search no manager matches says so, like the other search boxes
-  ul.replaceChildren(...(q ? (names.length ? [] : [OS.el('li', 'os-empty', 'No manager matches. Try part of a name.')]) : [item('', 'Everyone in the team', null)]), ...names.map((n) => item(n, n, counts.get(n))));
+  // a search no manager matches says so, like the other search boxes (with a team picked, only its managers are listed)
+  const none = region === 'All' ? 'No manager matches. Try part of a name.' : 'No manager in ' + region + ' matches. Try part of a name, or All EMEA.';
+  ul.replaceChildren(...(q ? (names.length ? [] : [OS.el('li', 'os-empty', none)]) : [item('', 'Everyone in the team', null)]), ...names.map((n) => item(n, n, counts.get(n))));
 });
 dash.draw('scope-label', (el) => {
   const m = mgrPick();
@@ -1105,7 +1106,7 @@ dash.draw('pd-act', (box) => {
   if (sf) out.push(sf);
   const lvAll = n ? OS.leavers() : null;
   const left = lvAll ? lvAll.rows.find((r) => r.name === n) || null : null;
-  const ask = left ? lvAsk(left) : n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book, open follow-ups with me and their selling activity in the last 4 weeks (counts only, no names of people or companies outside Legora), and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
+  const ask = left ? lvAsk(left) : n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book, open follow-ups with me and their selling activity in the last 4 weeks (counts only, no names of people or companies outside Legora, no subjects or email text in chat), and what I should do about any of it. Read only: change nothing and send nothing without my OK.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
   if (ask) out.push(ask);
   box.replaceChildren(...out);
 });

@@ -384,8 +384,8 @@ dash.calc('oo_points_act', {
     const num = (n) => Math.round(n).toLocaleString('en');
     const plural = (n, one, many) => num(n) + ' ' + (n === 1 ? one : many);
     const wk = (n) => (n == null ? '—' : (Math.round(n * 10) / 10).toLocaleString('en'));
-    // a change that rounds to 0 shows as 0%, not −0% or +0%
-    const sgn = (v) => { const a = Math.abs(Math.round(v * 100)); return (a === 0 ? '' : v < 0 ? '−' : '+') + a + '%'; };
+    // halves round away from zero, as OS.signedPct does; a change that rounds to 0 shows as 0%, not −0% or +0%
+    const sgn = (v) => { const a = Math.round(Math.abs(v) * 100); return (a === 0 ? '' : v < 0 ? '−' : '+') + a + '%'; };
     const day = (t) => (t == null ? '' : new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Paris' }).replace(',', ''));
     const list = (rs, f) => rs.slice(0, 4).map(f).join(', ') + (rs.length > 4 ? ' and ' + (rs.length - 4) + ' more' : '');
     const CORE = { customer: 'customer meetings', prospect: 'prospect meetings', external: 'external meetings' };

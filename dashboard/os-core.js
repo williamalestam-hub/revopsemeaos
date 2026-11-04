@@ -281,11 +281,13 @@ dash.loader('gr_notes', {
 // ---------- Helpers for drawings ----------
 window.OS = (() => {
   const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
-  const usd = (v) => (v == null || Number.isNaN(+v) ? '—' : (v < 0 ? '−$' : '$') + compact.format(Math.abs(+v)));
+  // a negative that formats as 0 (a few cents left over when sums cancel) shows as $0, not −$0
+  const usd = (v) => { if (v == null || Number.isNaN(+v)) return '—'; const s = compact.format(Math.abs(+v)); return (v < 0 && s !== '0' ? '−$' : '$') + s; };
   const num = (v) => (v == null || Number.isNaN(+v) ? '—' : d3.format(',')(Math.round(+v)));
   const pct = (v) => (v == null || Number.isNaN(+v) ? '—' : d3.format('.0%')(+v));
-  // a change in whole percent with its sign; one that rounds to 0 shows as 0%, not −0% or +0%
-  const signedPct = (v) => { if (v == null || Number.isNaN(+v)) return '—'; const a = Math.abs(Math.round(+v * 100)); return (a === 0 ? '' : v < 0 ? '−' : '+') + a + '%'; };
+  // a change in whole percent with its sign, rounded as OS.pct rounds (halves away from zero); one that rounds to 0
+  // shows as 0%, not −0% or +0%
+  const signedPct = (v) => { if (v == null || Number.isNaN(+v)) return '—'; const a = Math.round(Math.abs(+v) * 100); return (a === 0 ? '' : v < 0 ? '−' : '+') + a + '%'; };
   const day = (v) => (v ? d3.utcFormat('%-d %b %Y')(new Date(String(v).slice(0, 10) + 'T00:00:00Z')) : '—');
   const shortDay = (v) => (v ? d3.utcFormat('%-d %b')(new Date(String(v).slice(0, 10) + 'T00:00:00Z')) : '—');
   const region = () => (dash.params().region || 'All');
@@ -1336,7 +1338,9 @@ OS.oo = (() => {
     } else add('leavers', na('Leavers', 'leavers_core'));
     const ldSpeed = !ld ? '' : ld.hRate != null ? `${OS.pct(ld.hRate)} of demo requests worked within 1 business day (${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)}, last 30 days)`
       : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : !ld.lEligible && ld.notScored > 0 ? 'speed not timed for SMB-owned leads (automation moves them out of Ready)' : 'no timed demo requests in the last 30 days';
-    if (ld) { if (ld.handoffs || ld.readyNow) add('leads', `• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`, ld.demoWaiting || ld.stale || (ldRt && ldRt.routingIssues) ? 'medium' : null); }
+    // routing (LeanData fields) can fail while the rest loads: the line says so rather than dropping that part
+    const rtNa = !ldRt && failedSrc('ld_kpi_rt');
+    if (ld) { if (ld.handoffs || ld.readyNow) add('leads', `• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}${rtNa ? ' (routing not available)' : ''}`, ld.demoWaiting || ld.stale || (ldRt && ldRt.routingIssues) ? 'medium' : rtNa ? 'low' : null); }
     else add('leads', na('Leads', 'ld_kpi'));
     if (act) {
       if (act.blind || act.meetings || act.emails || act.sellers) {
