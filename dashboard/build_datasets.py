@@ -8,8 +8,8 @@ ROLES = ("'AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BEN
          "'DIR-EM-EMEA','DIR-BDR-EMEA'")
 OWNER = f"Owner.UserRole.Name IN ({ROLES})"
 # Closed deals count for the team that closed them: the owner's role stamped at close (Closed_Owner_Role__c, filled
-# since about April 2026) when it is a selling role, else the current owner's. The queries read deals that either
-# role puts in EMEA; the calcs decide which team each one counts for (a deal another region closed counts for them).
+# since about April 2026) when it is an EMEA sales role, else the current owner's. The queries read deals that either
+# role puts in EMEA; the calcs decide which team each one counts for.
 CLOSED_BY = f"(Closed_Owner_Role__c IN ({ROLES}) OR {OWNER})"
 GEO = "Sales_Region__c IN ('Northern Europe','FME','DACH','Iberia','Southern Europe','MEA','LATAM')"
 CREATED_NOT_FLOW = "(RecordType.Name != 'Renewal' OR Upsell_Renewal_Created_By__c != 'Flow')"

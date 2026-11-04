@@ -799,7 +799,7 @@ OS.defTable('partner-table', ['partner_pipe'], () => dash.data('partner_pipe').d
 OS.defChart('lost-chart', ['lost_reasons'], () => {
   const scope = mgrPick() ? 'M|' + mgrPick() : OS.region();
   return (dash.data('lost_reasons').data || []).filter((r) => r.scope === scope && r.thisOpps)
-    .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : r.was ? ' (was ' + r.was + ')' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
+    .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
     .sort((a, b) => b.thisQ - a.thisQ || b.lastQ - a.lastQ);
 }, (box, rows) => OS.hbars(box, rows, [{ k: 'thisQ', name: 'This quarter', color: dash.colors[0] }], OS.num));
 const rampCls = (v) => (v === 'Ramping' || v === 'Sourcing' ? 'ok' : v === 'Not ramping' || v === 'No Salesforce user' ? 'bad' : v === 'Too early' ? 'warn' : '');
@@ -1119,7 +1119,7 @@ OS.defTable('mv-table', ['pipe_moves'], () => (dash.data('pipe_moves').data || [
   { f: 'pulled', fmt: OS.num, num: true },
   { f: 'up', fmt: OS.num, num: true }, { f: 'down', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'intoCommit', fmt: OS.num, num: true }, { f: 'outCommit', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
-], { key: 'owner' });
+], { key: 'key' });
 
 // ===================== COVERAGE =====================
 const covKey = () => (mgrPick() ? 'M|' + mgrPick() : OS.region() === 'All' ? 'All|All' : OS.region() + '|All');
