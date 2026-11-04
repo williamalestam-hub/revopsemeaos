@@ -57,14 +57,16 @@ Salesforce role and changing scope never re-runs a query.
   `DIR-EM-EMEA`, `DIR-BDR-EMEA`. `AE-EMEA-NORDICS` is included: it is a real EMEA region that was missing
   from the original brief. Legal Engineering roles (`LE-EMEA`, …) are excluded.
 - **ARR**: `Finance_ARR_USD__c` (incremental ARR, USD) for pipeline, created and won;
-  `Incremental_Rep_Commit/Best_Case_ARR_USD__c` for forecast (best case is never below commit on the same deals,
-  so the upside call is won + best case, not won + commit + best case); `Order_Form_ARR_USD__c` for renewals at stake;
+  the forecast sums it by Rep Forecast Category: commit = deals in Commit, best case = Commit + Best Case (so
+  the upside call is won + best case, not won + commit + best case; the rep commit and best-case ARR fields
+  stopped being maintained on 1 Sep 2026 and are being removed); `Order_Form_ARR_USD__c` for renewals at stake;
   `Account.ARR_USD__c` for books. Never `Amount` (TCV).
 - **Renewals**: incremental ARR on renewals is roughly zero, so pipeline views are New Business + Upsell.
   Renewals show separately as contract ARR at stake (stage 1+; stage 0 renewals are Flow auto-created).
 - **Won**: by the date actually closed (`Actual_Close_Date__c`) everywhere: Pipeline, Forecast, Bookings, Home.
 - **Created**: owner-scoped; renewals auto-created by Flow (`Upsell_Renewal_Created_By__c = 'Flow'`) excluded.
-  BDR-sourced counts only `BDR-EMEA` / `DIR-BDR-EMEA` originating BDRs.
+  BDR-sourced counts only `BDR-EMEA` / `DIR-BDR-EMEA` originating BDRs, by the role stamped on the deal or, when
+  none was stamped, the BDR's current role.
 - **Missing from routing**: an active AE / SMB / BDR / EM user in no pool of their kind
   (`RR:` or `RR Gov:` for AEs, `RR SMB*`, `RR BDR:`, `EM*`) 7+ days after their Salesforce user was created.
   Users in their first 7 days show as "add next week", matching the add-in-week-2 practice. Without a Legora start
@@ -100,7 +102,8 @@ Salesforce role and changing scope never re-runs a query.
   Ready or New. Leads and pool seats come from their own sources, so a viewer without Lead or LeanData access still
   sees the deals, renewals and accounts (leads and pools then show —).
 - **Leads in scope**: leads an EMEA seller owns (any country), plus leads that are EMEA by country (`Region__c`) or
-  by LeanData routing region (`Routing_Region__c`), whoever owns them. They count for their current owner's team and
+  by LeanData routing region (`Routing_Region__c`, or the sub-region LATAM, which LeanData files under Rest of World
+  or North America), whoever owns them. They count for their current owner's team and
   manager; the Marketing Queue and owners outside EMEA sales show under All EMEA only. By source is always all EMEA.
 - **Hand-off and speed**: a hand-off is a lead becoming Ready (`Ready_Since__c`); it ends when the lead first leaves
   Ready (`First_Response_Timestamp__c`). Speed is business time between the two, Mon–Fri 09:00–18:00 Paris time, no

@@ -4,7 +4,7 @@
 // ===================== PIPELINE =====================
 dash.calc('pipe_team', {
   title: 'Pipeline by team and manager',
-  description: 'Open New Business and Upsell pipeline, rep commit, rep best case and stage bands per team and manager for this and next quarter, with closed won this quarter (by the date actually closed) and renewals at stake past stage 0. Best case is the rep\'s best-case ARR, never less than their commit on the same deals, so it already includes commit. Team comes from the owner role; "M|<manager>" rows total each manager\'s direct reports across teams.',
+  description: 'Open New Business and Upsell pipeline, rep commit, rep best case and stage bands per team and manager for this and next quarter, with closed won this quarter (by the date actually closed) and renewals at stake past stage 0. Commit is the ARR of deals the rep has put in the Commit forecast category; best case adds the Best Case category, so it already includes commit. Deals with no category count as pipeline only. Team comes from the owner role; "M|<manager>" rows total each manager\'s direct reports across teams.',
   inputs: ['pipe_stage', 'won_q', 'renew_stake'],
   fn: (pipe_stage, won_q, renew_stake) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -32,7 +32,9 @@ dash.calc('pipe_team', {
       each(r, (o) => {
         if (q === thisQ) {
           o.thisPipe += +r.arrUsd || 0; o.thisOpps += +r.opps || 0;
-          o.thisCommit += +r.commitUsd || 0; o.thisBest += Math.max(+r.bestCaseUsd || 0, +r.commitUsd || 0);
+          // by the rep forecast category: the rep commit and best-case ARR fields stopped being maintained on 1 Sep 2026
+          if (r.forecast === 'Commit') o.thisCommit += +r.arrUsd || 0;
+          if (r.forecast === 'Commit' || r.forecast === 'Best Case') o.thisBest += +r.arrUsd || 0;
           o['this' + band] += +r.arrUsd || 0;
         } else if (q === nextQ) {
           o.nextPipe += +r.arrUsd || 0; o.nextOpps += +r.opps || 0;
@@ -1156,7 +1158,7 @@ dash.calc('person_deals', {
 // ===================== FORECAST =====================
 dash.calc('forecast', {
   title: 'Forecast roll-up, this quarter',
-  description: 'Per team, per team and manager, per manager and for all EMEA, this quarter: closed won, rep commit and best case on open deals, open pipeline, and the two calls: won + commit, and won + best case (best case already includes commit, so it is not added on top). The upside is best case above commit. New Business and Upsell, incremental ARR.',
+  description: 'Per team, per team and manager, per manager and for all EMEA, this quarter: closed won, commit and best case on open deals (the ARR of deals in the rep forecast categories Commit, and Commit plus Best Case), open pipeline, and the two calls: won + commit, and won + best case (best case already includes commit, so it is not added on top). The upside is best case above commit. New Business and Upsell, incremental ARR.',
   inputs: ['pipe_team'],
   fn: (pipe_team) => pipe_team.map((r) => ({
     key: r.key, region: r.region, manager: r.manager, level: r.level,

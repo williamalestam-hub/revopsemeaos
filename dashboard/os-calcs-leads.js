@@ -110,7 +110,8 @@ dash.calc('ld_backlog', {
       const o = get(r);
       const demo = r.src === 'Inbound' && DEMO.includes(r.detail);
       o.ready += n; if (demo) o.demo += n;
-      if (r.routingRegion && r.routingRegion !== 'EMEA') { o.elsewhere += n; o.regions[r.routingRegion] = (o.regions[r.routingRegion] || 0) + n; }
+      // LATAM is EMEA's, though LeanData files it under Rest of World or North America
+      if (r.routingRegion && r.routingRegion !== 'EMEA' && r.routingSub !== 'LATAM') { o.elsewhere += n; o.regions[r.routingRegion] = (o.regions[r.routingRegion] || 0) + n; }
       if (!r.readyDay) {
         const created = String(r.firstCreated || '').slice(0, 10);
         if (created >= FIELD_ADDED) o.stampGap += n; else { o.noDate += n; o.before = true; if (demo) o.demoBefore = true; }

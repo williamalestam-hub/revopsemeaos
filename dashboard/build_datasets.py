@@ -23,10 +23,10 @@ def ds(id, title, description, src):
 
 # ---------- Pipeline ----------
 ds("pipe_stage", "Open pipeline by team",
-   "Open EMEA opportunities closing this or next quarter, by owner role, manager, type, stage and rep forecast category, in incremental ARR (USD).",
+   "Open EMEA opportunities closing this or next quarter, by owner role, manager, type, stage and rep forecast category, in incremental ARR (USD). Commit and best case come from the rep forecast category: the rep commit and best-case ARR fields stopped being maintained on 1 Sep 2026 and are being removed.",
    SF(f"""SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name recordType, StageName stage,
    Rep_Forecast_Category__c forecast, FISCAL_YEAR(CloseDate) fy, FISCAL_QUARTER(CloseDate) fq, COUNT(Id) opps,
-   SUM(Finance_ARR_USD__c) arrUsd, SUM(Incremental_Rep_Commit_ARR_USD__c) commitUsd, SUM(Incremental_Rep_Best_Case_ARR_USD__c) bestCaseUsd
+   SUM(Finance_ARR_USD__c) arrUsd
    FROM Opportunity WHERE {OPEN_WINDOW} AND {OWNER}
    GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name, StageName, Rep_Forecast_Category__c, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate)
    ORDER BY Owner.UserRole.Name, Owner.Manager.Name LIMIT 2000"""))
@@ -85,10 +85,11 @@ ds("cr_owner_q", "Created opps by rep",
    WHERE CreatedDate = THIS_FISCAL_QUARTER AND {OWNER} AND {CREATED_NOT_FLOW}
    GROUP BY Owner.Name, Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name LIMIT 2000"""))
 ds("cr_bdr", "BDR-sourced opps",
-   "Opportunities sourced by EMEA BDRs (BDR-EMEA and DIR-BDR-EMEA roles) this and last quarter, per BDR, whoever owns them; renewals auto-created by Flow left out.",
+   "Opportunities sourced by EMEA BDRs (BDR-EMEA and DIR-BDR-EMEA roles) this and last quarter, per BDR, whoever owns them; by the role stamped on the deal, or the BDR's current role when none was stamped; renewals auto-created by Flow left out.",
    SF(f"""SELECT CALENDAR_YEAR(convertTimezone(CreatedDate)) yr, CALENDAR_QUARTER(convertTimezone(CreatedDate)) qtr,
    Originating_BDR__r.Name bdr, Originating_BDR__r.Manager.Name bdrManager, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd
-   FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND Originating_BDR_Role__c IN ('BDR-EMEA', 'DIR-BDR-EMEA')
+   FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND (Originating_BDR_Role__c IN ('BDR-EMEA', 'DIR-BDR-EMEA')
+   OR (Originating_BDR_Role__c = null AND Originating_BDR__r.UserRole.Name IN ('BDR-EMEA', 'DIR-BDR-EMEA')))
    AND {CREATED_NOT_FLOW}
    GROUP BY CALENDAR_YEAR(convertTimezone(CreatedDate)), CALENDAR_QUARTER(convertTimezone(CreatedDate)), Originating_BDR__r.Name,
    Originating_BDR__r.Manager.Name LIMIT 2000"""))
@@ -336,14 +337,16 @@ ds("lv_leads", "Open leads owned by people who left",
 # In scope: owned by an EMEA seller (any country), or EMEA by country (Region__c, a formula: filter only, never group)
 # or by LeanData routing region, whoever owns it (the Marketing Queue included). The owner filter uses
 # Owner.UserRole.Name IN because a semi-join inside an OR fails. No lead names, emails, phones, companies or Ids are read.
-LEAD_SCOPE = f"({OWNER} OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA')"
+# LATAM is EMEA's (accounts, pools and roles already are), but LeanData files LATAM leads under the routing region
+# 'Rest of World' or 'North America' with the sub-region 'LATAM'
+LEAD_SCOPE = f"({OWNER} OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA' OR Routing_Sub_Region__c = 'LATAM')"
 LEAD_OPEN = "IsConverted = false AND Status NOT IN ('Disqualified','Converted')"
 ds("ld_ready", "Ready leads now",
-   "Leads in Ready now (not converted) that an EMEA seller owns, or that are EMEA by country or LeanData routing region whoever owns them (the Marketing Queue, other teams). Grouped per owner, LeanData routing region, lead source and detail, and the UTC day they became Ready, with the earliest created date. Counts only.",
+   "Leads in Ready now (not converted) that an EMEA seller owns, or that are EMEA by country or LeanData routing region (LATAM included) whoever owns them (the Marketing Queue, other teams). Grouped per owner, LeanData routing region and sub-region, lead source and detail, and the UTC day they became Ready, with the earliest created date. Counts only.",
    SF(f"""SELECT OwnerId ownerId, Owner.Name owner, Owner.Type ownerType, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive,
-   Routing_Region__c routingRegion, LeadSource src, Lead_Source_Details__c detail, DAY_ONLY(Ready_Since__c) readyDay, COUNT(Id) leads,
+   Routing_Region__c routingRegion, Routing_Sub_Region__c routingSub, LeadSource src, Lead_Source_Details__c detail, DAY_ONLY(Ready_Since__c) readyDay, COUNT(Id) leads,
    MIN(CreatedDate) firstCreated FROM Lead WHERE Status = 'Ready' AND IsConverted = false AND {LEAD_SCOPE}
-   GROUP BY OwnerId, Owner.Name, Owner.Type, Owner.UserRole.Name, Owner.IsActive, Routing_Region__c, LeadSource, Lead_Source_Details__c,
+   GROUP BY OwnerId, Owner.Name, Owner.Type, Owner.UserRole.Name, Owner.IsActive, Routing_Region__c, Routing_Sub_Region__c, LeadSource, Lead_Source_Details__c,
    DAY_ONLY(Ready_Since__c) LIMIT 2000"""))
 # one row per lead (GROUP BY Id without selecting it): exact times for business-hour speed, but no Id or prospect detail
 ds("ld_handoffs", "Lead hand-offs, last 30 days",

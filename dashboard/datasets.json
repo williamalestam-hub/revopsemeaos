@@ -1,13 +1,13 @@
 {
  "pipe_stage": {
   "title": "Open pipeline by team",
-  "description": "Open EMEA opportunities closing this or next quarter, by owner role, manager, type, stage and rep forecast category, in incremental ARR (USD).",
+  "description": "Open EMEA opportunities closing this or next quarter, by owner role, manager, type, stage and rep forecast category, in incremental ARR (USD). Commit and best case come from the rep forecast category: the rep commit and best-case ARR fields stopped being maintained on 1 Sep 2026 and are being removed.",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name recordType, StageName stage, Rep_Forecast_Category__c forecast, FISCAL_YEAR(CloseDate) fy, FISCAL_QUARTER(CloseDate) fq, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd, SUM(Incremental_Rep_Commit_ARR_USD__c) commitUsd, SUM(Incremental_Rep_Best_Case_ARR_USD__c) bestCaseUsd FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name, StageName, Rep_Forecast_Category__c, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) ORDER BY Owner.UserRole.Name, Owner.Manager.Name LIMIT 2000"
+    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, RecordType.Name recordType, StageName stage, Rep_Forecast_Category__c forecast, FISCAL_YEAR(CloseDate) fy, FISCAL_QUARTER(CloseDate) fq, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER) AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name, StageName, Rep_Forecast_Category__c, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) ORDER BY Owner.UserRole.Name, Owner.Manager.Name LIMIT 2000"
    }
   }
  },
@@ -121,13 +121,13 @@
  },
  "cr_bdr": {
   "title": "BDR-sourced opps",
-  "description": "Opportunities sourced by EMEA BDRs (BDR-EMEA and DIR-BDR-EMEA roles) this and last quarter, per BDR, whoever owns them; renewals auto-created by Flow left out.",
+  "description": "Opportunities sourced by EMEA BDRs (BDR-EMEA and DIR-BDR-EMEA roles) this and last quarter, per BDR, whoever owns them; by the role stamped on the deal, or the BDR's current role when none was stamped; renewals auto-created by Flow left out.",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT CALENDAR_YEAR(convertTimezone(CreatedDate)) yr, CALENDAR_QUARTER(convertTimezone(CreatedDate)) qtr, Originating_BDR__r.Name bdr, Originating_BDR__r.Manager.Name bdrManager, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND Originating_BDR_Role__c IN ('BDR-EMEA', 'DIR-BDR-EMEA') AND (RecordType.Name != 'Renewal' OR Upsell_Renewal_Created_By__c != 'Flow') GROUP BY CALENDAR_YEAR(convertTimezone(CreatedDate)), CALENDAR_QUARTER(convertTimezone(CreatedDate)), Originating_BDR__r.Name, Originating_BDR__r.Manager.Name LIMIT 2000"
+    "q": "SELECT CALENDAR_YEAR(convertTimezone(CreatedDate)) yr, CALENDAR_QUARTER(convertTimezone(CreatedDate)) qtr, Originating_BDR__r.Name bdr, Originating_BDR__r.Manager.Name bdrManager, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity WHERE (CreatedDate = THIS_FISCAL_QUARTER OR CreatedDate = LAST_FISCAL_QUARTER) AND (Originating_BDR_Role__c IN ('BDR-EMEA', 'DIR-BDR-EMEA') OR (Originating_BDR_Role__c = null AND Originating_BDR__r.UserRole.Name IN ('BDR-EMEA', 'DIR-BDR-EMEA'))) AND (RecordType.Name != 'Renewal' OR Upsell_Renewal_Created_By__c != 'Flow') GROUP BY CALENDAR_YEAR(convertTimezone(CreatedDate)), CALENDAR_QUARTER(convertTimezone(CreatedDate)), Originating_BDR__r.Name, Originating_BDR__r.Manager.Name LIMIT 2000"
    }
   }
  },
@@ -574,13 +574,13 @@
  },
  "ld_ready": {
   "title": "Ready leads now",
-  "description": "Leads in Ready now (not converted) that an EMEA seller owns, or that are EMEA by country or LeanData routing region whoever owns them (the Marketing Queue, other teams). Grouped per owner, LeanData routing region, lead source and detail, and the UTC day they became Ready, with the earliest created date. Counts only.",
+  "description": "Leads in Ready now (not converted) that an EMEA seller owns, or that are EMEA by country or LeanData routing region (LATAM included) whoever owns them (the Marketing Queue, other teams). Grouped per owner, LeanData routing region and sub-region, lead source and detail, and the UTC day they became Ready, with the earliest created date. Counts only.",
   "source": {
    "kind": "query",
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT OwnerId ownerId, Owner.Name owner, Owner.Type ownerType, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, Routing_Region__c routingRegion, LeadSource src, Lead_Source_Details__c detail, DAY_ONLY(Ready_Since__c) readyDay, COUNT(Id) leads, MIN(CreatedDate) firstCreated FROM Lead WHERE Status = 'Ready' AND IsConverted = false AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA') GROUP BY OwnerId, Owner.Name, Owner.Type, Owner.UserRole.Name, Owner.IsActive, Routing_Region__c, LeadSource, Lead_Source_Details__c, DAY_ONLY(Ready_Since__c) LIMIT 2000"
+    "q": "SELECT OwnerId ownerId, Owner.Name owner, Owner.Type ownerType, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, Routing_Region__c routingRegion, Routing_Sub_Region__c routingSub, LeadSource src, Lead_Source_Details__c detail, DAY_ONLY(Ready_Since__c) readyDay, COUNT(Id) leads, MIN(CreatedDate) firstCreated FROM Lead WHERE Status = 'Ready' AND IsConverted = false AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA' OR Routing_Sub_Region__c = 'LATAM') GROUP BY OwnerId, Owner.Name, Owner.Type, Owner.UserRole.Name, Owner.IsActive, Routing_Region__c, Routing_Sub_Region__c, LeadSource, Lead_Source_Details__c, DAY_ONLY(Ready_Since__c) LIMIT 2000"
    }
   }
  },
@@ -592,7 +592,7 @@
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT OwnerId ownerId, Owner.Type ownerType, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, LeadSource src, Lead_Source_Details__c detail, Status status, IsConverted converted, MIN(Ready_Since__c) readyAt, MIN(First_Response_Timestamp__c) respAt, MIN(Last_Assigned_Date__c) routedAt FROM Lead WHERE Ready_Since__c = LAST_N_DAYS:30 AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA') GROUP BY Id, OwnerId, Owner.Type, Owner.Name, Owner.UserRole.Name, Owner.IsActive, LeadSource, Lead_Source_Details__c, Status, IsConverted ORDER BY MIN(Ready_Since__c) DESC LIMIT 2000"
+    "q": "SELECT OwnerId ownerId, Owner.Type ownerType, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, LeadSource src, Lead_Source_Details__c detail, Status status, IsConverted converted, MIN(Ready_Since__c) readyAt, MIN(First_Response_Timestamp__c) respAt, MIN(Last_Assigned_Date__c) routedAt FROM Lead WHERE Ready_Since__c = LAST_N_DAYS:30 AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA' OR Routing_Sub_Region__c = 'LATAM') GROUP BY Id, OwnerId, Owner.Type, Owner.Name, Owner.UserRole.Name, Owner.IsActive, LeadSource, Lead_Source_Details__c, Status, IsConverted ORDER BY MIN(Ready_Since__c) DESC LIMIT 2000"
    }
   }
  },
@@ -604,7 +604,7 @@
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT LeadSource src, Lead_Source_Details__c detail, Owner.Type ownerType, Owner.UserRole.Name ownerRole, Routing_Sub_Region__c subRegion, Status status, LeanData__Routing_Action__c routing, COUNT(Id) leads, COUNT(Ready_Since__c) readyStamped, COUNT(Last_Assigned_Date__c) routedToPerson FROM Lead WHERE CreatedDate = LAST_N_DAYS:30 AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA') GROUP BY LeadSource, Lead_Source_Details__c, Owner.Type, Owner.UserRole.Name, Routing_Sub_Region__c, Status, LeanData__Routing_Action__c LIMIT 2000"
+    "q": "SELECT LeadSource src, Lead_Source_Details__c detail, Owner.Type ownerType, Owner.UserRole.Name ownerRole, Routing_Sub_Region__c subRegion, Status status, LeanData__Routing_Action__c routing, COUNT(Id) leads, COUNT(Ready_Since__c) readyStamped, COUNT(Last_Assigned_Date__c) routedToPerson FROM Lead WHERE CreatedDate = LAST_N_DAYS:30 AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA' OR Routing_Sub_Region__c = 'LATAM') GROUP BY LeadSource, Lead_Source_Details__c, Owner.Type, Owner.UserRole.Name, Routing_Sub_Region__c, Status, LeanData__Routing_Action__c LIMIT 2000"
    }
   }
  },
@@ -616,7 +616,7 @@
    "connector": "Salesforce",
    "tool": "soqlQuery",
    "args": {
-    "q": "SELECT OwnerId ownerId, Owner.Type ownerType, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, Status status, Lifecycle_Stage__c lifecycle, LeanData__Routing_Status__c ldStatus, LeanData__Routing_Action__c ldAction, COUNT(Id) leads, MAX(LeanData__Reporting_Timestamp__c) lastProcessed FROM Lead WHERE IsConverted = false AND Status NOT IN ('Disqualified','Converted') AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA') GROUP BY OwnerId, Owner.Type, Owner.Name, Owner.UserRole.Name, Owner.IsActive, Status, Lifecycle_Stage__c, LeanData__Routing_Status__c, LeanData__Routing_Action__c LIMIT 2000"
+    "q": "SELECT OwnerId ownerId, Owner.Type ownerType, Owner.Name owner, Owner.UserRole.Name ownerRole, Owner.IsActive ownerActive, Status status, Lifecycle_Stage__c lifecycle, LeanData__Routing_Status__c ldStatus, LeanData__Routing_Action__c ldAction, COUNT(Id) leads, MAX(LeanData__Reporting_Timestamp__c) lastProcessed FROM Lead WHERE IsConverted = false AND Status NOT IN ('Disqualified','Converted') AND (Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR Region__c = 'EMEA' OR Routing_Region__c = 'EMEA' OR Routing_Sub_Region__c = 'LATAM') GROUP BY OwnerId, Owner.Type, Owner.Name, Owner.UserRole.Name, Owner.IsActive, Status, Lifecycle_Stage__c, LeanData__Routing_Status__c, LeanData__Routing_Action__c LIMIT 2000"
    }
   }
  },
