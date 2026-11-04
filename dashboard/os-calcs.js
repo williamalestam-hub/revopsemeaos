@@ -2405,9 +2405,9 @@ dash.calc('checks_ld_cap', {
 
 dash.calc('act_reps', {
   title: 'Selling activity per person',
-  description: 'One row per EMEA seller: emails sent (captured from their mailbox) and external meetings in the last 4 weeks (28 days to yesterday) and the 4 weeks before, meetings booked for the next 2 weeks, split customer / prospect by the account status today; the change on the 4 weeks before for current sellers whose capture covered both windows; business days since the last email or meeting (Paris calendar, up to the last day the queries read in your Salesforce time zone); and flags. Leaders are shown but never flagged; people in their first 28 days are New. Activity your access can\'t see shows as blank, not zero.',
-  inputs: ['act_mail', 'act_mail_prev', 'act_meet', 'act_meet_prev', 'roster', 'sf_me'],
-  fn: (act_mail, act_mail_prev, act_meet, act_meet_prev, roster, sf_me) => {
+  description: 'One row per EMEA seller: emails sent (captured from their mailbox) and external meetings in the last 4 weeks (28 days to yesterday) and the 4 weeks before, meetings booked for the next 2 weeks, split customer / prospect by the account status today; the change on the 4 weeks before for current sellers and leaders whose capture covered both windows; business days since the last email or meeting (Paris calendar, up to yesterday in Paris or your browser\'s time zone, whichever is earlier); and flags. Leaders are shown but never flagged; people in their first 28 days are New. When your access shows activity for fewer than half the sellers, or almost none of one channel, what it hides is blank, not zero; below that, hidden activity reads as nothing captured.',
+  inputs: ['act_mail', 'act_mail_prev', 'act_meet', 'act_meet_prev', 'roster'],
+  fn: (act_mail, act_mail_prev, act_meet, act_meet_prev, roster) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const kindOf = (role) => (/^AE-EMEA-/.test(role || '') ? 'AE' : role === 'SMB-EMEA' ? 'SMB' : role === 'BDR-EMEA' ? 'BDR' : role === 'EM-EMEA' || role === 'EM-EMEA-LATAM' ? 'EM' : 'Leader');
     const NEW_DAYS = 28, CMP_DAYS = 56, QUIET_BD = 5, QUIET_LONG_BD = 10, GAP_BD = 10, RECENT_BD = 3;
@@ -2417,12 +2417,11 @@ dash.calc('act_reps', {
     const dayIn = (f, t) => { const p = Object.fromEntries(f.formatToParts(new Date(t)).map((x) => [x.type, x.value])); return Date.UTC(+p.year, +p.month - 1, +p.day) / 864e5; };
     const dayN = (t) => dayIn(fmt, t);
     const dayLbl = (n) => new Date(n * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-    // the queries' "yesterday" is in the viewer's Salesforce time zone: never count a Paris day they haven't read yet
-    // (a zone behind Paris, such as Los Angeles, is still on the day before until its own midnight)
-    let sfFmt;
-    try { sfFmt = new Intl.DateTimeFormat('en-GB', { timeZone: (sf_me && sf_me[0] && sf_me[0].timeZone) || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }); }
-    catch (e) { sfFmt = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' }); }
-    const today = Math.min(dayN(Date.now()), dayIn(sfFmt, Date.now()));
+    // the queries' "yesterday" is in the viewer's Salesforce time zone, normally where their browser is: never count a
+    // Paris day it hasn't reached (a browser behind Paris is still on the day before until its own midnight). A
+    // Salesforce zone set behind the browser's can still count one day early in the morning: the Activity view says so.
+    const here = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const today = Math.min(dayN(Date.now()), dayIn(here, Date.now()));
     const dateN = (s) => { const t = Date.parse(String(s || '').slice(0, 10) + 'T00:00:00Z'); return Number.isNaN(t) ? null : t / 864e5; };
     // Mon-Fri days after the day of t, up to and including yesterday (Paris calendar, no holidays)
     const idleBd = (t) => { if (t == null) return null; let n = 0; for (let d = dayN(t) + 1; d < today; d++) { const w = new Date(d * 864e5).getUTCDay(); if (w !== 0 && w !== 6) n += 1; } return n; };
@@ -2508,8 +2507,9 @@ dash.calc('act_reps', {
     const anySeen = sellers.filter((r) => r.emails || r.meetings || r.emailsPrev || r.meetPrev).length;
     const limited = sellers.length >= 10 && anySeen < sellers.length / 2;
     const withMeet = sellers.filter((r) => r.meetings >= OFF_MEET), withMail = sellers.filter((r) => r.emails >= OFF_MAIL);
-    const mailHidden = !limited && withMeet.length >= 10 && withMeet.filter((r) => r.emails > 0).length < withMeet.length / 2;
-    const meetHidden = !limited && withMail.length >= 10 && withMail.filter((r) => r.meetings > 0).length < withMail.length / 2;
+    // a channel hidden for the sellers the viewer can see (with limited access too: these are only sellers with activity)
+    const mailHidden = withMeet.length >= 10 && withMeet.filter((r) => r.emails > 0).length < withMeet.length / 2;
+    const meetHidden = withMail.length >= 10 && withMail.filter((r) => r.meetings > 0).length < withMail.length / 2;
     // usual range per role: core meetings a week among active sellers past 28 days with something captured (none when meetings are hidden)
     const p25 = new Map();
     for (const k of ['AE', 'SMB', 'BDR', 'EM']) {
@@ -2528,8 +2528,9 @@ dash.calc('act_reps', {
       else {
         const seenMail = !mailHidden, seenMeet = !meetHidden;
         const tenured = r.tenure == null || r.tenure >= NEW_DAYS;
-        mailOff = seenMail && tenured && r.meetings >= OFF_MEET && (r.emails === 0 || (r.idleMail != null && r.idleMail >= GAP_BD && r.idleMeet != null && r.idleMeet <= RECENT_BD));
-        calOff = seenMeet && tenured && r.kind !== 'BDR' && r.emails >= OFF_MAIL && (r.meetings === 0 ? true : r.idleMeet != null && r.idleMeet >= GAP_BD && r.idleMail != null && r.idleMail <= RECENT_BD && r.meetPrev >= OFF_MEET);
+        // each gap is read off the other channel, so both must be visible
+        mailOff = seenMail && seenMeet && tenured && r.meetings >= OFF_MEET && (r.emails === 0 || (r.idleMail != null && r.idleMail >= GAP_BD && r.idleMeet != null && r.idleMeet <= RECENT_BD));
+        calOff = seenMeet && seenMail && tenured && r.kind !== 'BDR' && r.emails >= OFF_MAIL && (r.meetings === 0 ? true : r.idleMeet != null && r.idleMeet >= GAP_BD && r.idleMail != null && r.idleMail <= RECENT_BD && r.meetPrev >= OFF_MEET);
         const nothing = (r.emails === 0 || !seenMail) && (r.meetings === 0 || !seenMeet) && (seenMail || seenMeet);
         if (nothing) flags.push('No capture');
         else {
@@ -2543,12 +2544,16 @@ dash.calc('act_reps', {
         }
         status = flags.length ? flags.slice().sort((a, b) => RANK.indexOf(a) - RANK.indexOf(b))[0] : 'Active';
       }
-      // like-for-like only for current sellers whose capture covers the last 4 weeks too, on a channel the viewer can see
-      const capOk = !flags.includes('No capture');
+      // like-for-like only for current sellers and leaders whose capture covers the last 4 weeks too, on a channel the
+      // viewer can see (leaders are never flagged, so their nothing-captured test is here)
+      const capOk = !flags.includes('No capture') && !(r.kind === 'Leader' && r.active && (r.emails === 0 || mailHidden) && (r.meetings === 0 || meetHidden));
       const cmpMeet = r.cmpMeet && r.active && !meetHidden && !calOff && capOk, cmpMail = r.cmpMail && r.active && !mailHidden && !mailOff && capOk;
       const lost = (r.cmpMeet || r.cmpMail) && !cmpMeet && !cmpMail;
       const blind = status === 'Not visible';
-      const trendNote = blind ? 'not visible with your access' : !lost ? r.trendNote : !r.active ? 'left' : !capOk ? 'nothing captured in the last 4 weeks' : mailOff || calOff ? 'capture looks off in the last 4 weeks' : 'not visible with your access';
+      // a comparison lost to a hidden channel: give the visible channel's own reason, since its line is the one shown
+      const visPrev = mailHidden ? r.meetPrev : r.emailsPrev, visFirst = mailHidden ? r.firstMeetPrev : r.firstMailPrev;
+      const visNote = mailHidden && meetHidden ? 'not visible with your access' : !visPrev ? 'nothing captured in the 4 weeks before' : visFirst != null ? 'capture started ' + dayLbl(dayN(visFirst)) : 'capture didn\'t cover the 4 weeks before';
+      const trendNote = blind ? 'not visible with your access' : !lost ? r.trendNote : !r.active ? 'left' : !capOk ? 'nothing captured in the last 4 weeks' : mailOff || calOff ? 'capture looks off in the last 4 weeks' : visNote;
       // what the viewer's access can't see is blank, not zero: a hidden channel, or a seller whose activity is all hidden.
       // The last touch then comes from the channel that can be seen.
       const noMail = mailHidden || blind, noMeet = meetHidden || blind;
@@ -2588,7 +2593,7 @@ dash.calc('act_ranges', {
 
 dash.calc('act_kpi', {
   title: 'Selling activity headline',
-  description: 'Per team, per manager ("M|<manager>", direct reports) and for all EMEA: external meetings and emails sent in the last 4 weeks (customer / prospect), meetings booked for the next 2 weeks, meetings and emails per seller a week, the like-for-like change on the 4 weeks before (only current sellers whose capture covered both windows, with how many were compared), how many sellers are quiet, slowing, have nothing booked, are below the usual range or have nothing captured, and for how many sellers your access shows no activity at all. A channel your access hides is blank.',
+  description: 'Per team, per manager ("M|<manager>", direct reports) and for all EMEA: external meetings and emails sent in the last 4 weeks (customer / prospect), meetings booked for the next 2 weeks, meetings and emails per seller a week, the like-for-like change on the 4 weeks before (only current sellers and leaders whose capture covered both windows, with how many were compared), and how many sellers are quiet, slowing, have nothing booked, are below the usual range or have nothing captured. When your access shows activity for fewer than half the sellers, it also gives for how many in the scope it shows none, and a scope where it shows none at all is blank; a channel your access hides is blank.',
   inputs: ['act_reps'],
   fn: (act_reps) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
@@ -2620,6 +2625,12 @@ dash.calc('act_kpi', {
       // a channel the viewer's access hides is blank, not zero
       if (g.mailHidden) for (const f of ['emails', 'emailsCust', 'emailsPros', 'people', 'accounts', 'emailsPrev']) o[f] = null;
       if (g.meetHidden) for (const f of ['meetings', 'meetCust', 'meetPros', 'events', 'booked', 'bookedCust', 'bookedPros', 'custMet', 'meetPrev', 'meetWk', 'custShare', 'meetPerSellerWk', 'meetChg']) o[f] = null;
+      // flags that can't fire with a channel hidden: Quiet needs both, Nothing booked needs meetings
+      if (g.mailHidden || g.meetHidden) o.quiet = o.quietLong = null;
+      if (g.meetHidden) o.nothingBooked = null;
+      // a scope where the viewer's access shows no seller's activity: blank, not a row of zeros
+      if (o.sellers && o.notVisible >= o.sellers) for (const f of ['captured', 'meetings', 'meetCust', 'meetPros', 'events', 'booked', 'bookedCust', 'bookedPros', 'emails', 'emailsCust', 'emailsPros', 'people', 'accounts', 'custMet', 'meetPrev', 'emailsPrev',
+        'meetWk', 'emailsWk', 'custShare', 'meetPerSellerWk', 'emailsPerSellerWk', 'lflMeetReps', 'meetChg', 'lflMailReps', 'emailsChg', 'notCompared', 'quiet', 'quietLong', 'slowing', 'nothingBooked', 'belowRange', 'noCapture', 'captureGap', 'needLook', 'badge', 'checkCapture']) o[f] = null;
       return o;
     });
   },
@@ -2644,7 +2655,9 @@ dash.calc('act_trust', {
     const g = act_reps[0] || {};
     const nc = sel.filter((r) => r.flags.includes('No capture')).length, gap = sel.filter((r) => r.flags.includes('Capture gap')).length;
     out.push({ id: 'capture', measure: 'Sellers with nothing captured or a capture gap', value: nc + gap, fmt: 'n', detail: num(nc) + (g.mailHidden ? ' with no meeting captured in 4 weeks (emails not visible with your access)' : g.meetHidden ? ' with no sent email captured in 4 weeks (meetings not visible with your access)' : ' with no sent email and no meeting captured in 4 weeks') + ' · ' + num(gap) + ' with mailbox or calendar capture that looks off. Their numbers read low for data reasons; see Data checks.', severity: nc + gap ? 'warn' : 'info' });
-    out.push({ id: 'access', measure: 'Hidden by your access', value: g.limited || g.mailHidden || g.meetHidden ? 1 : 0, fmt: 'n', detail: g.limited ? 'Your Salesforce access shows activity for ' + num(g.visibleSellers) + ' of ' + num(g.sellers) + ' sellers; the others show Not visible.' : g.mailHidden ? 'Your access shows meetings but almost no captured emails, so emails show — and no one is flagged Quiet.' : g.meetHidden ? 'Your access shows emails but almost no meetings, so meetings show — and only email-based flags remain.' : 'Your access shows activity for ' + num(g.visibleSellers || 0) + ' of ' + num(g.sellers || 0) + ' sellers past their first 28 days.', severity: g.limited || g.mailHidden || g.meetHidden ? 'warn' : 'info' });
+    out.push({ id: 'access', measure: 'Hidden by your access', value: g.limited || g.mailHidden || g.meetHidden ? 1 : 0, fmt: 'n', detail: !(g.limited || g.mailHidden || g.meetHidden) ? 'Your access shows activity for ' + num(g.visibleSellers || 0) + ' of ' + num(g.sellers || 0) + ' sellers past their first 28 days.'
+      : (g.limited ? 'Your Salesforce access shows activity for ' + num(g.visibleSellers) + ' of ' + num(g.sellers) + ' sellers; the others show Not visible.' + (g.mailHidden || g.meetHidden ? ' For those it shows, it' : '') : 'Your access')
+        + (g.mailHidden ? ' shows meetings but almost no captured emails, so emails show — and no one is flagged Quiet.' : g.meetHidden ? ' shows emails but almost no meetings, so meetings show — and only email-based flags remain.' : ''), severity: g.limited || g.mailHidden || g.meetHidden ? 'warn' : 'info' });
     // held and booked meetings are told apart by Activity_in_Past__c (start before now): check the split still holds
     const tsx = (x) => { const t = Date.parse(String(x || '').replace(/([+-]\d\d)(\d\d)$/, '$1:$2')); return Number.isNaN(t) ? null : t; };
     const nowT = Date.now();
@@ -2659,7 +2672,7 @@ dash.calc('act_trust', {
 
 dash.calc('team_act', {
   title: 'Selling activity per team',
-  description: 'For each person in team_tree, their whole team (them and everyone below them in the Salesforce manager chain): external meetings in the last 4 weeks (customer / prospect), booked for the next 2 weeks, emails sent, meetings per seller a week, the like-for-like change in meetings on the 4 weeks before, and how many people are quiet, slowing or have nothing booked. Blank for a team with sellers your access shows no activity for (and meetings blank when your access hides meetings), rather than a partial total. Its own calc, so the scorecard still loads when activity can\'t be read.',
+  description: 'For each person in team_tree, their whole team (them and everyone below them in the Salesforce manager chain): external meetings in the last 4 weeks (customer / prospect), booked for the next 2 weeks, emails sent, meetings per seller a week, the like-for-like change in meetings on the 4 weeks before, and how many people are quiet, slowing or have nothing booked. When your access shows activity for fewer than half the sellers, a team with sellers it shows none for is blank rather than a partial total; meetings are blank when it hides meetings, and flags that can\'t fire with a channel hidden are blank too. Its own calc, so the scorecard still loads when activity can\'t be read.',
   inputs: ['team_tree', 'act_reps'],
   fn: (team_tree, act_reps) => {
     const kids = new Map();
@@ -2678,8 +2691,11 @@ dash.calc('team_act', {
         actEmails: g.mailHidden ? null : sum(rs, 'emails'), actMeetPerSellerWk: cap.length ? sum(cap, 'meetings') / cap.length / 4 : null,
         actMeetChg: pm >= 20 ? (sum(lm, 'meetings') - pm) / pm : null, actCompared: lm.length,
         actQuiet: has('Quiet'), actSlowing: has('Slowing'), actNothingBooked: has('Nothing booked'), actNoCapture: has('No capture'),
-        actHidden: rs.filter((r) => r.status === 'Not visible').length };
-      o.actFlags = o.actQuiet + o.actSlowing + o.actNothingBooked;
+        actHidden: rs.filter((r) => r.status === 'Not visible').length, actMailHidden: !!g.mailHidden, actMeetHidden: !!g.meetHidden };
+      // flags that can't fire with a channel hidden are blank, not 0: Quiet needs both channels, Nothing booked needs meetings
+      if (g.mailHidden || g.meetHidden) o.actQuiet = null;
+      if (g.meetHidden) o.actNothingBooked = null;
+      o.actFlags = (o.actQuiet || 0) + o.actSlowing + (o.actNothingBooked || 0);
       // blank rather than a partial total: a team with sellers whose activity the viewer's access hides, or meetings hidden
       const blank = (fs) => { for (const f of fs) o[f] = null; };
       if (o.actHidden) blank(['actMeetings', 'actMeetCust', 'actMeetPros', 'actBooked', 'actBookedPros', 'actEmails', 'actMeetPerSellerWk', 'actMeetChg', 'actCompared', 'actQuiet', 'actSlowing', 'actNothingBooked', 'actNoCapture', 'actFlags']);
@@ -2753,7 +2769,7 @@ dash.calc('checks_act', {
 
 dash.calc('oo_points_act', {
   title: '1:1 numbers and talking points, activity',
-  description: 'The activity lines of each 1:1 agenda (for a leader, their whole team): numbers (meetings, emails, booked, the like-for-like change and the usual range for their role) and up to 3 talking points, most urgent first: nothing captured for 5+ business days, the role\'s meetings (or a BDR\'s emails) well down on the 4 weeks before, nothing booked for the next 2 weeks, no prospect meetings, below the usual range for the role, and capture problems. People in their first 28 days get the numbers only. Its own calc, so agendas still build when activity can\'t be read; the agenda merges it in by severity, after the core and routing points.',
+  description: 'The activity lines of each 1:1 agenda (for a leader, their whole team): numbers (meetings, emails, booked, the like-for-like change and the usual range for their role) and up to 3 talking points, most urgent first: nothing captured for 5+ business days, the role\'s meetings (or a BDR\'s emails) well down on the 4 weeks before, nothing booked for the next 2 weeks, no prospect meetings, below the usual range for the role, and capture problems. People in their first 28 days get the numbers only; a person, or a team, whose activity the viewer\'s access doesn\'t show gets a line saying so instead of zeros. Its own calc, so agendas still build when activity can\'t be read; the agenda merges it in by severity, after the core and routing points.',
   inputs: ['team_tree', 'act_reps', 'act_ranges', 'books_owner'],
   fn: (team_tree, act_reps, act_ranges, books_owner) => {
     const MAX_TALK = 3;
@@ -2783,7 +2799,9 @@ dash.calc('oo_points_act', {
       const chk = { screen: 'actions', view: 'checks' };
       if (!lead) {
         const r = by.get(t.name);
-        if (!r || !r.active || r.status === 'Not visible' || (r.kind === 'Leader' && !r.meetings && !r.emails)) continue;
+        if (!r || !r.active || (r.kind === 'Leader' && !r.meetings && !r.emails)) continue;
+        // say so rather than leave activity out: the agenda is copied, emailed and sent to Claude
+        if (r.status === 'Not visible') { push('numbers', '', 'Activity: your Salesforce access shows no sent email or meeting of theirs in the last 8 weeks.', { actHidden: true }); continue; }
         const meetTxt = r.meetings == null ? 'meetings not visible with your access' : plural(r.meetings, 'external meeting', 'external meetings') + ' (' + num(r.meetCust) + ' with customers, ' + num(r.meetPros) + ' with prospects)';
         push('numbers', '', 'Activity, last 4 weeks: ' + meetTxt + ' and ' + emailsTxt(r.emails, r.people, r.accounts) + (r.booked == null ? '' : '; ' + num(r.booked) + ' booked for the next 2 weeks') + '.');
         const bits = [];
@@ -2811,7 +2829,9 @@ dash.calc('oo_points_act', {
         const live = rs.filter((r) => r.active && (r.emails || r.meetings));
         const chg = pm >= 20 ? (nm - pm) / pm : null;
         const hid = rs.filter((r) => r.active && r.status === 'Not visible').length, sel = rs.filter((r) => r.active && r.kind !== 'Leader').length;
-        push('numbers', '', 'Team activity, last 4 weeks: ' + (g.meetHidden ? 'meetings not visible with your access' : plural(sum('meetings'), 'external meeting', 'external meetings') + ' (' + num(sum('meetCust')) + ' with customers, ' + num(sum('meetPros')) + ' with prospects), ' + num(sum('booked')) + ' booked for the next 2 weeks') + '; ' + (g.mailHidden ? 'emails not visible with your access' : plural(sum('emails'), 'email', 'emails') + ' sent') + '.'
+        // no seller's activity visible: say so instead of a line of zeros (the weekly summary does the same)
+        if (sel && hid >= sel) push('numbers', '', 'Team activity, last 4 weeks: not visible with your Salesforce access (it shows no activity for any of the ' + plural(sel, 'seller', 'sellers') + ' in this team).', { actHidden: true });
+        else push('numbers', '', 'Team activity, last 4 weeks: ' + (g.meetHidden ? 'meetings not visible with your access' : plural(sum('meetings'), 'external meeting', 'external meetings') + ' (' + num(sum('meetCust')) + ' with customers, ' + num(sum('meetPros')) + ' with prospects), ' + num(sum('booked')) + ' booked for the next 2 weeks') + '; ' + (g.mailHidden ? 'emails not visible with your access' : plural(sum('emails'), 'email', 'emails') + ' sent') + '.'
           + (chg != null ? ' Meetings ' + sgn(chg) + ' like-for-like on the 4 weeks before (' + num(lm.length) + ' of ' + num(live.length) + ' people compared).' : '')
           + (hid ? ' Your access shows no activity for ' + num(hid) + ' of the ' + plural(sel, 'seller', 'sellers') + ' in this team, so these totals may be partial.' : ''));
         const act = rs.filter((r) => r.active && r.kind !== 'Leader' && !r.isNew);
@@ -2826,7 +2846,7 @@ dash.calc('oo_points_act', {
         const below = fl('Below range');
         if (below.length) talk.push(['low', plural(below.length, 'person is', 'people are') + ' below the usual range for their role: ' + list(below, (r) => r.name + ' (' + wk(r.coreWk) + ' a week)') + '.']);
         const nc = act.filter((r) => r.flags.includes('No capture') || r.flags.includes('Capture gap'));
-        if (nc.length) talk.push(['low', plural(nc.length, 'person has', 'people have') + ' no activity captured or a capture gap: ' + list(nc, (r) => r.name) + '. Check capture before reading their numbers.', chk]);
+        if (nc.length) talk.push(['low', plural(nc.length, 'person has', 'people have') + (g.mailHidden ? ' no meeting captured (emails not visible with your access): ' : g.meetHidden ? ' no sent email captured (meetings not visible with your access): ' : ' no activity captured or a capture gap: ') + list(nc, (r) => r.name) + '. Check capture before reading their numbers.', chk]);
       }
       const rank = { high: 0, medium: 1, low: 2 };
       talk.map((x, i) => [...x, i]).sort((a, b) => rank[a[0]] - rank[b[0]] || a[3] - b[3]).slice(0, MAX_TALK).forEach(([sev, text, extra]) => push('talk', sev, text, extra));

@@ -133,16 +133,16 @@ Salesforce role and changing scope never re-runs a query.
   - *Customers and prospects*: by the account's status today; Customer is a customer, everything else a prospect.
   - *The role's meetings*: customer meetings for Engagement Managers, prospect meetings for BDRs, all external
     meetings for AEs, SMB and leaders.
-  - *Changes* are like-for-like: only current sellers who joined 8+ weeks ago, whose capture was on in the first week
-    of the earlier window and still looks on (people who left, nothing captured or a capture gap are left out); team
+  - *Changes* are like-for-like: only current sellers and leaders who joined 8+ weeks ago, whose capture was on in the
+    first week of the earlier window and still looks on (people who left, anyone with nothing captured in the last 4
+    weeks and sellers with a capture gap are left out); team
     changes add up those people, say how many, and need 20+ meetings (200+ emails) before.
     Capture was switched on during 2026 (people with captured sent mail: 32 in March, 98 in September, 123 in
     October), so longer comparisons would measure the rollout, not selling.
   - *Flags* (active AEs, SMB reps, BDRs and Engagement Managers past their first 28 days; leaders and new joiners
     are shown, never flagged): **Quiet** = nothing captured for 5+ business days (Mon–Fri on the Paris calendar, up
-    to the last day the queries read: yesterday, or the day before while your Salesforce time zone is still on an
-    earlier date than Paris; 10+ is urgent; time off can't be seen; never flagged while your access hides emails or
-    meetings); **Slowing** = the role's meetings down 30%+ on the 4 weeks before, from
+    to yesterday in Paris or your browser's time zone, whichever is earlier; 10+ is urgent; time off can't be seen;
+    never flagged while your access hides emails or meetings); **Slowing** = the role's meetings down 30%+ on the 4 weeks before, from
     at least 8 and by more than twice the square root of the earlier count (for BDRs, emails the same way from 40);
     **Nothing booked** = no prospect meetings booked for the next 2 weeks after 4+ in the last 4 (customer meetings
     for Engagement Managers); **Below range** = under the 25th percentile of the role's meetings in both 4-week
@@ -151,9 +151,13 @@ Salesforce role and changing scope never re-runs a query.
   - *Usual range*: the middle half (25th–75th percentile) of EMEA sellers in the same role over the last 4 weeks.
     It describes peers, not a target.
   - *Access*: activity follows Salesforce sharing (Account, Opportunity and Lead are Public Read Only). If your
-    access shows activity for fewer than half the sellers, empty rows read Not visible with blank numbers, a team
-    with such sellers shows no scorecard total, and summaries and agendas say for how many sellers it shows nothing; if it
-    shows meetings but almost no emails, emails show — (and the reverse for meetings, with no usual range).
+    access shows activity for fewer than half the sellers, empty rows read Not visible with blank numbers, a scope
+    or team where it shows none reads blank rather than 0, a team with such sellers shows no scorecard total, and
+    summaries, agendas and the BDR capacity request say for how many it shows nothing. If, for the sellers it shows,
+    it shows meetings but almost no emails, emails show — and Quiet is off (the reverse for meetings, with no usual
+    range and Nothing booked off too), and capture gaps aren't flagged, since each is read off the other channel. A
+    note above the Activity table, the BDR table and the team scorecard says which applies. Below those thresholds
+    hidden activity can't be told from none, so it reads as nothing captured.
 - **Book moves**: per AE team and SMB, active accounts to move from books at 2× the team median or more to
   books at half or less, largest gaps first, each move stopping at the median for both reps.
 - **People matching**: a HiBob person is matched to an active Salesforce user by work email (any role;
@@ -188,7 +192,9 @@ without LeanData, routing pools, routing checks, routing gaps and pool seats sho
 person panel, data checks, team scorecard, 1:1 agendas and Leavers (deals, renewals, accounts) keep working;
 without Lead access, the Leads screen and leavers' leads are missing; without HiBob, the Hiring screen and HiBob
 checks; without email message or event access, Activity and its scorecard columns show —, and agendas leave out
-the activity lines (saying so when nothing else is flagged), while the rest of each screen keeps working. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
+the activity lines (saying so when nothing else is flagged), while the rest of each screen keeps working. Without
+`getUserInfo`, the Home greeting is blank, the scorecard starts from the top EMEA leader and the Activity view can't
+check your Salesforce time zone; nothing else changes. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
 "Connect … in your claude.ai connectors" (naming the one that is actually missing) rather than "Failed to load", and
 one turned off for the dashboard says so. The weekly summary waits for its sources and says "not available" for one
 that failed instead of leaving it out.
@@ -208,8 +214,10 @@ that failed instead of leaving it out.
   mailbox copy, so emails read somewhat low. Activity is joined to people by name and counts for the record's
   current owner. One business calendar (Paris, no holidays), so a national holiday can make a country look quiet.
   The windows follow each viewer's Salesforce time zone, so viewers in different zones differ by a few records at
-  the edges; a Salesforce user left on a zone far from where they work (say Los Angeles for someone in Europe) gets
-  windows that end at that zone's midnight, so set your Salesforce time zone to where you work.
+  the edges. Days since the last activity count to yesterday in Paris or your browser's time zone, whichever is
+  earlier; a Salesforce time zone behind that (say Los Angeles for someone in Europe) ends the queries at its own
+  midnight, so until then each morning those days can read one high. The Activity view says so when it sees it;
+  set your Salesforce time zone to where you work.
   It was built and checked with RevOps access: before rollout, have one EMEA director compare 1:1s › Activity with
   RevOps totals. **Per-person activity shown to managers needs a check with HR and, where they exist, works councils
   (for example in Germany and France) before rollout.** What ships: Slowing compares the role's meetings with the

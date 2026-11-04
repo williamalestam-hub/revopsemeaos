@@ -776,6 +776,44 @@ OS.leaversIn = (scope) => {
 // what the leavers drawings wait for: the core, plus a layer only while it is still loading
 OS.leaversIds = () => ['leavers_core'].concat(['leavers_leads', 'leavers_pools'].filter((id) => OS.state(id) === 'loading'));
 
+// ----- activity: the note above the activity tables -----
+// minutes east of UTC for a time zone at time t (t on a whole minute)
+const tzOffset = (zone, t) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+  return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute) - t) / 6e4);
+};
+// Activity counts days up to yesterday in Paris or the browser's zone, whichever is earlier, while the queries stop at
+// midnight in the viewer's Salesforce time zone. A Salesforce zone behind both means that each morning, until its
+// midnight, a day the queries haven't read counts: { sf, until } (until = that midnight on the browser's clock), or null.
+// sf_me is optional here: without it there is no note, and nothing else changes.
+OS.tzLag = () => {
+  const me = OS.state('sf_me') === 'ok' ? (dash.data('sf_me').data || [])[0] : null;
+  if (!me || !me.timeZone) return null;
+  try {
+    const t = Math.floor(Date.now() / 6e4) * 6e4, here = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const sf = tzOffset(me.timeZone, t), loc = tzOffset(here, t);
+    if (Math.min(tzOffset('Europe/Paris', t), loc) - sf <= 0) return null;
+    const m = (((loc - sf) % 1440) + 1440) % 1440;
+    return { sf: me.timeZone, until: String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0') };
+  } catch (e) { return null; }
+};
+// The sentence above the activity tables, or '' when there is nothing to say: what the viewer's Salesforce access hides
+// and, where days since the last activity show (ctx 'activity' and 'bdrs', not 'team'), the time-zone lag. apply()
+// shows the note when this isn't empty and its drawing writes it, so the two always agree.
+OS.actNote = (ctx) => {
+  const g = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || [])[0] || null : null;
+  if (!g) return '';
+  const team = ctx === 'team', out = [];
+  const ch = g.mailHidden ? 'shows meetings but almost no captured emails, so ' + (team ? 'no one is flagged Quiet.' : 'emails show — and no one is flagged Quiet.')
+    : g.meetHidden ? 'shows emails but almost no meetings, so meetings show — and ' + (team ? 'so do the activity flags.' : 'only email-based flags remain.') : '';
+  if (g.limited) out.push('Your Salesforce access shows activity for ' + OS.num(g.visibleSellers) + ' of ' + OS.num(g.sellers) + ' sellers; '
+    + (team ? 'a team with anyone it shows nothing for has blank activity columns.' : 'the rest show Not visible, with blank numbers, and the totals above count only what it shows.') + (ch ? ' For those it shows, it ' + ch : ''));
+  else if (ch) out.push('Your access ' + ch);
+  const z = team ? null : OS.tzLag();
+  if (z) out.push('Your Salesforce time zone is ' + z.sf.replace(/_/g, ' ') + ', behind yours: the activity queries stop at midnight there, so until ' + z.until + ' your time, days since the last activity can read one high. Set your Salesforce time zone to where you work.');
+  return out.join(' ');
+};
+
 // ---------- Completed next steps ----------
 // Each viewer's ticks live in their own private part of this dashboard's database (data/users/<their id>/os-done),
 // keyed by the meeting and the item's wording. Without a database or an id here, nothing can be ticked.
@@ -986,6 +1024,9 @@ OS.oo = (() => {
     document.querySelectorAll('[data-seg-views]').forEach((g) => { g.hidden = !g.dataset.segViews.split(' ').includes(screen + ':' + view[screen]); });
     document.querySelectorAll('[data-detail]').forEach((d) => { d.hidden = !person; });
     document.querySelectorAll('.app').forEach((a) => a.classList.toggle('has-detail', !!person && !!a.querySelector('[data-detail]')));
+    // the note above the activity tables of the view on screen, only when there is something to say: here rather than in
+    // onData, so a screen or view switch with the data already loaded gets it right too
+    document.querySelectorAll('[data-act-access]').forEach((n) => { if (n.dataset.actAccess === screen + ':' + view[screen]) n.hidden = !OS.actNote(n.dataset.ctx || 'activity'); });
   };
 
   const toTop = () => document.querySelectorAll('.app-main').forEach((m) => { const t = m.getBoundingClientRect().top; if (t < 0 || t > innerHeight / 2) m.scrollIntoView({ block: 'start' }); });
@@ -1134,7 +1175,7 @@ OS.oo = (() => {
         const sg = (v) => (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%';
         // a channel the viewer's access hides is named, not dropped or counted as zero, and so are the flags it switches off
         const meet = act.meetings == null ? 'meetings not visible with your access' : `${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks`;
-        const flags = [act.mailHidden || act.meetHidden ? '' : `${OS.num(act.quiet)} quiet`, `${OS.num(act.slowing)} slowing`, act.meetHidden ? '' : `${OS.num(act.nothingBooked)} with nothing booked`, `${OS.num(act.noCapture)} with nothing captured`].filter(Boolean).join(', ');
+        const flags = [act.mailHidden || act.meetHidden ? '' : `${OS.num(act.quiet)} quiet`, `${OS.num(act.slowing)} slowing`, act.meetHidden ? '' : `${OS.num(act.nothingBooked)} with nothing booked`, `${OS.num(act.noCapture)} with ${act.mailHidden ? 'no meeting captured' : act.meetHidden ? 'no sent email captured' : 'nothing captured'}`].filter(Boolean).join(', ');
         if (act.sellers && act.notVisible >= act.sellers) add(`• Activity, last 4 weeks: not visible with your Salesforce access (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})`);
         else add(`• Activity, last 4 weeks: ${meet}, ${act.emails != null ? `${n(act.emails, 'email', 'emails')} sent` : 'emails not visible with your access'}`
           + `${act.meetChg != null ? `; meetings ${sg(act.meetChg)} like-for-like (${n(act.lflMeetReps, 'person', 'people')} compared)` : ''}`
@@ -1357,11 +1398,6 @@ OS.oo = (() => {
     document.querySelectorAll('[data-hello]').forEach((h) => { h.hidden = h.dataset.hello !== part; });
     OS.ask.refresh();
     document.querySelectorAll('[data-ask-agenda]').forEach((b) => { b.hidden = !OS.ask.can(); });
-    // 1:1s › Activity: the note on what the viewer's access hides, only when it hides something
-    if (screen === 'oneonone' && view.oneonone === 'activity') {
-      const g = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || [])[0] || null : null;
-      document.querySelectorAll('[data-act-access]').forEach((n) => { n.hidden = !(g && (g.limited || g.mailHidden || g.meetHidden)); });
-    }
     // data checks: say so when some sources failed while others loaded (only on the screens that list them)
     if (screen === 'home' || screen === 'actions') {
       const st = OS.CHECKS.map((id) => OS.state(id));

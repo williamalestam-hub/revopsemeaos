@@ -414,7 +414,7 @@ D["cal_events"] = {"title": "Your calendar, next 14 days",
     "args": {"startTime": "{{cal_from}}", "endTime": "{{cal_to}}", "orderBy": "startTime", "pageSize": 250, "eventType": ["DEFAULT"]},
     "rules": {"cal_from": {"type": "string", "pattern": CAL_DAY}, "cal_to": {"type": "string", "pattern": CAL_DAY}}}}
 D["sf_me"] = {"title": "You in Salesforce",
-  "description": "Who you are in Salesforce (user, role, title and manager), so the team scorecard can start from your own direct reports.",
+  "description": "Who you are in Salesforce (user, role, title, manager and time zone), so the Home greeting has your name, the team scorecard can start from your own direct reports and the Activity view can say when your Salesforce time zone shifts its days.",
   "source": {"kind": "query", "connector": "Salesforce", "tool": "getUserInfo", "args": {}}}
 
 json.dump(D, open('datasets.json', 'w'), indent=1)
