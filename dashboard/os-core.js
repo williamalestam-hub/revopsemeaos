@@ -737,7 +737,7 @@ OS.links = (() => {
 // (checks_hb), leavers' leads (checks_lv), leads (checks_ld, checks_ld_rt, checks_ld_cap), activity capture (checks_act) and
 // Salesforce values the pipeline logic depends on (checks_cfg).
 // Each is its own calc, so one failing leaves the rest.
-OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg'];
+OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg', 'checks_closed'];
 OS.checkRows = (sc) => {
   // sc: { mgr, region } to read another scope than the scope pill's (the 1:1 agendas read all EMEA)
   const p = sc || dash.params();

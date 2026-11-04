@@ -240,7 +240,7 @@
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
             <p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access, so this list may be incomplete.</p>
-            <ul class="ilist" data-draw="home-checks" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_cfg"></ul>
+            <ul class="ilist" data-draw="home-checks" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_cfg checks_closed"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-checks"></span>
               <p class="os-empty" data-msg-for="home-checks" data-msg="empty" hidden>No problems found.</p>
               <p class="os-empty" data-msg-for="home-checks" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
@@ -378,7 +378,7 @@
               <button class="btn" type="button" data-copy-checks><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
           </div>
-          <div class="pane-scroll"><p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access (Salesforce, LeanData, HiBob or lead data), so this list may be incomplete.</p><ul class="ilist" data-draw="check-list" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_cfg"></ul>
+          <div class="pane-scroll"><p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access (Salesforce, LeanData, HiBob or lead data), so this list may be incomplete.</p><ul class="ilist" data-draw="check-list" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_cfg checks_closed"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="check-list"></span>
               <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
               <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
@@ -469,7 +469,7 @@
               </section>
               <section class="ag-sec" data-oo-sec="ops" hidden>
                 <h3>RevOps work</h3>
-                <ul class="ag-bullets ag-talk" data-draw="oo-ops" data-source="risk_kpi rr_kpi checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg leavers_core leavers_leads leavers_pools ld_kpi ld_kpi_rt act_kpi orphan_kpi engagement_kpi"></ul>
+                <ul class="ag-bullets ag-talk" data-draw="oo-ops" data-source="risk_kpi rr_kpi checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg checks_closed leavers_core leavers_leads leavers_pools ld_kpi ld_kpi_rt act_kpi orphan_kpi engagement_kpi"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-ops"></span>
                   <p class="os-empty" data-msg-for="oo-ops" data-msg="empty" hidden>Nothing open: no stuck deals, routing gaps, data checks, leavers' records, lead or activity problems.</p>
                 </div>
@@ -698,7 +698,7 @@
         </div>
         <div class="pane" id="pipe-partner">
           <div class="pane-head">
-            <div><h2 class="pane-title">Owned outside EMEA sales</h2><p class="pane-note">Open deals on EMEA-region accounts (the account's sales region) owned by the global partnership roles and strategic AEs. Team totals follow the owner's role, so none of these are in them. All of EMEA whatever the scope; New Business and Upsell ARR, renewals counted apart.</p></div>
+            <div><h2 class="pane-title">Owned outside EMEA sales</h2><p class="pane-note">Open deals on EMEA-region accounts (the account's sales region) whose owner isn't in an EMEA sales role: the global partnership roles, strategic AEs, other regions' sellers and users with no role. Team totals follow the owner's role, so none of these are in them. All of EMEA whatever the scope; New Business and Upsell ARR, renewals counted apart.</p></div>
             <button class="ibtn" type="button" data-copy-table="partner-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
           </div>
           <div class="pane-scroll">
@@ -716,7 +716,7 @@
               <tbody data-draw="partner-table"></tbody>
             </table>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="partner-table"></span>
-              <p class="os-empty" data-msg-for="partner-table" data-msg="empty" hidden>No open deals on EMEA accounts owned by partnership roles or strategic AEs.</p>
+              <p class="os-empty" data-msg-for="partner-table" data-msg="empty" hidden>No open deals on EMEA accounts owned outside EMEA sales.</p>
               <p class="os-empty" data-msg-for="partner-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
             </div>
           </div>

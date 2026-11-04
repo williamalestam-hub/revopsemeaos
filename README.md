@@ -66,7 +66,9 @@ Salesforce role and changing scope never re-runs a query.
 - **Won**: by the date actually closed (`Actual_Close_Date__c`) everywhere: Pipeline, Forecast, Bookings, Home.
 - **Closed deals count for the team that closed them** (won, lost, win rates, lost reasons, coverage history, sales
   cycle, this week's won and lost): the owner's role stamped at close (`Closed_Owner_Role__c`, filled since about
-  April 2026; before that, and when it is blank, the current owner's role). A deal that has since moved to someone in
+  April 2026) when it is a selling role; before that, when it is blank, and when it isn't a selling role (RevOps,
+  Legal Engineering, Product), the current owner's role. A deal another region's seller closed counts for that region,
+  not EMEA, even if an EMEA owner holds it now. A deal that has since moved to someone in
   another role (a promotion, or a leaver's deals handed to a director) also counts for its owner and manager at close
   (`Closed_Owner__c`, `Closed_Owner_Manager__c`; no manager when that isn't stamped), so someone promoted can have a
   Bookings row per team they closed under. A deal still in the same role counts for its current owner and manager, so
@@ -76,10 +78,14 @@ Salesforce role and changing scope never re-runs a query.
   as Not a fit, Timing as Deferred, Technical/Functional Gap as Product fit, Lost to Competitor as Chose an alternative,
   No Champion as Buyer engagement, Budget as Price and budget (each label says what it was). Value not perceived has
   no clear new equivalent and stays apart as "Value not perceived (old list)". Admin merges keep their names.
-- **Owned outside EMEA sales**: team totals follow the owner's role, so deals that the global partnership roles
-  (`… Partnerships`) and strategic AEs (`AE-STRAT`) own on EMEA-region accounts (the account's sales region) are in
-  none of them. Pipeline › By team lists them apart: this quarter, next quarter and all open (later and past-due
-  deals too), renewals counted apart, for all of EMEA whatever the scope.
+- **Owned outside EMEA sales**: team totals follow the owner's role, so open deals on EMEA-region accounts (the
+  account's sales region) owned by anyone outside the EMEA sales roles are in none of them: the global partnership roles
+  (`… Partnerships`), strategic AEs and ADs (`AE-STRAT`, `AD-STRAT`), other regions' sellers, and users with no role.
+  Pipeline › By team lists them by owner role: this quarter, next quarter and all open (later and past-due deals too),
+  renewals counted apart, for all of EMEA whatever the scope.
+- **Role at close data check**: someone whose deals closed this quarter and last carry two or more roles at close in
+  each of the two quarters. One role change can't do that, so either their role switched back and forth or the stamp
+  read the wrong role; their deals are split between those teams until it is fixed.
 - **Created**: owner-scoped; renewals auto-created by Flow (`Upsell_Renewal_Created_By__c = 'Flow'`) excluded.
   BDR-sourced counts only `BDR-EMEA` / `DIR-BDR-EMEA` originating BDRs, by the role stamped on the deal or, when
   none was stamped, the BDR's current role.
