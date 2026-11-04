@@ -425,6 +425,67 @@ ds("act_meet_prev", "Meetings, the 4 weeks before",
    AND {EXT} AND {OWNER}
    GROUP BY Owner.Name, Owner.UserRole.Name, Account.Account_Status__c LIMIT 2000"""))
 
+# ---------- Conversion ----------
+# What happens to the New Business (and Upsell) opps EMEA creates. Counts and sums only: no opportunity, account or
+# person name outside Legora and no record Id is read (cv_days groups by Id without selecting it, like ld_handoffs).
+# Stages are read by number from the IRO stage entry dates, so the 3 Nov 2026 rename of stage 3 doesn't matter.
+# Admin merges ('Merged with Global Pilot', 'Record cleanup') are left out, except in cv_window, which counts them.
+# Closed deals count for the team that closed them (CLOSED_BY, as in Bookings and Coverage): a deal an EMEA seller
+# closed that now sits outside EMEA still counts for them. Open deals follow the owner today (OWNER).
+CV_COHORTS = "(CreatedDate = LAST_N_FISCAL_QUARTERS:4 OR CreatedDate = THIS_FISCAL_QUARTER)"
+CV_CREATED = "FISCAL_YEAR(convertTimezone(CreatedDate)), FISCAL_QUARTER(convertTimezone(CreatedDate))"
+CV_STAMPS = ", ".join([f"COUNT(IRO_Stage_{k}_Date_Stamp__c) s{k}" for k in range(7)]
+                      + ["COUNT(IRO_Closed_Won_Date_Stamp__c) cwStamp", "COUNT(IRO_Closed_Lost_Date_Stamp__c) clStamp"])
+CV_REAL = "(IsWon = true OR Closed_Reason__c = null OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup'))"
+CV_DAYS = ", ".join(f"MAX(Days_in_Stage_{k}__c) d{k}" for k in range(7))
+CV_CLOSE_WINDOW = "(Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER)"
+# the team that closed a deal is SMB: its role at close, or the owner's role today when none was stamped
+CV_NOT_SMB = "(Closed_Owner_Role__c != 'SMB-EMEA' AND (Closed_Owner_Role__c != null OR Owner.UserRole.Name != 'SMB-EMEA'))"
+ds("cv_open", "Open opps by created quarter",
+   "Open EMEA New Business and Upsell opportunities of any age, by type, the quarter they were created in (in your Salesforce time zone), owner role and the owner's manager: how many, their incremental ARR (USD), how many carry each stage entry date (stage 0 to 6; a skipped stage is dated too) and how many were marked Closed Won or Closed Lost before and reopened. Counts and sums only.",
+   SF(f"""SELECT RecordType.Name rt, FISCAL_YEAR(convertTimezone(CreatedDate)) fy, FISCAL_QUARTER(convertTimezone(CreatedDate)) fq,
+   Owner.UserRole.Name role, Owner.Manager.Name manager, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr, {CV_STAMPS}
+   FROM Opportunity WHERE {NB_UP} AND {OWNER} AND IsClosed = false
+   GROUP BY RecordType.Name, {CV_CREATED}, Owner.UserRole.Name, Owner.Manager.Name LIMIT 2000"""))
+ds("cv_closed", "Won and lost opps by created quarter",
+   "EMEA New Business and Upsell opportunities created in the last 4 completed quarters and this one (in your Salesforce time zone) that are now closed won or lost, admin merges ('Merged with Global Pilot', 'Record cleanup') left out, with the owner's role and manager now and when the deal closed (a deal counts for the team that closed it, also when it is owned outside EMEA today), won or lost, and the quarter it was actually closed (Actual Close Date): how many, their incremental ARR (USD), how many carry each stage entry date (0 to 6) and the Closed Won and Closed Lost entry dates. Counts and sums only.",
+   SF(f"""SELECT RecordType.Name rt, FISCAL_YEAR(convertTimezone(CreatedDate)) fy, FISCAL_QUARTER(convertTimezone(CreatedDate)) fq,
+   Owner.UserRole.Name role, Owner.Manager.Name manager, Closed_Owner_Role__c closedRole, Closed_Owner_Manager__c closedManager, IsWon won,
+   FISCAL_YEAR(Actual_Close_Date__c) cfy, FISCAL_QUARTER(Actual_Close_Date__c) cfq, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr, {CV_STAMPS}
+   FROM Opportunity WHERE {NB_UP} AND {CLOSED_BY} AND IsClosed = true AND {CV_COHORTS} AND {CV_REAL}
+   GROUP BY RecordType.Name, {CV_CREATED}, Owner.UserRole.Name, Owner.Manager.Name, Closed_Owner_Role__c, Closed_Owner_Manager__c, IsWon,
+   FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c) LIMIT 2000"""))
+ds("cv_window", "New Business closed, last 4 quarters",
+   "EMEA New Business closed won or lost in the last 4 completed quarters and this one, by the date it was actually closed, for the team that closed it (also when it is owned outside EMEA today): by close quarter, owner role now and when the deal closed, won or lost, the last stage before close and the lost reason (the list retired on 3 Nov 2026 and the new one): how many and their incremental ARR (USD). Admin merges are kept so they can be counted, and left out of every figure. Counts and sums only.",
+   SF(f"""SELECT FISCAL_YEAR(Actual_Close_Date__c) fy, FISCAL_QUARTER(Actual_Close_Date__c) fq, Owner.UserRole.Name role,
+   Closed_Owner_Role__c closedRole, IsWon won, IRO_Last_Stage_Before_Close__c lastStage, Closed_Reason__c reason, COUNT(Id) n,
+   SUM(Finance_ARR_USD__c) arr FROM Opportunity WHERE RecordType.Name = 'New Business' AND {CLOSED_BY} AND IsClosed = true
+   AND {CV_CLOSE_WINDOW}
+   GROUP BY FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c), Owner.UserRole.Name, Closed_Owner_Role__c,
+   IsWon, IRO_Last_Stage_Before_Close__c, Closed_Reason__c LIMIT 2000"""))
+ds("cv_lost_month", "New Business lost by month",
+   "EMEA New Business closed lost in the last 4 completed quarters and this one, for the team that closed it, admin merges left out: how many per calendar month of the date actually closed. It finds a one-month burst of losses, such as a pipeline clean-up. Counts only.",
+   SF(f"""SELECT CALENDAR_YEAR(Actual_Close_Date__c) yr, CALENDAR_MONTH(Actual_Close_Date__c) mo, COUNT(Id) n FROM Opportunity
+   WHERE RecordType.Name = 'New Business' AND {CLOSED_BY} AND IsClosed = true AND IsWon = false AND {CV_CLOSE_WINDOW}
+   AND (Closed_Reason__c = null OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup'))
+   GROUP BY CALENDAR_YEAR(Actual_Close_Date__c), CALENDAR_MONTH(Actual_Close_Date__c) LIMIT 2000"""))
+ds("cv_source", "New Business by source",
+   "EMEA New Business closed won or lost in the last 4 completed quarters (by the date actually closed; admin merges left out; for the team that closed it), plus every open one an EMEA role owns, by lead source, the originating BDR's role (stamped on the deal, and the BDR's role today), the creator's role, owner role now and when the deal closed, open or closed, and won or lost: how many, incremental ARR (USD), and the days from creation to the close date added up, with how many deals had them. Counts and sums only.",
+   SF(f"""SELECT LeadSource src, Originating_BDR_Role__c bdrRole, Originating_BDR__r.UserRole.Name bdrNow, CreatedBy.UserRole.Name creatorRole,
+   Owner.UserRole.Name role, Closed_Owner_Role__c closedRole, IsClosed closed, IsWon won, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr,
+   SUM(Days_from_Created_to_Close_Date__c) cycleDays, COUNT(Days_from_Created_to_Close_Date__c) cycleN FROM Opportunity
+   WHERE RecordType.Name = 'New Business' AND ((IsClosed = false AND {OWNER}) OR (IsClosed = true AND {CLOSED_BY}
+   AND Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 AND {CV_REAL}))
+   GROUP BY LeadSource, Originating_BDR_Role__c, Originating_BDR__r.UserRole.Name, CreatedBy.UserRole.Name, Owner.UserRole.Name,
+   Closed_Owner_Role__c, IsClosed, IsWon LIMIT 2000"""))
+ds("cv_days", "Days in each stage of recent wins",
+   "EMEA New Business won in the last 90 days (deals SMB closed: the last 30 days), for the team that closed it, one row per deal but without its Id, name, account or ARR: owner role and the owner's manager now and when the deal closed, the days the deal spent in each stage 0 to 6 (from one stage entry date to the next; 0 for a stage passed the same day or skipped), the days from creation to the win, and its Closed Won entry date and close date (to spot wins reopened and won again).",
+   SF(f"""SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, Closed_Owner_Role__c closedRole, Closed_Owner_Manager__c closedManager,
+   {CV_DAYS}, MAX(Days_from_Created_to_Close_Date__c) daysToWin, MAX(IRO_Closed_Won_Date_Stamp__c) cwAt, MAX(Actual_Close_Date__c) closeAt
+   FROM Opportunity WHERE RecordType.Name = 'New Business' AND {CLOSED_BY} AND IsWon = true AND Actual_Close_Date__c = LAST_N_DAYS:90
+   AND ({CV_NOT_SMB} OR Actual_Close_Date__c = LAST_N_DAYS:30)
+   GROUP BY Id, Owner.UserRole.Name, Owner.Manager.Name, Closed_Owner_Role__c, Closed_Owner_Manager__c LIMIT 2000"""))
+
 # ---------- 1:1s ----------
 CAL_DAY = r"^\d{4}-\d{2}-\d{2}T00:00:00$"
 D["cal_events"] = {"title": "Your calendar, next 14 days",

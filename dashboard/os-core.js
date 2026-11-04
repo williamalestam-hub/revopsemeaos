@@ -39,6 +39,7 @@ const sfRows = ({ answer, args }, capped = true) => {
   'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
   'users_all', 'mv_outcomes', 'mv_created', 'mv_close', 'age_stuck', 'cycle_team', 'coverage_base', 'bk_stale', 'bk_em_cover', 'lv_opps', 'lv_leads',
   'ld_ready', 'ld_handoffs', 'ld_inflow', 'ld_open', 'act_mail', 'act_mail_prev', 'act_meet', 'act_meet_prev',
+  'cv_open', 'cv_closed', 'cv_window', 'cv_lost_month', 'cv_source', 'cv_days',
 ].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped); marked cut when the answer fills the query\'s LIMIT', fn: (x) => sfRows(x) }));
 // the largest deals and renewals: the LIMIT is the point of the query, not a cut
 ['top_deals', 'top_renewals'].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped); the 300 largest by design', fn: (x) => sfRows(x, false) }));
@@ -646,7 +647,7 @@ window.OS = (() => {
 // click; the platform asks them to confirm). The page itself never writes to Salesforce, LeanData, mail or calendars.
 OS.ask = (() => {
   let room = null, mode = 'off';
-  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table', 'act-table', 'act-monday', 'act-trust-list', 'act-bdr-table', 'act-bdr-plan'];
+  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table', 'act-table', 'act-monday', 'act-trust-list', 'act-bdr-table', 'act-bdr-plan', 'conv-step-table', 'conv-monday', 'conv-cohort-table', 'conv-smb', 'conv-reason-table', 'conv-src-ask', 'conv-trust-list'];
   const refresh = async () => {
     if (!room || typeof room.canSendToClaudeSession !== 'function') return;
     let m = 'off';
@@ -734,10 +735,10 @@ OS.links = (() => {
 
 // ---------- Data checks ----------
 // Every check source that has loaded, in the scope picked: Salesforce (checks), LeanData routing (checks_rr), HiBob
-// (checks_hb), leavers' leads (checks_lv), leads (checks_ld, checks_ld_rt, checks_ld_cap), activity capture (checks_act) and
-// Salesforce values the pipeline logic depends on (checks_cfg).
+// (checks_hb), leavers' leads (checks_lv), leads (checks_ld, checks_ld_rt, checks_ld_cap), activity capture (checks_act),
+// Salesforce values the pipeline logic depends on (checks_cfg) and conversion (checks_conv, checks_conv_lost, checks_conv_days).
 // Each is its own calc, so one failing leaves the rest.
-OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg'];
+OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg', 'checks_conv', 'checks_conv_lost', 'checks_conv_days'];
 OS.checkRows = (sc) => {
   // sc: { mgr, region } to read another scope than the scope pill's (the 1:1 agendas read all EMEA)
   const p = sc || dash.params();
@@ -970,10 +971,10 @@ OS.oo = (() => {
     const dayTxt = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     return dayTxt + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   };
-  // an agenda's numbers and talking points: the core ones, plus routing (oo_points_rr) and selling activity
-  // (oo_points_act) once each has loaded; activity orders after the rest within a severity
+  // an agenda's numbers and talking points: the core ones, plus routing (oo_points_rr), selling activity (oo_points_act)
+  // and a leader's conversion lines (oo_points_conv) once each has loaded; each orders after the ones before it within a severity
   const RANK = { high: 0, medium: 1, low: 2, '': 3 };
-  const points = (email) => rowsOf('oo_points').concat(rowsOf('oo_points_rr'), rowsOf('oo_points_act')).filter((r) => r.email === email)
+  const points = (email) => rowsOf('oo_points').concat(rowsOf('oo_points_rr'), rowsOf('oo_points_act'), rowsOf('oo_points_conv')).filter((r) => r.email === email)
     .sort((a, b) => (a.section === b.section ? 0 : a.section === 'numbers' ? -1 : 1) || (RANK[a.sev] ?? 3) - (RANK[b.sev] ?? 3) || a.order - b.order);
   // Who they are to you: your manager, someone who reports to you, RevOps, EMEA sales (they have Salesforce numbers), or
   // none of these. ops: their agenda gets the EMEA update and RevOps work. sales: true or false once oo_points has
@@ -1019,7 +1020,10 @@ OS.oo = (() => {
     const pts = points(email);
     const num = pts.filter((r) => r.section === 'numbers');
     const talk = pts.filter((r) => r.section === 'talk');
-    if (num.length) { lines.push('', 'Numbers'); for (const r of num) lines.push('- ' + r.text); }
+    // a leader's conversion lines join when they load: the copy, email and Send to Claude say so until then, or when they couldn't
+    const cs = rowsOf('team_tree').some((t) => t.email === email && t.isLeader) ? OS.state('oo_points_conv') : 'ok';
+    const conv = cs === 'loading' ? '- Conversion: still loading' : cs === 'error' || cs === 'connect' ? "- Conversion: not available (couldn't load)" : '';
+    if (num.length || conv) { lines.push('', 'Numbers'); for (const r of num) lines.push('- ' + r.text); if (conv) lines.push(conv); }
     if (talk.length) { lines.push('', 'Talking points'); for (const r of talk) lines.push('- ' + r.text); }
     const k = kind(email);
     if (k && k.ops) {
@@ -1060,11 +1064,26 @@ OS.oo = (() => {
       t.setAttribute('aria-selected', String(view[s] === v));
     });
     document.querySelectorAll('[data-seg-views]').forEach((g) => { g.hidden = !g.dataset.segViews.split(' ').includes(screen + ':' + view[screen]); });
+    convApply();
     document.querySelectorAll('[data-detail]').forEach((d) => { d.hidden = !person; });
     document.querySelectorAll('.app').forEach((a) => a.classList.toggle('has-detail', !!person && !!a.querySelector('[data-detail]')));
     // the note above the activity tables of the view on screen, only when there is something to say: here rather than in
     // onData, so a screen or view switch with the data already loaded gets it right too
     document.querySelectorAll('[data-act-access]').forEach((n) => { if (n.dataset.actAccess === screen + ':' + view[screen]) n.hidden = !OS.actNote(n.dataset.ctx || 'activity'); });
+  };
+
+  // Created opps › Conversion: the Field · SMB switch only at All EMEA, the scope note's sentence for the scope picked, and the
+  // clean-up chip only when there is a clean-up quarter. conv_mgr and conv_closeout are read only while the view is open
+  // (reading them loads them); apply() and onData both run this, since they can load after the pick.
+  const convApply = () => {
+    const p = dash.params(), mgr = p.mgr || '', reg = p.region || 'All', open = screen === 'created' && view.created === 'conversion';
+    document.querySelectorAll('[data-cv-segs]').forEach((g) => { if (mgr || reg !== 'All') g.hidden = true; });
+    const row = (id, pick) => (open && OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
+    const mt = mgr ? row('conv_mgr', (r) => r.manager === mgr) : null;
+    const k = mgr ? 'mgr' : reg === 'BDR' ? 'bdr' : reg !== 'All' || (p.cvSeg || 'all') !== 'all' ? 'team' : 'all';
+    document.querySelectorAll('[data-cv-note-k]').forEach((n) => { const x = n.dataset.cvNoteK; n.hidden = !(x === k || (x === 'bdr' && mt && mt.team === 'BDR')); });
+    const co = row('conv_closeout', (r) => r.key === 'All');
+    document.querySelectorAll('[data-cv-clean]').forEach((b) => { b.hidden = !(co && co.closeoutQs && co.closeoutQs.length); });
   };
 
   const toTop = () => document.querySelectorAll('.app-main').forEach((m) => { const t = m.getBoundingClientRect().top; if (t < 0 || t > innerHeight / 2) m.scrollIntoView({ block: 'start' }); });
@@ -1150,7 +1169,7 @@ OS.oo = (() => {
   // plain-text summaries for Slack: built from the data already loaded on screen
   const rowOf = (id, pick) => (OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
   // the sources the weekly summary reads; Home loads them while it is open, and the copy button waits for them
-  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi', 'gr_actions'];
+  const SUMMARY = ['pipe_team', 'pipe_cover', 'conv_cohorts', 'conv_steps', 'conv_close', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi', 'gr_actions'];
   const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
   // The weekly summary as lines, each with what it is about. Home's Copy summary reads it for the scope pill; the 1:1
   // agendas of RevOps people (your manager, your reports, RevOps colleagues) read it for all EMEA.
@@ -1184,8 +1203,28 @@ OS.oo = (() => {
     else add('pipe', na('Pipeline', 'pipe_team'));
     if (cov && cov.avgBookings > 0) add('cover', cov.aheadOfUsual
       ? `• Coverage: past a usual quarter already (${OS.usd(cov.wonSoFar)} won, ${OS.usd(cov.avgBookings)} usual); next quarter ${x(cov.coverageNext)}`
-      : `• Coverage: ${OS.usd(cov.openThis)} open against ${OS.usd(cov.toGo)} still to win for a usual quarter (${x(cov.coverageThis)}); next quarter ${x(cov.coverageNext)}${cov.projectedThis != null ? `; expected ${OS.usd(cov.projectedThis)} at a ${OS.pct(cov.winRate)} win rate` : ''}`);
+      : `• Coverage: ${OS.usd(cov.openThis)} open against ${OS.usd(cov.toGo)} still to win for a usual quarter (${x(cov.coverageThis)}); next quarter ${x(cov.coverageNext)}${cov.projectedThis != null ? `; expected ${OS.usd(cov.projectedThis)} at a ${OS.pct(cov.winRate)} win rate by ARR` : ''}`);
     else if (!cov) add('cover', na('Coverage', 'pipe_cover'));
+    // conversion, New Business by count for the team that closed each deal; the 1:1 agendas' EMEA update leaves it out,
+    // so they don't load it. With a manager picked the win rate is left out (it is per team); the rest covers their reports.
+    if (!(sc && sc.mine === false)) {
+      const cvh = rowOf('conv_cohorts', (r) => r.key === scope + '|New Business');
+      if (cvh) {
+        const cvc = mgr ? null : rowOf('conv_close', (r) => r.key === scope), cvs = rowOf('conv_steps', (r) => r.key === scope);
+        const parts = [];
+        if (cvc && cvc.winRate != null) parts.push(`New Business win rate by count ${OS.pct(cvc.winRate)} over the last 4 quarters (${OS.num(cvc.won4)} won, ${OS.num(cvc.lost4)} lost, by who closed them)`);
+        if (cvh.y2q != null) {
+          const prev = cvh.prevY2q != null ? `${cvh.prevCohort} ${OS.pct(cvh.prevY2q)}` : '';
+          if (scope === 'All') parts.push(`of deals created in ${cvh.y2qCohort}, SMB won ${OS.pct(cvh.smbY2q)} within 2 quarters${cvh.smbPrevY2q != null ? ` (${cvh.prevCohort} ${OS.pct(cvh.smbPrevY2q)})` : ''} and Field ${OS.pct(cvh.fieldY2q)}${cvh.fieldPrevY2q != null ? ` (${cvh.prevCohort} ${OS.pct(cvh.fieldPrevY2q)})` : ''}, ${OS.pct(cvh.smbY2qOpen)} and ${OS.pct(cvh.fieldY2qOpen)} still open at 2 quarters (Field deals take longer: compare each segment with its own earlier quarters)`);
+          else if (cvh.trendNote === 'mix') parts.push(`${OS.pct(cvh.y2q)} of deals created in ${cvh.y2qCohort} won within 2 quarters (motions mixed: not compared)`);
+          else parts.push(`${OS.pct(cvh.y2q)} of the team's deals created in ${cvh.y2qCohort} won within 2 quarters${prev || cvh.peerY2q != null ? ` (${[prev, cvh.peerLabel && cvh.peerY2q != null ? `${cvh.peerLabel} ${OS.pct(cvh.peerY2q)}` : ''].filter(Boolean).join('; ')})` : ''}`);
+        }
+        if (cvs && cvs.leakBand) parts.push(`leaks most at ${cvs.leakLabel.replace(/^S/, 's')} (${OS.pct(cvs.leakRate)} vs ${OS.pct(cvs.leakExp)}, about ${n(cvs.leakBehind, 'deal', 'deals')} behind)`);
+        if (cvh.staleOpen) parts.push(`${n(cvh.staleOpen, 'deal', 'deals')} created 3+ quarters ago still at stage 0–1`);
+        const miss = [!mgr && failedSrc('conv_close') ? 'win rate' : '', failedSrc('conv_steps') ? 'leaks' : ''].filter(Boolean).join(' and ');
+        if (parts.length || miss) add('conv', `• Conversion: ${parts.join('; ') || 'nothing to compare yet'}${miss ? ` (${miss} not available)` : ''}`);
+      } else add('conv', na('Conversion', 'conv_cohorts'));
+    }
     if (mv) add('moves', `• Last 7 days: ${OS.num(mv.won)} won (${OS.usd(mv.wonArr)}), ${OS.num(mv.lost)} lost (${OS.usd(mv.lostArr)}); ${n(mv.pushed, 'deal', 'deals')} (${OS.usd(mv.pushedArr)}) pushed out of this quarter, ${OS.num(mv.pulled)} pulled in; Commit ${signed(mv.netCommitArr)} net`);
     else add('moves', na('Last 7 days', 'moves_kpi'));
     if (cr) add('created', `• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
@@ -1241,7 +1280,7 @@ OS.oo = (() => {
   };
   // what each part of a 1:1 agenda's RevOps sections reads (the summary without your own action items)
   OS.summary = { lines: summaryLines, SOURCES: SUMMARY, NUM: ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi'],
-    OPS: ['risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi'] };
+    OPS: ['risk_kpi', 'rr_kpi', ...OS.CHECKS.filter((id) => !/^checks_conv/.test(id)), 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi'] };
   const checksChecklist = () => {
     const area = dash.params().checkArea || 'All';
     return OS.checkRows().filter((c) => area === 'All' || c.area === area)
@@ -1256,7 +1295,7 @@ OS.oo = (() => {
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.scope')) scopeOpen(false);
-    const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], [data-ld-ready], [data-ld-prob], [data-act-role], [data-act-look], [data-act-left], th[data-sort]');
+    const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], [data-ld-ready], [data-ld-prob], [data-act-role], [data-act-look], [data-act-left], [data-cv-seg], [data-cv-rt], [data-cv-clean], th[data-sort]');
     if (!t) return;
     if (t.matches('[data-ask]')) {
       let data = null;
@@ -1330,6 +1369,9 @@ OS.oo = (() => {
     // the Need a look tile turns the filter on; the chip toggles it
     if (t.matches('[data-act-look]')) { dash.setParams({ actLook: t.dataset.actLook === 'on' ? true : !dash.params().actLook }); return; }
     if (t.matches('[data-act-left]')) { dash.setParams({ actLeft: !dash.params().actLeft }); return; }
+    if (t.matches('[data-cv-seg]')) { dash.setParams({ cvSeg: t.dataset.cvSeg }); return; }
+    if (t.matches('[data-cv-rt]')) { dash.setParams({ cvRt: t.dataset.cvRt }); return; }
+    if (t.matches('[data-cv-clean]')) { dash.setParams({ cvClean: !dash.params().cvClean }); return; }
     if (t.matches('th[data-sort]')) {
       const tbl = t.closest('table[data-sortable]');
       if (!tbl) return;
@@ -1409,6 +1451,9 @@ OS.oo = (() => {
     pressed('[data-ld-ready]', 'ldReady', p.ldReady || '');
     pressed('[data-ld-prob]', 'ldProb', p.ldProb || '');
     pressed('[data-act-role]', 'actRole', p.actRole || '');
+    pressed('[data-cv-seg]', 'cvSeg', p.cvSeg || 'all');
+    pressed('[data-cv-rt]', 'cvRt', p.cvRt || 'nb');
+    document.querySelectorAll('[data-cv-clean]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.cvClean)));
     document.querySelectorAll('.fchip[data-act-look]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.actLook)));
     document.querySelectorAll('[data-act-left]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.actLeft)));
     pressed('[data-gr-group]', 'grGroup', p.grGroup || 'meeting');

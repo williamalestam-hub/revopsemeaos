@@ -501,3 +501,7 @@
   .act-notes h3 { margin: var(--cds-pad-sm) 0 4px; font-size: var(--cds-font-size-caption); font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
   .act-notes ul { margin: 0 0 var(--cds-pad-sm); padding-left: 1.1rem; display: grid; gap: 4px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); max-width: 100ch; }
   .stat-sub .lnk { color: var(--color-fg); }
+  /* Conversion: a step rate or rate so far that is still early (many deals undecided): muted, still readable */
+  .cv-early { color: var(--color-fg-muted); }
+  /* a message the slot writes itself (the connector to connect, or one turned off) reads like the fixed sentences */
+  .msg-slot:not(:empty):not(.dash-skeleton):not(.os-fail) { display: block; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); padding: var(--cds-pad-lg); text-align: center; }

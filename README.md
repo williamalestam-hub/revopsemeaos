@@ -40,7 +40,7 @@ manager, their team (with a "Prep a 1:1" button).
 | 1:1s | An agenda for each 1:1 with a colleague in the next 14 days (from your calendar), or for anyone you pick, labelled with who they are to you (your manager, reports to you, RevOps, EMEA sales): open follow-ups from your Granola notes with them (tick them off as you go), the last meeting with them and the topics it covered. With EMEA sales, their numbers (for a leader, their whole team's) and talking points (past-due and pushed-out deals, early-stage deals closing this quarter, missing next steps, risky large deals and renewals, routing gaps, book balance, data checks); activity numbers and up to 3 activity talking points join once they load. With your manager, your reports and RevOps colleagues, the EMEA update and the RevOps work open (the weekly summary for all EMEA, each line linking to its view). Anyone else gets your notes only, and the agenda says so. Copy the agenda into the invite or your notes. **Team scorecard**: each direct report with their whole team's numbers, selling activity included, starting from you, or from the top EMEA leader when no EMEA people report to you. **Activity**: per seller, emails sent and external meetings in the last 4 weeks against the 4 weeks before (like-for-like), meetings booked for the next 2 weeks, last activity and flags (quiet, slowing, nothing booked, below the usual range for the role, check capture), the usual range by role, and how far to trust the numbers | Google Calendar `list_events`, Salesforce `getUserInfo` and `User`, Granola, the Salesforce sources, `Task` + `EmailMessage` and `Event` (counts only) |
 | Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), with due dates read from the wording (overdue / due soon), plus data checks: routing gaps, joiners with no Salesforce user, selling titles outside EMEA sales roles, manager differences, past-due opps, deals closing this quarter that nobody has forecast, Salesforce values the dashboard doesn't know (a stage without its number, a new forecast category or record type: a rename that would otherwise drop deals silently), orphan accounts, split books, people who left who still own deals or leads | Granola `list_meetings` + `get_meetings`; the Salesforce and HiBob sources |
 | Pipeline | Open NB + Upsell pipeline by team → manager → rep; **Forecast** roll-up (won, won + commit, won + best case); **Top deals**: the 300 largest open deals with risk flags (past due, Commit at early stage, early stage closing this quarter, stale 30d+, no next step, next step overdue, stuck in stage) and a risk score; **Rep risk** with stuck deals; renewals at stake; **This week**: what moved in the last 7 days per rep (created, won, lost, close dates pushed out of or pulled into this quarter, stage up or down, into or out of Commit); **Coverage**: open pipeline against what the team usually books, win rate, expected close and sales cycle; **Owned outside EMEA sales** (By team): open deals on EMEA-region accounts owned by the global partnership roles and strategic AEs, which are in no team's totals | `Opportunity`, `OpportunityHistory`, `OpportunityFieldHistory` |
-| Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards, and **BDR activity**: people emailed, prospect meetings held and booked, meetings per 100 people emailed, next to what each BDR sourced | `Opportunity`, `Task` + `EmailMessage`, `Event` (counts only) |
+| Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards, **BDR activity**: people emailed, prospect meetings held and booked, meetings per 100 people emailed, next to what each BDR sourced, and **Conversion**: what becomes of the New Business EMEA creates: win rate over 4 quarters, won within 2 quarters per created quarter (SMB and Field side by side), where deals leak against fair peers (team × manager × step), why and where deals are lost, how each source converts (rate and won ARR per closed deal), time in stage of recent wins, and how far to trust it all; leaders' 1:1 agendas get one conversion line and up to 2 points, and Data checks a Conversion area | `Opportunity`, `Task` + `EmailMessage`, `Event` (counts only) |
 | Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to their Salesforce user (by work email, then name) and routing pools; ramp of recent joiners; selling titles without an EMEA sales role and HiBob vs Salesforce manager differences are flagged; **Leavers**: people whose Salesforce user is inactive but who still own deals, renewals, leads or accounts or keep a pool seat, with a hand-over request for your Claude | HiBob `commons_searchEmployees`, `User`, `Lead` (counts), LeanData pools |
 | Routing pools | Every EMEA LeanData pool and its members, 90-day assignments and how evenly they're spread, reps missing from routing, joiners due in week 2, inactive members, members getting none | `LeanData__Round_Robin_Setting__c`, `LeanData__Log__c` (counts only), `User` |
 | Account books | Book size per rep (incl. EM book), territory coverage by Sales Region, orphan accounts with reason, split books, routing vs book mismatches, **Engagement**: active accounts nobody has touched in 90 days (or ever) and customers without an active Engagement Manager, and **Plan moves**: suggested account moves from Heavy to Light books within each team, untouched accounts first | `Account`, `Opportunity`, LeanData pools |
@@ -65,7 +65,7 @@ Salesforce role and changing scope never re-runs a query.
   Renewals show separately as contract ARR at stake (stage 1+; stage 0 renewals are Flow auto-created).
 - **Won**: by the date actually closed (`Actual_Close_Date__c`) everywhere: Pipeline, Forecast, Bookings, Home.
 - **Closed deals count for the team that closed them** (won, lost, win rates, lost reasons, coverage history, sales
-  cycle, this week's won and lost): the owner's role stamped at close (`Closed_Owner_Role__c`, filled since about
+  cycle, this week's won and lost, and every conversion figure): the owner's role stamped at close (`Closed_Owner_Role__c`, filled since about
   April 2026; before that, and when it is blank, the current owner's role). A deal that has since moved to someone in
   another role (a promotion, or a leaver's deals handed to a director) also counts for its owner and manager at close
   (`Closed_Owner__c`, `Closed_Owner_Manager__c`; no manager when that isn't stamped), so someone promoted can have a
@@ -80,6 +80,65 @@ Salesforce role and changing scope never re-runs a query.
   (`… Partnerships`) and strategic AEs (`AE-STRAT`) own on EMEA-region accounts (the account's sales region) are in
   none of them. Pipeline › By team lists them apart: this quarter, next quarter and all open (later and past-due
   deals too), renewals counted apart, for all of EMEA whatever the scope.
+- **Conversion** (Created opps › Conversion, leaders' 1:1 agendas, Data checks, Copy weekly summary): what happens to
+  the New Business opportunities EMEA owns (and, for cohorts, Upsell): how far they get, how many are won, lost or still
+  open, where losses leave from and why, how long stages take, and how sources convert. Counts and sums only: no
+  opportunity, account, contact or competitor name and no record Id is read, shown, copied or sent to Claude; our own
+  people may be named. Admin merges are left out everywhere and counted in How far to trust. Every request to your Claude
+  starts with the counts-only guard (a long request loses its end, never its start), and none asks it to read lost notes.
+  - *Two bases, never mixed in one number.* Cohorts: deals created in each of the last 4 completed quarters and this one
+    (your Salesforce time zone) and what has become of them (leaks, cohorts, old deals). Closed in the last 4 quarters:
+    New Business closed won or lost in the last 4 completed quarters by Actual Close Date (win rate, where losses
+    leave, reasons, sources). Time in stage: wins of the last 90 days (SMB: 30). Close Date is never used for closed deals.
+  - *Team, segment and manager*: closed deals count as above (the team that closed them; a deal since moved to someone in
+    another role also for its manager at close, otherwise today's manager), deals EMEA closed that are owned outside EMEA
+    today included; open deals for the owner today. SMB = SMB-EMEA, Field = everything else. With a manager picked,
+    leaks, cohorts and time in stage cover their direct reports; win rate, losses and sources (queried per team) show the
+    team most of their reports are in, and the note says so (— until it is known, never All EMEA's figures).
+  - *Stage reached*: from the IRO stage entry dates, matched by stage number (the stage-3 rename doesn't matter). Every
+    created deal reached stage 0, a later stage implies the earlier ones (a skipped stage is dated too) and a won deal
+    passed every stage, so the funnel never widens; it is recorded progress, not stages worked. Stage history isn't read.
+  - *Won within 2 quarters* (the rate to compare): of the deals created in a quarter, the share won by the end of the
+    following quarter, shown once that quarter has ended and from 20 created; younger quarters show *so far*. The share
+    still open at 2 quarters sits beside it: Field deals take longer, so each segment is compared with its own earlier
+    quarters, never SMB with Field. All EMEA, and managers or leaders under 80% in one motion, get no trend verdict: their
+    totals move with SMB's share of what is created (about 12% of Q1 2026's New Business and 40% of Q2's on 4 Nov 2026).
+  - *Where deals leak*: the three most recent quarters whose following quarter has ended, pooled; steps 0 → 1, 1 → 2,
+    2 → 3, 3 → 4 and stages 4–6 → won (rated together: most moves out of 5 and 6 are same-day paperwork). A step's rate
+    counts only deals that have left the stage, from 20; grey while a quarter or more are still in it.
+  - *Peers*: one motion, same created quarters, each quarter's peer rate weighted by the team's own deals: an AE team
+    against the other AE teams; a manager or leader with 80%+ of their deals in AE teams or SMB against the rest of that
+    motion. BDR-, Engagement- and Leadership-owned deals are never compared or part of anyone's peers. A leak is a step
+    5+ points below, beyond twice the normal swing (z ≤ −2), from 20 settled deals, 3+ deals behind (how many more would
+    have moved on at the peers' rate); with many teams, managers and steps a few differences pass by chance.
+  - *Win rate*: won ÷ (won + lost), New Business by count over the last 4 completed quarters (by ARR beside it; after
+    qualification leaves out stage-0 losses). Coverage's win rate is by ARR for New Business and Upsell and Bookings' by
+    count for this quarter and last; all three count closed deals for the team that closed them, and the weekly summary
+    writes "win rate by ARR" on the Coverage line and "New Business win rate by count" on the Conversion line.
+  - *Where losses leave and why*: the last stage before Closed Lost (0–1, 2–3, 4–6; "lost after a win" = won, reopened,
+    then lost), and the lost reason on the list used since 3 Nov 2026, older values under their new name as in Bookings.
+    *Rising*: a reason's share of last quarter's losses 8+ points above the three quarters before (a clean-up quarter
+    among them left out), from 10; not shown when last quarter was itself a clean-up quarter.
+  - *Clean-up quarter*: a completed quarter with a month of at least 2.5 times the average of its other two months and 100
+    more New Business losses (September 2026: 348 against 106), likely a pipeline clean-up. Its losses are real and count
+    everywhere; Why deals are lost can leave the quarter out and the win-rate tile's tooltip gives the rate without it.
+  - *Sources* (closed in the last 4 quarters, plus open today): as in Created opps › Sources (BDR-sourced, Inbound,
+    Rep-sourced), by lead source (retired Inbound Webform and Apollo as Inbound and Outbound), by origin (BDR-originated:
+    an EMEA BDR, as on the BDR leaderboard) and by who created it; win rate by count and ARR, average won deal, won ARR
+    per closed deal, average days to win over all wins, open now; SMB and Field columns compare a source within each
+    segment only.
+  - *Time in stage*: wins of the last 90 days (SMB: 30, so SMB carries about a third of its weight in All EMEA). Same-day
+    moves are counted, not timed; medians and 75th percentiles count moves of a day or more, from 10. Stage dates keep the
+    latest pass, so stages 4–6 are timed together and a deal whose stage 0–3 dates go backwards is left out of those.
+    *Days to win* = the median days from creation to the win of the wins that took a day or more (wins created and won
+    within a day were logged at signature and are counted beside it); Coverage's *Sales cycle* is an average of all New
+    Business and Upsell wins.
+  - *Old deals still at stage 0–1*: open New Business created 3 or more quarters ago that never reached stage 2: a tile,
+    a data check per team and manager (5 or more) and an agenda point.
+  - *Agendas*: leaders only (someone with EMEA sales people below them), except one whose deals are mostly BDR-owned: one
+    numbers line and up to 2 talking points (a leaking step, below peers, old deals at stage 0–1, a drop on the quarter
+    before; for the top EMEA leader, SMB against its own quarter before). They join when they load; while they load, or
+    when they couldn't, the copied agenda says so. The 1:1 agendas of RevOps people don't wait for conversion checks.
 - **Created**: owner-scoped; renewals auto-created by Flow (`Upsell_Renewal_Created_By__c = 'Flow'`) excluded.
   BDR-sourced counts only `BDR-EMEA` / `DIR-BDR-EMEA` originating BDRs, by the role stamped on the deal or, when
   none was stamped, the BDR's current role.
@@ -217,7 +276,10 @@ without LeanData, routing pools, routing checks, routing gaps and pool seats sho
 person panel, data checks, team scorecard, 1:1 agendas and Leavers (deals, renewals, accounts) keep working;
 without Lead access, the Leads screen and leavers' leads are missing; without HiBob, the Hiring screen and HiBob
 checks; without email message or event access, Activity and its scorecard columns show —, and agendas leave out
-the activity lines (saying so when nothing else is flagged), while the rest of each screen keeps working. Without
+the activity lines (saying so when nothing else is flagged), while the rest of each screen keeps working. Each
+conversion query and calc stands alone: without the losses by month only the clean-up toggle and figures go, without
+the recent wins only time in stage, Days to win and the signature check, and a leader's agenda says when its conversion
+lines couldn't load. Without
 `getUserInfo`, the Home greeting is blank, the scorecard starts from the top EMEA leader and the Activity view can't
 check your Salesforce time zone; nothing else changes. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
 "Connect … in your claude.ai connectors" (naming the one that is actually missing) rather than "Failed to load", and
@@ -256,6 +318,19 @@ that failed instead of leaving it out.
   20,000 Task/Other rows on EMEA owners' records, roughly one per received email, touching about 2,500 accounts. So
   Untouched and stale counts are lower bounds. Per-account rep touches can't be read from Account, because Task
   can't be the inner object of a semi-join.
+- **Conversion** leaves out on purpose: conversion per rep (a rep closes 5–40 New Business deals a year, reassigned
+  books move deals between people, and per-person performance views need the HR and works-council check named for
+  Activity; the Dig into request breaks a team's losses down by owner on demand), how long lost deals sat (one row per
+  lost deal would pass the 2,000-row limit), ARR at each stage (S0–S6 ARR; how SUM treats their currency is unverified),
+  Lost Detail (not filled yet), lost notes and competitor names (free text about prospects and vendor names in chat need
+  the owner's sign-off). A deal that moved outside EMEA after closing before about April 2026 (no closing role stamped)
+  can't be seen. Won within 2 quarters is a fixed horizon, so it cuts off more of Field's later wins than SMB's (the share
+  still open at 2 quarters is shown beside it). Originating BDR is set on about 18% of closed deals, so older BDR deals
+  sit under Rep-sourced or Inbound unless a BDR created them. Upsell shows outcomes only (its stages changed during 2026).
+  The six queries were run read-only on 4 Nov 2026 with the access the app was built with (211, 650, 758, 14, 705 and
+  296 rows, none cut);
+  field-level access for EMEA profiles to the stage entry dates, Last Stage Before Close, Closed Owner Role, Closed Owner
+  Manager and Days in Stage must be checked before rollout, and one EMEA director should compare All EMEA with RevOps.
 - Lead speed covers EMEA sellers except SMB: demo requests LeanData converts to a contact on arrival are followed
   up on the contact, and SMB leads are moved out of Ready by automation, so neither is timed. One business calendar
   (Paris, no holidays) for all of EMEA, so MEA and holiday weeks look slower than they are. Leads count for their
@@ -274,6 +349,7 @@ dashboard/
   os-calcs.js         # dash.calc derivations (visible to readers in Sources)
   os-calcs-leads.js   # the Leads calcs, its own file to stay under the 256 KB per-file limit
   os-calcs-act.js     # the selling activity calcs, likewise
+  os-calcs-conv.js    # the conversion calcs (cohorts, leaks, win rate, reasons, sources, time in stage), likewise
   os-draw.js          # charts, stats, tables, lists, badges, person panel
   build_store.py      # writes store/ JSON docs for the artifact's store
 ```

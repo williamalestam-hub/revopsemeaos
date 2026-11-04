@@ -680,6 +680,78 @@
    }
   }
  },
+ "cv_open": {
+  "title": "Open opps by created quarter",
+  "description": "Open EMEA New Business and Upsell opportunities of any age, by type, the quarter they were created in (in your Salesforce time zone), owner role and the owner's manager: how many, their incremental ARR (USD), how many carry each stage entry date (stage 0 to 6; a skipped stage is dated too) and how many were marked Closed Won or Closed Lost before and reopened. Counts and sums only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT RecordType.Name rt, FISCAL_YEAR(convertTimezone(CreatedDate)) fy, FISCAL_QUARTER(convertTimezone(CreatedDate)) fq, Owner.UserRole.Name role, Owner.Manager.Name manager, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr, COUNT(IRO_Stage_0_Date_Stamp__c) s0, COUNT(IRO_Stage_1_Date_Stamp__c) s1, COUNT(IRO_Stage_2_Date_Stamp__c) s2, COUNT(IRO_Stage_3_Date_Stamp__c) s3, COUNT(IRO_Stage_4_Date_Stamp__c) s4, COUNT(IRO_Stage_5_Date_Stamp__c) s5, COUNT(IRO_Stage_6_Date_Stamp__c) s6, COUNT(IRO_Closed_Won_Date_Stamp__c) cwStamp, COUNT(IRO_Closed_Lost_Date_Stamp__c) clStamp FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') AND IsClosed = false GROUP BY RecordType.Name, FISCAL_YEAR(convertTimezone(CreatedDate)), FISCAL_QUARTER(convertTimezone(CreatedDate)), Owner.UserRole.Name, Owner.Manager.Name LIMIT 2000"
+   }
+  }
+ },
+ "cv_closed": {
+  "title": "Won and lost opps by created quarter",
+  "description": "EMEA New Business and Upsell opportunities created in the last 4 completed quarters and this one (in your Salesforce time zone) that are now closed won or lost, admin merges ('Merged with Global Pilot', 'Record cleanup') left out, with the owner's role and manager now and when the deal closed (a deal counts for the team that closed it, also when it is owned outside EMEA today), won or lost, and the quarter it was actually closed (Actual Close Date): how many, their incremental ARR (USD), how many carry each stage entry date (0 to 6) and the Closed Won and Closed Lost entry dates. Counts and sums only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT RecordType.Name rt, FISCAL_YEAR(convertTimezone(CreatedDate)) fy, FISCAL_QUARTER(convertTimezone(CreatedDate)) fq, Owner.UserRole.Name role, Owner.Manager.Name manager, Closed_Owner_Role__c closedRole, Closed_Owner_Manager__c closedManager, IsWon won, FISCAL_YEAR(Actual_Close_Date__c) cfy, FISCAL_QUARTER(Actual_Close_Date__c) cfq, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr, COUNT(IRO_Stage_0_Date_Stamp__c) s0, COUNT(IRO_Stage_1_Date_Stamp__c) s1, COUNT(IRO_Stage_2_Date_Stamp__c) s2, COUNT(IRO_Stage_3_Date_Stamp__c) s3, COUNT(IRO_Stage_4_Date_Stamp__c) s4, COUNT(IRO_Stage_5_Date_Stamp__c) s5, COUNT(IRO_Stage_6_Date_Stamp__c) s6, COUNT(IRO_Closed_Won_Date_Stamp__c) cwStamp, COUNT(IRO_Closed_Lost_Date_Stamp__c) clStamp FROM Opportunity WHERE RecordType.Name IN ('New Business','Upsell') AND (Closed_Owner_Role__c IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR (Closed_Owner_Role__c = null AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA'))) AND IsClosed = true AND (CreatedDate = LAST_N_FISCAL_QUARTERS:4 OR CreatedDate = THIS_FISCAL_QUARTER) AND (IsWon = true OR Closed_Reason__c = null OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup')) GROUP BY RecordType.Name, FISCAL_YEAR(convertTimezone(CreatedDate)), FISCAL_QUARTER(convertTimezone(CreatedDate)), Owner.UserRole.Name, Owner.Manager.Name, Closed_Owner_Role__c, Closed_Owner_Manager__c, IsWon, FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c) LIMIT 2000"
+   }
+  }
+ },
+ "cv_window": {
+  "title": "New Business closed, last 4 quarters",
+  "description": "EMEA New Business closed won or lost in the last 4 completed quarters and this one, by the date it was actually closed, for the team that closed it (also when it is owned outside EMEA today): by close quarter, owner role now and when the deal closed, won or lost, the last stage before close and the lost reason (the list retired on 3 Nov 2026 and the new one): how many and their incremental ARR (USD). Admin merges are kept so they can be counted, and left out of every figure. Counts and sums only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT FISCAL_YEAR(Actual_Close_Date__c) fy, FISCAL_QUARTER(Actual_Close_Date__c) fq, Owner.UserRole.Name role, Closed_Owner_Role__c closedRole, IsWon won, IRO_Last_Stage_Before_Close__c lastStage, Closed_Reason__c reason, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr FROM Opportunity WHERE RecordType.Name = 'New Business' AND (Closed_Owner_Role__c IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR (Closed_Owner_Role__c = null AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA'))) AND IsClosed = true AND (Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER) GROUP BY FISCAL_YEAR(Actual_Close_Date__c), FISCAL_QUARTER(Actual_Close_Date__c), Owner.UserRole.Name, Closed_Owner_Role__c, IsWon, IRO_Last_Stage_Before_Close__c, Closed_Reason__c LIMIT 2000"
+   }
+  }
+ },
+ "cv_lost_month": {
+  "title": "New Business lost by month",
+  "description": "EMEA New Business closed lost in the last 4 completed quarters and this one, for the team that closed it, admin merges left out: how many per calendar month of the date actually closed. It finds a one-month burst of losses, such as a pipeline clean-up. Counts only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT CALENDAR_YEAR(Actual_Close_Date__c) yr, CALENDAR_MONTH(Actual_Close_Date__c) mo, COUNT(Id) n FROM Opportunity WHERE RecordType.Name = 'New Business' AND (Closed_Owner_Role__c IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR (Closed_Owner_Role__c = null AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA'))) AND IsClosed = true AND IsWon = false AND (Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 OR Actual_Close_Date__c = THIS_FISCAL_QUARTER) AND (Closed_Reason__c = null OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup')) GROUP BY CALENDAR_YEAR(Actual_Close_Date__c), CALENDAR_MONTH(Actual_Close_Date__c) LIMIT 2000"
+   }
+  }
+ },
+ "cv_source": {
+  "title": "New Business by source",
+  "description": "EMEA New Business closed won or lost in the last 4 completed quarters (by the date actually closed; admin merges left out; for the team that closed it), plus every open one an EMEA role owns, by lead source, the originating BDR's role (stamped on the deal, and the BDR's role today), the creator's role, owner role now and when the deal closed, open or closed, and won or lost: how many, incremental ARR (USD), and the days from creation to the close date added up, with how many deals had them. Counts and sums only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT LeadSource src, Originating_BDR_Role__c bdrRole, Originating_BDR__r.UserRole.Name bdrNow, CreatedBy.UserRole.Name creatorRole, Owner.UserRole.Name role, Closed_Owner_Role__c closedRole, IsClosed closed, IsWon won, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr, SUM(Days_from_Created_to_Close_Date__c) cycleDays, COUNT(Days_from_Created_to_Close_Date__c) cycleN FROM Opportunity WHERE RecordType.Name = 'New Business' AND ((IsClosed = false AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA')) OR (IsClosed = true AND (Closed_Owner_Role__c IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR (Closed_Owner_Role__c = null AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA'))) AND Actual_Close_Date__c = LAST_N_FISCAL_QUARTERS:4 AND (IsWon = true OR Closed_Reason__c = null OR Closed_Reason__c NOT IN ('Merged with Global Pilot','Record cleanup')))) GROUP BY LeadSource, Originating_BDR_Role__c, Originating_BDR__r.UserRole.Name, CreatedBy.UserRole.Name, Owner.UserRole.Name, Closed_Owner_Role__c, IsClosed, IsWon LIMIT 2000"
+   }
+  }
+ },
+ "cv_days": {
+  "title": "Days in each stage of recent wins",
+  "description": "EMEA New Business won in the last 90 days (deals SMB closed: the last 30 days), for the team that closed it, one row per deal but without its Id, name, account or ARR: owner role and the owner's manager now and when the deal closed, the days the deal spent in each stage 0 to 6 (from one stage entry date to the next; 0 for a stage passed the same day or skipped), the days from creation to the win, and its Closed Won entry date and close date (to spot wins reopened and won again).",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.UserRole.Name role, Owner.Manager.Name manager, Closed_Owner_Role__c closedRole, Closed_Owner_Manager__c closedManager, MAX(Days_in_Stage_0__c) d0, MAX(Days_in_Stage_1__c) d1, MAX(Days_in_Stage_2__c) d2, MAX(Days_in_Stage_3__c) d3, MAX(Days_in_Stage_4__c) d4, MAX(Days_in_Stage_5__c) d5, MAX(Days_in_Stage_6__c) d6, MAX(Days_from_Created_to_Close_Date__c) daysToWin, MAX(IRO_Closed_Won_Date_Stamp__c) cwAt, MAX(Actual_Close_Date__c) closeAt FROM Opportunity WHERE RecordType.Name = 'New Business' AND (Closed_Owner_Role__c IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') OR (Closed_Owner_Role__c = null AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA'))) AND IsWon = true AND Actual_Close_Date__c = LAST_N_DAYS:90 AND ((Closed_Owner_Role__c != 'SMB-EMEA' AND (Closed_Owner_Role__c != null OR Owner.UserRole.Name != 'SMB-EMEA')) OR Actual_Close_Date__c = LAST_N_DAYS:30) GROUP BY Id, Owner.UserRole.Name, Owner.Manager.Name, Closed_Owner_Role__c, Closed_Owner_Manager__c LIMIT 2000"
+   }
+  }
+ },
  "cal_events": {
   "title": "Your calendar, next 14 days",
   "description": "Your Google Calendar events from today for the next 14 days (regular events only), with who is invited; the page keeps the 1:1s with a colleague.",
