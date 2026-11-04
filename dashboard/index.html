@@ -696,6 +696,31 @@
   <p class="os-empty" data-msg-for="pipe-chart" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
 </div></div>
         </div>
+        <div class="pane" id="pipe-partner">
+          <div class="pane-head">
+            <div><h2 class="pane-title">Owned outside EMEA sales</h2><p class="pane-note">Open deals on EMEA-region accounts (the account's sales region) owned by the global partnership roles and strategic AEs. Team totals follow the owner's role, so none of these are in them. All of EMEA whatever the scope; New Business and Upsell ARR, renewals counted apart.</p></div>
+            <button class="ibtn" type="button" data-copy-table="partner-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+          </div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="partner_pipe" data-row-key="key">
+              <thead><tr>
+                <th data-field="role">Owner role</th>
+                <th class="num" data-field="thisArr">This quarter</th>
+                <th class="num" data-field="thisOpps">Deals this Q</th>
+                <th class="num" data-field="nextArr">Next quarter</th>
+                <th class="num" data-field="allArr">All open</th>
+                <th class="num" data-field="allOpps">Deals open</th>
+                <th class="num" data-field="renewals">Renewals</th>
+                <th data-field="regions">Most in</th>
+              </tr></thead>
+              <tbody data-draw="partner-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="partner-table"></span>
+              <p class="os-empty" data-msg-for="partner-table" data-msg="empty" hidden>No open deals on EMEA accounts owned by partnership roles or strategic AEs.</p>
+              <p class="os-empty" data-msg-for="partner-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="view" id="pipeline-forecast" data-view-panel="pipeline:forecast" hidden>
@@ -764,7 +789,7 @@
               <button class="ibtn" type="button" data-copy-table="book-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
             </div>
             <div class="pane-scroll">
-              <table class="tbl" data-source="bookings" data-row-key="owner" data-sortable="book-table">
+              <table class="tbl" data-source="bookings" data-row-key="key" data-sortable="book-table">
                 <thead><tr>
                   <th data-field="owner" data-sort="owner"><button type="button" class="th-sort">Rep</button></th>
                   <th data-field="region" data-sort="region"><button type="button" class="th-sort">Team</button></th>

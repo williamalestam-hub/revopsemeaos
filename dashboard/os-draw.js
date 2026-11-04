@@ -788,11 +788,18 @@ OS.defTable('book-table', ['bookings'], () => (dash.data('bookings').data || [])
   { f: 'wonThis', fmt: OS.num, num: true }, { f: 'lostThis', fmt: OS.num, num: true },
   { f: 'winRateThis', fmt: OS.pct, num: true }, { f: 'avgDealThis', fmt: OS.usd, num: true },
   { f: 'wonLastArr', fmt: OS.usd, num: true }, { f: 'winRateLast', fmt: OS.pct, num: true },
-], { key: 'owner' });
+], { key: 'key' });
+// open deals on EMEA accounts owned outside EMEA sales roles (partnerships, strategic AEs): in no team's totals
+OS.defTable('partner-table', ['partner_pipe'], () => dash.data('partner_pipe').data || [], [
+  { f: 'role' },
+  { f: 'thisArr', fmt: OS.usd, num: true }, { f: 'thisOpps', fmt: OS.num, num: true },
+  { f: 'nextArr', fmt: OS.usd, num: true }, { f: 'allArr', fmt: OS.usd, num: true, bar: (l) => d3.max(l.filter((r) => r.role !== 'All'), (r) => r.allArr) },
+  { f: 'allOpps', fmt: OS.num, num: true }, { f: 'renewals', fmt: OS.num, num: true }, { f: 'regions', fmt: (v) => v || '—' },
+], { key: 'key' });
 OS.defChart('lost-chart', ['lost_reasons'], () => {
   const scope = mgrPick() ? 'M|' + mgrPick() : OS.region();
   return (dash.data('lost_reasons').data || []).filter((r) => r.scope === scope && r.thisOpps)
-    .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
+    .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : r.was ? ' (was ' + r.was + ')' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
     .sort((a, b) => b.thisQ - a.thisQ || b.lastQ - a.lastQ);
 }, (box, rows) => OS.hbars(box, rows, [{ k: 'thisQ', name: 'This quarter', color: dash.colors[0] }], OS.num));
 const rampCls = (v) => (v === 'Ramping' || v === 'Sourcing' ? 'ok' : v === 'Not ramping' || v === 'No Salesforce user' ? 'bad' : v === 'Too early' ? 'warn' : '');

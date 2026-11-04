@@ -3,7 +3,7 @@
 
 // ===================== PIPELINE =====================
 dash.calc('pipe_team', {
-  title: 'Pipeline by team and manager',
+  title: 'Pipeline by team and manager Closed won counts for the team that closed it (the owner\'s role at close; a deal since moved to someone in another role also for the manager at close).',
   description: 'Open New Business and Upsell pipeline, rep commit, rep best case and stage bands per team and manager for this and next quarter, with closed won this quarter (by the date actually closed) and renewals at stake past stage 0. Commit is the ARR of deals the rep has put in the Commit forecast category; best case adds the Best Case category, so it already includes commit. Deals with no category count as pipeline only. Team comes from the owner role; "M|<manager>" rows total each manager\'s direct reports across teams.',
   inputs: ['pipe_stage', 'won_q', 'renew_stake'],
   fn: (pipe_stage, won_q, renew_stake) => {
@@ -44,13 +44,43 @@ dash.calc('pipe_team', {
     }
     for (const r of won_q) {
       if (r.recordType === 'Renewal') continue;
-      each(r, (o) => { o.won += +r.wonArrUsd || 0; });
+      // the team that closed it: the owner's role at close (the current one when not stamped); a deal that has since
+      // moved to someone in another role also counts for the manager at close (none when that isn't stamped)
+      const moved = !!(r.closedRole && r.closedRole !== r.role);
+      each({ role: r.closedRole || r.role, manager: moved ? r.closedManager || null : r.manager }, (o) => { o.won += +r.wonArrUsd || 0; });
     }
     for (const r of renew_stake) {
       if (r.fy * 10 + r.fq !== thisQ || String(r.stage).startsWith('0')) continue;
       each(r, (o) => { o.renewThis += +r.renewingArrUsd || 0; o.renewThisCount += +r.renewals || 0; });
     }
     return [...out.values()];
+  },
+});
+
+dash.calc('partner_pipe', {
+  title: 'Pipeline owned outside EMEA sales',
+  description: 'Open deals on EMEA-region accounts owned by the global partnership roles and strategic AEs, per owner role and in total ("All"): New Business and Upsell ARR and deals closing this quarter, next quarter and in all (later quarters and past-due deals included), open renewals, and the account regions holding the most. None of it is in any EMEA team\'s totals, which follow the owner\'s role.',
+  inputs: ['pipe_partner'],
+  fn: (pipe_partner) => {
+    const now = new Date();
+    const thisQ = now.getUTCFullYear() * 10 + Math.floor(now.getUTCMonth() / 3) + 1;
+    const nextQ = thisQ % 10 === 4 ? (Math.floor(thisQ / 10) + 1) * 10 + 1 : thisQ + 1;
+    const usd = (v) => { const a = Math.abs(+v || 0); return '$' + (a >= 999500 ? (a / 1e6).toFixed(a >= 9.95e6 ? 0 : 1) + 'M' : a >= 999.5 ? Math.round(a / 1e3) + 'K' : String(Math.round(a))); };
+    const m = new Map();
+    const get = (role) => { if (!m.has(role)) m.set(role, { key: role, role, thisArr: 0, thisOpps: 0, nextArr: 0, nextOpps: 0, allArr: 0, allOpps: 0, renewals: 0, byRegion: {} }); return m.get(role); };
+    for (const r of pipe_partner) {
+      for (const o of [get('All'), get(r.role || '(no role)')]) {
+        if (r.rt === 'Renewal') { o.renewals += +r.opps || 0; continue; }
+        const q = r.fy * 10 + r.fq, arr = +r.arrUsd || 0, n = +r.opps || 0;
+        o.allArr += arr; o.allOpps += n;
+        if (q === thisQ) { o.thisArr += arr; o.thisOpps += n; } else if (q === nextQ) { o.nextArr += arr; o.nextOpps += n; }
+        const reg = r.region || '(no region)';
+        o.byRegion[reg] = (o.byRegion[reg] || 0) + arr;
+      }
+    }
+    return [...m.values()].map(({ byRegion, ...o }) => ({ ...o,
+      regions: Object.entries(byRegion).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => k + ' ' + usd(v)).join(', ') || null }))
+      .sort((a, b) => (a.role === 'All') - (b.role === 'All') || b.allArr - a.allArr);
   },
 });
 
@@ -685,9 +715,17 @@ dash.calc('person', {
 
 dash.calc('person_bk', {
   title: 'Person view, bookings',
-  description: 'Per rep, by name: won this quarter and last (ARR and count), lost this quarter, win rate and average won deal, from Bookings.',
+  description: 'Per rep, by name: won this quarter and last (ARR and count), lost this quarter, win rate and average won deal, from Bookings, adding up the teams they closed under.',
   inputs: ['bookings'],
-  fn: (bookings) => bookings.map((r) => ({ name: r.owner, wonThisArr: r.wonThisArr, wonThis: r.wonThis, lostThis: r.lostThis, wonLastArr: r.wonLastArr, winRateThis: r.winRateThis, avgDealThis: r.avgDealThis })),
+  fn: (bookings) => {
+    const m = new Map();
+    for (const r of bookings) {
+      if (!m.has(r.owner)) m.set(r.owner, { name: r.owner, wonThisArr: 0, wonThis: 0, lostThis: 0, wonLastArr: 0 });
+      const o = m.get(r.owner);
+      o.wonThisArr += +r.wonThisArr || 0; o.wonThis += +r.wonThis || 0; o.lostThis += +r.lostThis || 0; o.wonLastArr += +r.wonLastArr || 0;
+    }
+    return [...m.values()].map((o) => ({ ...o, winRateThis: o.wonThis + o.lostThis ? o.wonThis / (o.wonThis + o.lostThis) : null, avgDealThis: o.wonThis ? o.wonThisArr / o.wonThis : null }));
+  },
 });
 
 dash.calc('person_hb', {
@@ -1318,7 +1356,7 @@ dash.calc('cr_pace', {
 // ===================== BOOKINGS =====================
 dash.calc('bookings', {
   title: 'Bookings and win rate per rep',
-  description: 'Per rep, New Business and Upsell closed this quarter and last (by the date actually closed): won count and ARR, lost count, win rate by count, and average won deal. Losses marked "Merged with Global Pilot" or "Record cleanup" are admin merges and are left out of win rates.',
+  description: 'Per rep and the team and manager they closed under, New Business and Upsell closed this quarter and last (by the date actually closed): won count and ARR, lost count, win rate by count, and average won deal. A deal counts for the team of its owner\'s role at close (the current role before that was stamped, about April 2026); one that has since moved to someone in another role counts for its owner and manager at close, so someone who changed roles can have a row per team. Losses marked "Merged with Global Pilot" or "Record cleanup" are admin merges and are left out of win rates.',
   inputs: ['closed_rep'],
   fn: (closed_rep) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -1327,8 +1365,14 @@ dash.calc('bookings', {
     const thisQ = now.getUTCFullYear() * 10 + Math.floor(now.getUTCMonth() / 3) + 1;
     const m = new Map();
     for (const r of closed_rep) {
-      if (!m.has(r.owner)) m.set(r.owner, { owner: r.owner, role: r.role, region: TEAM[r.role] || 'Other', manager: r.manager || '(no manager)', wonThis: 0, wonThisArr: 0, wonNbArr: 0, wonUpArr: 0, lostThis: 0, wonLast: 0, wonLastArr: 0, lostLast: 0 });
-      const o = m.get(r.owner);
+      // who closed it, in which team and under which manager: the owner's role at close (the current one when not
+      // stamped); a deal that has since moved to someone in another role counts for its owner and manager at close
+      const moved = !!(r.closedRole && r.closedRole !== r.role);
+      const owner = moved ? r.closedOwner || r.owner : r.owner, role = r.closedRole || r.role;
+      const manager = (moved ? r.closedManager : r.manager) || '(no manager)', region = TEAM[role] || 'Other';
+      const key = owner + '|' + region + '|' + manager;
+      if (!m.has(key)) m.set(key, { key, owner, role, region, manager, wonThis: 0, wonThisArr: 0, wonNbArr: 0, wonUpArr: 0, lostThis: 0, wonLast: 0, wonLastArr: 0, lostLast: 0 });
+      const o = m.get(key);
       const p = r.fy * 10 + r.fq === thisQ ? 'This' : 'Last';
       if (r.won) {
         o['won' + p] += +r.opps || 0; o['won' + p + 'Arr'] += +r.arrUsd || 0;
@@ -1363,26 +1407,35 @@ dash.calc('bookings_kpi', {
 
 dash.calc('lost_reasons', {
   title: 'Lost reasons',
-  description: 'Lost New Business and Upsell deals by lost reason, this quarter and last, per team, per manager and for all EMEA. Admin merges ("Merged with Global Pilot", "Record cleanup") are shown but marked.',
+  description: 'Lost New Business and Upsell deals by lost reason, this quarter and last, per team, per manager and for all EMEA (the team and manager that closed them, as in Bookings). Reasons follow the list used since 3 Nov 2026; older values are grouped under their new name (Qualified Out as Not a fit, Timing as Deferred, Technical/Functional Gap as Product fit, Lost to Competitor as Chose an alternative, No Champion as Buyer engagement, Budget as Price and budget), and "was" names the older values in each group. Value not perceived has no clear new equivalent and stays apart. Admin merges ("Merged with Global Pilot", "Record cleanup") are shown but marked.',
   inputs: ['closed_rep'],
   fn: (closed_rep) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
     const ADMIN = /^(merged with global pilot|record cleanup)$/i;
     const now = new Date();
     const thisQ = now.getUTCFullYear() * 10 + Math.floor(now.getUTCMonth() / 3) + 1;
+    // the reason list changed on 3 Nov 2026: older values are grouped under their new name (a mapping RevOps agreed);
+    // Value not perceived has no clear new equivalent and stays apart; admin values and unknown ones keep their name
+    const REASON = { 'Qualified Out': 'Not a fit', 'Timing': 'Deferred', 'Technical/Functional Gap': 'Product fit', 'Lost to Competitor': 'Chose an alternative',
+      'No Champion': 'Buyer engagement', 'Budget': 'Price and budget', 'Value not perceived': 'Value not perceived (old list)' };
     const out = new Map();
     for (const r of closed_rep) {
       if (r.won) continue;
-      const reason = r.lostReason || 'No reason given';
-      const region = TEAM[r.role] || 'Other';
-      for (const scope of ['All', region].concat(r.manager ? ['M|' + r.manager] : [])) {
+      const raw = r.lostReason || '';
+      const reason = !raw ? 'No reason given' : REASON[raw] || raw;
+      // the team that closed it (see Bookings): role at close, and the manager at close for a deal moved to another role
+      const moved = !!(r.closedRole && r.closedRole !== r.role);
+      const region = TEAM[r.closedRole || r.role] || 'Other', manager = moved ? r.closedManager : r.manager;
+      for (const scope of ['All', region].concat(manager ? ['M|' + manager] : [])) {
         const key = scope + '|' + reason;
-        if (!out.has(key)) out.set(key, { key, scope, reason, admin: ADMIN.test(reason), thisOpps: 0, lastOpps: 0, thisArr: 0 });
+        if (!out.has(key)) out.set(key, { key, scope, reason, admin: ADMIN.test(reason), thisOpps: 0, lastOpps: 0, thisArr: 0, olds: {} });
         const o = out.get(key);
         if (r.fy * 10 + r.fq === thisQ) { o.thisOpps += +r.opps || 0; o.thisArr += +r.arrUsd || 0; } else o.lastOpps += +r.opps || 0;
+        if (raw && REASON[raw] && REASON[raw] !== raw + ' (old list)') o.olds[raw] = (o.olds[raw] || 0) + (+r.opps || 0);
       }
     }
-    return [...out.values()];
+    // was: the older values a group holds, e.g. 'Qualified Out' (both quarters together)
+    return [...out.values()].map(({ olds, ...o }) => ({ ...o, was: Object.keys(olds).sort((a, b) => olds[b] - olds[a]).join(', ') || null }));
   },
 });
 
@@ -1439,7 +1492,7 @@ dash.calc('team_tree', {
       if (!p.inRoster) continue;
       Object.assign(get(p.name), { emea: p.isActive === false ? 0 : 1, thisPipe: +p.thisPipe || 0, thisOpps: +p.thisOpps || 0, nextPipe: +p.nextPipe || 0, pastDue: +p.pastDue || 0, stale: +p.stale || 0, crOpps: +p.crOpps || 0, crArr: +p.crArr || 0 });
     }
-    for (const b of bookings) if (own.has(b.owner)) Object.assign(own.get(b.owner), { wonThisArr: +b.wonThisArr || 0, wonThis: +b.wonThis || 0, lostThis: +b.lostThis || 0 });
+    for (const b of bookings) if (own.has(b.owner)) { const o = own.get(b.owner); o.wonThisArr += +b.wonThisArr || 0; o.wonThis += +b.wonThis || 0; o.lostThis += +b.lostThis || 0; }
     for (const r of rep_risk) if (r.score >= 5) get(r.owner).riskReps += 1;
     for (const c of checks) if (c.person && c.area !== 'Routing' && c.area !== 'Pipeline') get(c.person).checks += 1;
     const KEYS = Object.keys(blank());
@@ -1776,7 +1829,7 @@ dash.calc('oo_kpi', {
 
 // ===================== WEEKLY MOVEMENT =====================
 dash.calc('pipe_moves', {
-  title: 'Pipeline movement, last 7 days',
+  title: 'Pipeline movement, last 7 days Won and lost count for who closed them: a deal that has since moved to someone in another role counts for its owner, team and manager at close.',
   description: 'Per EMEA rep, New Business and Upsell in the last 7 days: opportunities created, won and lost (by the date actually closed; admin merges and record clean-ups left out of lost), close dates pushed out of this quarter or pulled into it, stage moved up or down, and moved into or out of Commit. Each deal counts once per measure, at its current ARR, for its current owner, comparing where it was at the start of the week with where it is now, so a push that was pulled back, or a stage moved and moved back, does not count. Deals created this week count as created (and as won or lost if they closed); their close-date, stage and Commit changes are left out.',
   inputs: ['mv_outcomes', 'mv_created', 'mv_close', 'mv_fields', 'roster'],
   fn: (mv_outcomes, mv_created, mv_close, mv_fields, roster) => {
@@ -1789,7 +1842,12 @@ dash.calc('pipe_moves', {
       if (!m.has(owner)) m.set(owner, { owner, role: role || null, region: TEAM[role] || 'Other', manager: manager || '(no manager)', created: 0, createdArr: 0, createdThisQ: 0, won: 0, wonArr: 0, lost: 0, lostArr: 0, pushed: 0, pushedArr: 0, pulled: 0, pulledArr: 0, up: 0, upArr: 0, down: 0, downArr: 0, intoCommit: 0, intoCommitArr: 0, outCommit: 0, outCommitArr: 0 });
       return m.get(owner);
     };
-    for (const r of mv_outcomes) { const o = get(r.owner, r.role, r.manager); if (r.won) { o.won += +r.n || 0; o.wonArr += +r.arr || 0; } else { o.lost += +r.n || 0; o.lostArr += +r.arr || 0; } }
+    for (const r of mv_outcomes) {
+      // who closed it (see Bookings): a deal that has since moved to someone in another role counts at close
+      const moved = !!(r.closedRole && r.closedRole !== r.role);
+      const o = moved ? get(r.closedOwner || r.owner, r.closedRole, r.closedManager) : get(r.owner, r.role, r.manager);
+      if (r.won) { o.won += +r.n || 0; o.wonArr += +r.arr || 0; } else { o.lost += +r.n || 0; o.lostArr += +r.arr || 0; }
+    }
     for (const r of mv_created) {
       const o = get(r.owner, r.role, r.manager);
       o.created += +r.opps || 0; o.createdArr += +r.arr || 0;
@@ -1856,7 +1914,7 @@ dash.calc('moves_kpi', {
 // ===================== COVERAGE =====================
 dash.calc('pipe_cover', {
   title: 'Coverage against usual bookings',
-  description: 'Per team, team and manager, manager ("M|<manager>", direct reports) and all EMEA, New Business and Upsell: average quarterly bookings over the last 4 completed quarters (missing quarters count as 0), won so far this quarter, open pipeline closing this and next quarter (past-due deals from earlier quarters left out, as on Pipeline), coverage (open this quarter over what is still to win to reach the usual quarter, open next quarter over a usual quarter), the win rate by ARR over those 4 quarters (admin merges left out; falls back to all EMEA under 10 closed deals), expected close at that win rate, and the average days from creation to win.',
+  description: 'Per team, team and manager, manager ("M|<manager>", direct reports) and all EMEA, New Business and Upsell: average quarterly bookings over the last 4 completed quarters (missing quarters count as 0), won so far this quarter, open pipeline closing this and next quarter (past-due deals from earlier quarters left out, as on Pipeline), coverage (open this quarter over what is still to win to reach the usual quarter, open next quarter over a usual quarter), the win rate by ARR over those 4 quarters (admin merges left out; falls back to all EMEA under 10 closed deals), expected close at that win rate, and the average days from creation to win. Won, lost and days to win count for the team that closed each deal (its owner\'s role at close; a deal since moved to someone in another role also for the manager at close); open pipeline for its current owner.',
   inputs: ['coverage_base', 'cycle_team'],
   fn: (coverage_base, cycle_team) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -1872,7 +1930,9 @@ dash.calc('pipe_cover', {
       if (r.fy == null) continue;
       const q = idx(+r.fy, +r.fq);
       const arr = +r.arr || 0, n = +r.n || 0;
-      each(r.role, r.manager, (o) => {
+      // a closed deal counts for the team that closed it (see Bookings); open pipeline for its current owner
+      const moved = !!(r.closed && r.closedRole && r.closedRole !== r.role);
+      each(r.closed ? r.closedRole || r.role : r.role, moved ? r.closedManager : r.manager, (o) => {
         if (r.closed) {
           if (q >= cur - 4 && q < cur) { if (r.won) { o.wonHist += arr; if (arr > 0) o.histQs.add(q); } else o.lostHist += arr; o.closedN += n; }
           else if (q === cur && r.won) o.wonSoFar += arr;
@@ -1880,7 +1940,10 @@ dash.calc('pipe_cover', {
         else if (q === cur + 1) o.openNext += arr;
       });
     }
-    for (const r of cycle_team) each(r.role, r.manager, (o) => { o.cyc += (+r.avgCycleDays || 0) * (+r.wonOpps || 0); o.cycN += +r.wonOpps || 0; });
+    for (const r of cycle_team) {
+      const moved = !!(r.closedRole && r.closedRole !== r.role);
+      each(r.closedRole || r.role, moved ? r.closedManager : r.manager, (o) => { o.cyc += (+r.avgCycleDays || 0) * (+r.wonOpps || 0); o.cycN += +r.wonOpps || 0; });
+    }
     const all = m.get('All|All');
     const rate = (o) => (o.wonHist + o.lostHist > 0 ? o.wonHist / (o.wonHist + o.lostHist) : null);
     return [...m.values()].map((o) => {

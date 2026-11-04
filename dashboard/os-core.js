@@ -33,7 +33,7 @@ const sfRows = ({ answer, args }, capped = true) => {
   const lim = capped ? limitOf(args) : 0;
   return { columns: rows.length ? Object.keys(rows[0]) : [], rows, cut: a.done === false || (lim > 0 && rows.length >= lim) };
 };
-['pipe_stage', 'pipe_rep', 'pipe_pastdue', 'pipe_stale', 'won_q', 'renew_stake',
+['pipe_stage', 'pipe_rep', 'pipe_pastdue', 'pipe_stale', 'won_q', 'renew_stake', 'pipe_partner',
   'cr_daily', 'cr_monthly', 'cr_source', 'cr_owner_q', 'cr_bdr',
   'rr_members', 'rr_assign', 'roster',
   'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
