@@ -393,7 +393,7 @@
       <header class="scr-head">
         <div>
           <h1>1:1s</h1>
-          <p>An agenda for each 1:1 in the next two weeks: open follow-ups from your Granola notes, then their Salesforce numbers and what to raise. For a leader, the numbers cover everyone in EMEA sales below them.</p>
+          <p>An agenda for each 1:1 in the next two weeks: open follow-ups and what you covered last time from your Granola notes, then what to raise. With EMEA sales, their Salesforce numbers and talking points (for a leader, everyone in EMEA sales below them). With your manager, your reports and RevOps colleagues, the EMEA update and the RevOps work open.</p>
         </div>
         <div class="scr-actions">
           <button class="btn" type="button" data-copy-agenda><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy agenda</button>
@@ -424,7 +424,7 @@
           </div>
           <div class="pane" id="oo-agenda">
             <div class="pane-head">
-              <div><h2 class="pane-title" data-draw="oo-who" data-source="team_tree oo_upcoming">—</h2><p class="pane-note"><span data-draw="oo-when" data-source="oo_upcoming">—</span><span data-oo-note="nobooking" hidden>No 1:1 with them in the next 14 days.</span></p></div>
+              <div><h2 class="pane-title" data-draw="oo-who" data-source="team_tree oo_upcoming">—</h2><p class="pane-note"><span data-draw="oo-when" data-source="oo_upcoming">—</span><span data-oo-note="nobooking" hidden>No 1:1 with them in the next 14 days.</span></p><p class="pane-note oo-rel"><span data-draw="oo-rel" data-source="sf_me users_all oo_points">—</span></p></div>
               <div class="tools"><button class="btn btn-primary" type="button" data-ask-agenda hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>Send to Claude</button><span data-draw="oo-mail" data-source="oo_points oo_points_rr oo_points_act oo_followups"></span>
               <button class="ibtn" type="button" data-copy-agenda aria-label="Copy agenda" title="Copy the agenda for the invite, your notes or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
             </div>
@@ -433,6 +433,8 @@
               <section class="ag-sec">
                 <h3>Follow-ups from your notes</h3>
                 <p class="ag-last" data-oo-note="last" hidden><span>Last time:</span> <span data-draw="oo-last" data-source="oo_followups">—</span></p>
+                <div class="ag-topics" data-oo-note="topics" hidden><p class="ag-last">What it covered, to pick up again:</p>
+                  <ul class="ag-bullets" data-draw="oo-topics" data-source="oo_followups"></ul></div>
                 <ul class="ilist ag-list" data-draw="oo-follow" data-source="oo_followups"></ul>
                 <p class="pd-note" data-oo-note="private" hidden>Follow-ups marked Private note come from your private Granola notes. They show here for you only and are left out of the agenda you copy, email or send.</p>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-follow"></span>
@@ -440,7 +442,7 @@
                   <p class="os-empty" data-msg-for="oo-follow" data-msg="connect" hidden>Connect Granola in your claude.ai connectors to see follow-ups from your meetings.</p>
                 </div>
               </section>
-              <section class="ag-sec">
+              <section class="ag-sec" data-oo-sec="sales">
                 <h3>Numbers</h3>
                 <ul class="ag-bullets" data-draw="oo-numbers" data-source="oo_points oo_points_act"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-numbers"></span>
@@ -448,14 +450,31 @@
                   <p class="os-empty" data-msg-for="oo-numbers" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see their numbers.</p>
                 </div>
               </section>
-              <section class="ag-sec">
+              <section class="ag-sec" data-oo-sec="sales">
                 <h3>Talking points</h3>
                 <ul class="ag-bullets ag-talk" data-draw="oo-talk" data-source="oo_points oo_points_rr oo_points_act"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-talk"></span>
                   <p class="os-empty" data-msg-for="oo-talk" data-msg="empty" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance, data checks or activity to talk about.</p>
                   <p class="os-empty" data-msg-for="oo-talk" data-msg="emptycore" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance or data checks to talk about. Activity points aren't included: they're still loading, couldn't be read or aren't visible with your Salesforce access.</p>
+                  <p class="os-empty" data-msg-for="oo-talk" data-msg="nodata" hidden>No talking points from Salesforce: they aren't in EMEA sales.</p>
                 </div>
               </section>
+              <section class="ag-sec" data-oo-sec="ops" hidden>
+                <h3>EMEA update</h3>
+                <p class="ag-last">All of EMEA, as in the weekly summary on Home.</p>
+                <ul class="ag-bullets" data-draw="oo-emea" data-source="pipe_team pipe_cover moves_kpi cr_kpi"></ul>
+                <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-emea"></span>
+                  <p class="os-empty" data-msg-for="oo-emea" data-msg="empty" hidden>No EMEA numbers could be read.</p>
+                </div>
+              </section>
+              <section class="ag-sec" data-oo-sec="ops" hidden>
+                <h3>RevOps work</h3>
+                <ul class="ag-bullets ag-talk" data-draw="oo-ops" data-source="risk_kpi rr_kpi checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg leavers_core leavers_leads leavers_pools ld_kpi ld_kpi_rt act_kpi orphan_kpi engagement_kpi"></ul>
+                <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-ops"></span>
+                  <p class="os-empty" data-msg-for="oo-ops" data-msg="empty" hidden>Nothing open: no stuck deals, routing gaps, data checks, leavers' records, lead or activity problems.</p>
+                </div>
+              </section>
+              <p class="pd-note" data-oo-sec="none" hidden>They aren't in EMEA sales or RevOps, so there are no Salesforce numbers or talking points for them. This agenda has your Granola notes only.</p>
             </div>
           </div>
         </div>

@@ -738,8 +738,9 @@ OS.links = (() => {
 // Salesforce values the pipeline logic depends on (checks_cfg).
 // Each is its own calc, so one failing leaves the rest.
 OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg'];
-OS.checkRows = () => {
-  const p = dash.params();
+OS.checkRows = (sc) => {
+  // sc: { mgr, region } to read another scope than the scope pill's (the 1:1 agendas read all EMEA)
+  const p = sc || dash.params();
   const rank = { high: 0, medium: 1, low: 2 };
   return OS.CHECKS.filter((id) => OS.state(id) === 'ok').flatMap((id) => dash.data(id).data || [])
     .filter((c) => (p.mgr ? c.manager === p.mgr : !p.region || p.region === 'All' || c.region === p.region))
@@ -974,6 +975,31 @@ OS.oo = (() => {
   const RANK = { high: 0, medium: 1, low: 2, '': 3 };
   const points = (email) => rowsOf('oo_points').concat(rowsOf('oo_points_rr'), rowsOf('oo_points_act')).filter((r) => r.email === email)
     .sort((a, b) => (a.section === b.section ? 0 : a.section === 'numbers' ? -1 : 1) || (RANK[a.sev] ?? 3) - (RANK[b.sev] ?? 3) || a.order - b.order);
+  // Who they are to you: your manager, someone who reports to you, RevOps, EMEA sales (they have Salesforce numbers), or
+  // none of these. ops: their agenda gets the EMEA update and RevOps work. sales: true or false once oo_points has
+  // loaded, null while it loads or when it couldn't load (then the sales sections show their own message).
+  const kind = (email) => {
+    if (!email || email.startsWith('n:')) return null;
+    const me = rowsOf('sf_me')[0] || null;
+    const u = rowsOf('users_all').find((r) => String(r.email || '').toLowerCase() === email) || null;
+    const manager = !!(me && me.managerEmail && me.managerEmail === email);
+    const report = !!(me && me.name && u && u.manager === me.name);
+    const revops = !!(u && /REVOPS/i.test(u.role || ''));
+    const sales = OS.state('oo_points') === 'ok' ? points(email).length > 0 : null;
+    const label = [manager ? 'Your manager' : report ? 'Reports to you' : '', revops ? 'RevOps' : '', sales ? 'EMEA sales' : '',
+      !manager && !report && !revops && sales === false ? 'Not in EMEA sales or RevOps' : ''].filter(Boolean).join(' · ');
+    return { manager, report, revops, sales, ops: manager || report || revops, label };
+  };
+  // the EMEA update and RevOps work of an agenda: the weekly summary for all EMEA, without your own action items
+  const OPS = {
+    pipe: ['numbers', 'pipeline', 'teams'], cover: ['numbers', 'pipeline', 'coverage'], moves: ['numbers', 'pipeline', 'moves'],
+    created: ['numbers', 'created', 'trend'], stuck: ['talk', 'pipeline', 'deals'], routing: ['talk', 'routing', 'people'],
+    checks: ['talk', 'actions', 'checks'], leavers: ['talk', 'hiring', 'leavers'], leads: ['talk', 'leads', 'speed'],
+    activity: ['talk', 'oneonone', 'activity'], books: ['talk', 'books', 'orphans'], engage: ['talk', 'books', 'engage'],
+  };
+  const ops = (sec) => (OS.summary ? OS.summary.lines({ region: 'All', mine: false }).lines : []).filter((l) => OPS[l.key] && OPS[l.key][0] === sec)
+    .map((l) => ({ key: l.key, text: l.text, screen: OPS[l.key][1], view: OPS[l.key][2], na: / not available \(couldn't load\)$/.test(l.text) }));
+  const lastOf = (email) => rowsOf('oo_followups').find((r) => r.email === email && r.kind === 'last') || null;
   const text = () => {
     const email = who();
     if (!email || email.startsWith('n:')) return '';
@@ -985,15 +1011,26 @@ OS.oo = (() => {
       lines.push('', 'Follow-ups');
       for (const r of fu) lines.push(`- [ ] ${r.item}${r.owner ? ' (' + r.owner + ')' : ''}${r.due ? ', due ' + OS.shortDay(r.due) : ''}: ${r.meeting}, ${OS.shortDay(r.date)}`);
     }
+    const last = lastOf(email);
+    if (last && last.topics) {
+      lines.push('', 'From last time (' + last.item + ', ' + OS.shortDay(last.date) + ')');
+      for (const t of last.topics.split('\n')) lines.push('- ' + t);
+    }
     const pts = points(email);
     const num = pts.filter((r) => r.section === 'numbers');
     const talk = pts.filter((r) => r.section === 'talk');
     if (num.length) { lines.push('', 'Numbers'); for (const r of num) lines.push('- ' + r.text); }
     if (talk.length) { lines.push('', 'Talking points'); for (const r of talk) lines.push('- ' + r.text); }
+    const k = kind(email);
+    if (k && k.ops) {
+      const en = ops('numbers'), et = ops('talk');
+      if (en.length) { lines.push('', 'EMEA update'); for (const r of en) lines.push('- ' + r.text); }
+      if (et.length) { lines.push('', 'RevOps work'); for (const r of et) lines.push('- ' + r.text); }
+    }
     lines.push('', 'Anything else');
     return lines.join('\n');
   };
-  return { rowsOf, who, nextFor, nameOf, when, text, points };
+  return { rowsOf, who, nextFor, nameOf, when, text, points, kind, ops, lastOf };
 })();
 
 // ---------- App shell ----------
@@ -1115,16 +1152,19 @@ OS.oo = (() => {
   // the sources the weekly summary reads; Home loads them while it is open, and the copy button waits for them
   const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi', 'gr_actions'];
   const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
-  const weeklySummary = () => {
+  // The weekly summary as lines, each with what it is about. Home's Copy summary reads it for the scope pill; the 1:1
+  // agendas of RevOps people (your manager, your reports, RevOps colleagues) read it for all EMEA.
+  const summaryLines = (sc) => {
     const p = dash.params();
-    const scope = p.mgr ? 'M|' + p.mgr : p.region || 'All';
-    const label = p.mgr ? p.mgr + "'s team" : (p.region && p.region !== 'All' ? p.region : 'EMEA');
-    const pipeKey = p.mgr ? 'M|' + p.mgr : !p.region || p.region === 'All' ? 'All|All' : p.region + '|All';
+    const mgr = sc ? sc.mgr || '' : p.mgr || '';
+    const reg = sc ? sc.region || 'All' : p.region || 'All';
+    const scope = mgr ? 'M|' + mgr : reg;
+    const label = mgr ? mgr + "'s team" : (reg !== 'All' ? reg : 'EMEA');
+    const pipeKey = mgr ? 'M|' + mgr : reg === 'All' ? 'All|All' : reg + '|All';
     const pipe = rowOf('pipe_team', (r) => r.key === pipeKey);
     const cr = rowOf('cr_kpi', () => true);
     const rr = rowOf('rr_kpi', (r) => r.region === scope);
     const orph = rowOf('orphan_kpi', () => true);
-    const gr = rowOf('gr_kpi', () => true);
     const cov = rowOf('pipe_cover', (r) => r.key === pipeKey);
     const mv = rowOf('moves_kpi', (r) => r.region === scope);
     const rk = rowOf('risk_kpi', (r) => r.region === scope);
@@ -1138,61 +1178,70 @@ OS.oo = (() => {
     const signed = (v) => (v < 0 ? '−' : '+') + OS.usd(Math.abs(v));
     const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
     const na = (what, id) => (failedSrc(id) ? `• ${what}: not available (couldn't load)` : null);
-    const lines = [`RevOps update, ${label}, ${OS.day(new Date().toISOString().slice(0, 10))}`];
-    const add = (line) => { if (line) lines.push(line); };
-    if (pipe) add(`• Pipeline this quarter: ${OS.usd(pipe.thisPipe)} open (commit ${OS.usd(pipe.thisCommit)}, best case ${OS.usd(pipe.thisBest)}), ${OS.usd(pipe.won)} closed won`);
-    else add(na('Pipeline', 'pipe_team'));
-    if (cov && cov.avgBookings > 0) add(cov.aheadOfUsual
+    const lines = [];
+    const add = (key, line) => { if (line) lines.push({ key, text: line.replace(/^• /, '') }); };
+    if (pipe) add('pipe', `• Pipeline this quarter: ${OS.usd(pipe.thisPipe)} open (commit ${OS.usd(pipe.thisCommit)}, best case ${OS.usd(pipe.thisBest)}), ${OS.usd(pipe.won)} closed won`);
+    else add('pipe', na('Pipeline', 'pipe_team'));
+    if (cov && cov.avgBookings > 0) add('cover', cov.aheadOfUsual
       ? `• Coverage: past a usual quarter already (${OS.usd(cov.wonSoFar)} won, ${OS.usd(cov.avgBookings)} usual); next quarter ${x(cov.coverageNext)}`
       : `• Coverage: ${OS.usd(cov.openThis)} open against ${OS.usd(cov.toGo)} still to win for a usual quarter (${x(cov.coverageThis)}); next quarter ${x(cov.coverageNext)}${cov.projectedThis != null ? `; expected ${OS.usd(cov.projectedThis)} at a ${OS.pct(cov.winRate)} win rate` : ''}`);
-    else if (!cov) add(na('Coverage', 'pipe_cover'));
-    if (mv) add(`• Last 7 days: ${OS.num(mv.won)} won (${OS.usd(mv.wonArr)}), ${OS.num(mv.lost)} lost (${OS.usd(mv.lostArr)}); ${n(mv.pushed, 'deal', 'deals')} (${OS.usd(mv.pushedArr)}) pushed out of this quarter, ${OS.num(mv.pulled)} pulled in; Commit ${signed(mv.netCommitArr)} net`);
-    else add(na('Last 7 days', 'moves_kpi'));
-    if (cr) add(`• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
-    else add(na('Created', 'cr_kpi'));
-    if (rk) { if (rk.stuck) add(`• Stuck in stage: ${n(rk.stuck, 'deal', 'deals')} (${OS.usd(rk.stuckArr)}) closing this or next quarter, past twice the usual time in their stage`); }
-    else add(na('Stuck in stage', 'risk_kpi'));
-    if (rr) add(`• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
-    else add(na('Routing', 'rr_kpi'));
+    else if (!cov) add('cover', na('Coverage', 'pipe_cover'));
+    if (mv) add('moves', `• Last 7 days: ${OS.num(mv.won)} won (${OS.usd(mv.wonArr)}), ${OS.num(mv.lost)} lost (${OS.usd(mv.lostArr)}); ${n(mv.pushed, 'deal', 'deals')} (${OS.usd(mv.pushedArr)}) pushed out of this quarter, ${OS.num(mv.pulled)} pulled in; Commit ${signed(mv.netCommitArr)} net`);
+    else add('moves', na('Last 7 days', 'moves_kpi'));
+    if (cr) add('created', `• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
+    else add('created', na('Created', 'cr_kpi'));
+    if (rk) { if (rk.stuck) add('stuck', `• Stuck in stage: ${n(rk.stuck, 'deal', 'deals')} (${OS.usd(rk.stuckArr)}) closing this or next quarter, past twice the usual time in their stage`); }
+    else add('stuck', na('Stuck in stage', 'risk_kpi'));
+    if (rr) add('routing', `• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
+    else add('routing', na('Routing', 'rr_kpi'));
     if (OS.CHECKS.some((id) => OS.state(id) === 'ok')) {
-      const cs = OS.checkRows();
+      const cs = OS.checkRows({ mgr, region: reg });
       const partial = OS.CHECKS.some((id) => failedSrc(id));
-      add(`• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`);
-    } else add(na('Data checks', 'checks'));
+      add('checks', `• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`);
+    } else add('checks', na('Data checks', 'checks'));
     if (lv) {
       const held = [lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '',
         lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : '',
         lv.emCustomers ? 'Engagement Manager on ' + n(lv.emCustomers, 'customer', 'customers') : '', lv.pools ? n(lv.pools, 'LeanData pool seat', 'LeanData pool seats') : ''].filter(Boolean);
       const unknown = [lv.leads === null ? 'leads' : '', lv.pools === null ? 'pool seats' : ''].filter(Boolean).join(' and ');
-      if (lv.people && held.length) add(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}${unknown ? ` (${unknown} not available)` : ''}`);
-      else if (unknown) add(`• Leavers: ${unknown} of people who left not available (couldn't load)`);
-    } else add(na('Leavers', 'leavers_core'));
+      if (lv.people && held.length) add('leavers', `• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}${unknown ? ` (${unknown} not available)` : ''}`);
+      else if (unknown) add('leavers', `• Leavers: ${unknown} of people who left not available (couldn't load)`);
+    } else add('leavers', na('Leavers', 'leavers_core'));
     const ldSpeed = !ld ? '' : ld.hRate != null ? `${OS.pct(ld.hRate)} of demo requests worked within 1 business day (${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)}, last 30 days)`
       : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : !ld.lEligible && ld.notScored > 0 ? 'speed not timed for SMB-owned leads (automation moves them out of Ready)' : 'no timed demo requests in the last 30 days';
-    if (ld) { if (ld.handoffs || ld.readyNow) add(`• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
-    else add(na('Leads', 'ld_kpi'));
+    if (ld) { if (ld.handoffs || ld.readyNow) add('leads', `• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
+    else add('leads', na('Leads', 'ld_kpi'));
     if (act) {
       if (act.blind || act.meetings || act.emails || act.sellers) {
         const sg = (v) => (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%';
         // a channel the viewer's access hides is named, not dropped or counted as zero, and so are the flags it switches off
         const meet = act.meetings == null ? 'meetings not visible with your access' : `${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks`;
         const flags = [act.mailHidden || act.meetHidden ? '' : `${OS.num(act.quiet)} quiet`, `${OS.num(act.slowing)} slowing`, act.meetHidden ? '' : `${OS.num(act.nothingBooked)} with nothing booked`, `${OS.num(act.noCapture)} with ${act.mailHidden ? 'no meeting captured' : act.meetHidden ? 'no sent email captured' : 'nothing captured'}`].filter(Boolean).join(', ');
-        if (act.blind) add(`• Activity, last 4 weeks: not visible with your Salesforce access${act.sellers ? ` (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})` : ''}`);
-        else add(`• Activity, last 4 weeks: ${meet}, ${act.emails != null ? `${n(act.emails, 'email', 'emails')} sent` : 'emails not visible with your access'}`
+        if (act.blind) add('activity', `• Activity, last 4 weeks: not visible with your Salesforce access${act.sellers ? ` (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})` : ''}`);
+        else add('activity', `• Activity, last 4 weeks: ${meet}, ${act.emails != null ? `${n(act.emails, 'email', 'emails')} sent` : 'emails not visible with your access'}`
           + `${act.meetChg != null ? `; meetings ${sg(act.meetChg)} like-for-like (${n(act.lflMeetReps, 'person', 'people')} compared)` : ''}`
           + `; ${flags}`
           + `${act.notVisible ? ` (your Salesforce access shows no activity for ${OS.num(act.notVisible)} of the ${n(act.sellers, 'seller', 'sellers')}, so these may be partial)` : ''}`);
       }
-    } else add(na('Activity', 'act_kpi'));
-    if (orph && !p.mgr && (!p.region || p.region === 'All')) add(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
-    if (eng) { if (eng.untouched) add(`• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`); }
-    else add(na('Engagement', 'engagement_kpi'));
+    } else add('activity', na('Activity', 'act_kpi'));
+    if (orph && !mgr && reg === 'All') add('books', `• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
+    if (eng) { if (eng.untouched) add('engage', `• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`); }
+    else add('engage', na('Engagement', 'engagement_kpi'));
+    if (sc && sc.mine === false) return { label, lines };
+    const gr = rowOf('gr_kpi', () => true);
     const mine = OS.state('gr_actions') === 'ok' ? (dash.data('gr_actions').data || []).filter((r) => r.forYou && !r.done && !OS.done.has(r)) : null;
-    if (mine) add(`• My action items: ${OS.num(mine.length)} for me from ${OS.num(new Set(mine.map((r) => r.meetingId)).size)} meetings`);
-    else if (gr) add(`• My action items: ${OS.num(gr.forYou)} for me`);
-    else add(na('My action items', 'gr_actions'));
-    return lines.length > 1 ? lines.join('\n') : '';
+    if (mine) add('mine', `• My action items: ${OS.num(mine.length)} for me from ${OS.num(new Set(mine.map((r) => r.meetingId)).size)} meetings`);
+    else if (gr) add('mine', `• My action items: ${OS.num(gr.forYou)} for me`);
+    else add('mine', na('My action items', 'gr_actions'));
+    return { label, lines };
   };
+  const weeklySummary = () => {
+    const s = summaryLines();
+    return s.lines.length ? [`RevOps update, ${s.label}, ${OS.day(new Date().toISOString().slice(0, 10))}`].concat(s.lines.map((l) => '• ' + l.text)).join('\n') : '';
+  };
+  // what each part of a 1:1 agenda's RevOps sections reads (the summary without your own action items)
+  OS.summary = { lines: summaryLines, SOURCES: SUMMARY, NUM: ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi'],
+    OPS: ['risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi'] };
   const checksChecklist = () => {
     const area = dash.params().checkArea || 'All';
     return OS.checkRows().filter((c) => area === 'All' || c.area === area)
@@ -1372,13 +1421,22 @@ OS.oo = (() => {
       const ready = OS.state('oo_upcoming') !== 'loading';
       const booked = who && !who.startsWith('n:') ? OS.oo.nextFor(who) : null;
       const hasLast = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last');
+      const hasTopics = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last' && r.topics);
       const hasPriv = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'item' && r.priv && !OS.done.has(r));
       document.querySelectorAll('[data-oo-note]').forEach((n) => {
         const k = n.dataset.ooNote;
-        n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast) || (k === 'private' && hasPriv));
+        n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast) || (k === 'topics' && hasTopics) || (k === 'private' && hasPriv));
+      });
+      // which sections the agenda has: the Salesforce numbers and talking points of EMEA sales, the EMEA update and
+      // RevOps work for your manager, your reports and RevOps colleagues, or a note that it has your notes only
+      const rel = who ? OS.oo.kind(who) : null;
+      document.querySelectorAll('[data-oo-sec]').forEach((n) => {
+        const sec = n.dataset.ooSec;
+        n.hidden = sec === 'sales' ? !!(rel && rel.sales === false) : sec === 'ops' ? !(rel && rel.ops) : sec === 'none' ? !(rel && !rel.ops && rel.sales === false) : n.hidden;
       });
       // the agenda is built from what has loaded, so copying and sending wait for its sources
-      const agendaLoading = ['oo_points', 'oo_points_rr', 'oo_followups'].some((id) => OS.state(id) === 'loading');
+      const agendaLoading = ['oo_points', 'oo_points_rr', 'oo_followups'].concat(rel && rel.ops ? OS.summary.NUM.concat(OS.summary.OPS) : [])
+        .some((id) => OS.state(id) === 'loading');
       document.querySelectorAll('[data-copy-agenda], [data-ask-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:') || agendaLoading; });
     }
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });

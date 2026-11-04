@@ -910,6 +910,34 @@ OS.defList('oo-talk', ['oo_points'], ooPoints('talk'), (rows) => rows.map((r) =>
   return li;
 }), { msg: () => (!OS.oo.who() ? 'nowho' : ooPoints('talk')().length ? null : ooPoints('numbers')().length ? (OS.state('oo_points_act') === 'ok' && !ooPoints('numbers')().some((r) => r.actHidden) ? 'empty' : 'emptycore') : 'nodata') });
 
+// who they are to you, so it is clear why the agenda has the sections it has
+dash.draw('oo-rel', (el) => { const w = OS.oo.who(); const k = w ? OS.oo.kind(w) : null; el.textContent = k && k.label ? k.label : ''; });
+// what the last meeting with them covered: the headings of its Granola summary
+const ooTopics = () => { const w = OS.oo.who(); const r = w ? OS.oo.lastOf(w) : null; return r && r.topics ? r.topics.split('\n').map((t, i) => ({ key: r.meetingId + '|' + i, text: t })) : []; };
+OS.defList('oo-topics', ['oo_followups'], ooTopics, (rows) => rows.map((r) => { const li = OS.el('li', null, r.text); li.dataset.key = r.key; return li; }),
+  { msg: () => null });
+// RevOps people: the EMEA update and RevOps work, from the weekly summary for all EMEA
+const ooOpsRow = (r, talk) => {
+  const li = OS.el('li', talk ? 'ag-pt' : null);
+  li.dataset.key = r.key;
+  if (!talk) { li.textContent = r.text; return li; }
+  li.append(OS.el('span', 'itm-dot ' + (r.na ? 'low' : r.key === 'checks' || r.key === 'routing' ? 'high' : 'medium')), OS.el('span', 'ag-txt', r.text));
+  const go = OS.el('button', 'ibtn');
+  go.type = 'button';
+  go.dataset.nav = r.screen;
+  go.dataset.navView = r.view;
+  go.setAttribute('aria-label', 'Open in the app');
+  go.appendChild(OS.icon(OS.ICON.go));
+  li.append(OS.el('span', 'ag-acts'), go);
+  return li;
+};
+// each list waits while any of its sources loads; one that failed shows as its own 'not available' line
+const ooOpsIds = (part) => () => OS.summary[part].filter((id) => OS.state(id) === 'loading');
+OS.defList('oo-emea', ooOpsIds('NUM'), () => OS.oo.ops('numbers'), (rows) => rows.map((r) => ooOpsRow(r, false)),
+  { msg: () => (OS.oo.ops('numbers').length ? null : 'empty') });
+OS.defList('oo-ops', ooOpsIds('OPS'), () => OS.oo.ops('talk'), (rows) => rows.map((r) => ooOpsRow(r, true)),
+  { msg: () => (OS.oo.ops('talk').length ? null : 'empty') });
+
 // ===================== TEAM SCORECARD =====================
 const ooRoot = () => {
   const rows = ooRows('team_tree');

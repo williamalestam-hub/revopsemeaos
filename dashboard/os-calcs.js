@@ -1510,7 +1510,7 @@ dash.calc('team_rr', {
 
 dash.calc('oo_upcoming', {
   title: 'Your upcoming 1:1s',
-  description: 'Events in your calendar from now to 14 days ahead that are a 1:1: one colleague with your email domain besides you (meeting rooms aside), with you invited or organising, not all-day or cancelled, and declined by neither of you. The colleague is matched to an active Salesforce user by email.',
+  description: 'Events in your calendar from now to 14 days ahead that are a 1:1: one colleague with your email domain besides you (meeting rooms aside), with you invited or organising, not all-day or cancelled, and declined by neither of you. The colleague is matched to an active Salesforce user by email, unless that user has no role, no manager and a name unlike the colleague\'s (an integration user sharing their email).',
   inputs: ['cal_events', 'users_all'],
   fn: (cal_events, users_all) => {
     const byEmail = new Map(users_all.map((u) => [String(u.email || '').toLowerCase(), u]));
@@ -1528,8 +1528,12 @@ dash.calc('oo_upcoming', {
       if ((me && me.resp === 'declined') || o.resp === 'declined' || !mine || dom(o.email) !== dom(mine)) continue;
       const end = Date.parse(e.end || e.start || '');
       if (!Number.isNaN(end) && end < now) continue;
-      const u = byEmail.get(o.email) || null;
       const guess = o.email.split('@')[0].split(/[._-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+      // an integration user can share a person's email (no role, no manager, a name unlike theirs): not a match
+      const toks = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+      const known = toks(guess).concat(toks(o.name));
+      const hit = byEmail.get(o.email) || null;
+      const u = hit && !hit.role && !hit.manager && !toks(hit.name).some((w) => known.includes(w)) ? null : hit;
       out.push({ key: e.id, start: e.start, end: e.end, at: Date.parse(e.start || '') || null, title: e.title, email: o.email, name: u ? u.name : (String(o.name || '').trim() || guess), sfName: u ? u.name : null, role: u ? u.role || null : null, recurring: !!e.recurring, link: e.link });
     }
     return out.sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -1538,7 +1542,7 @@ dash.calc('oo_upcoming', {
 
 dash.calc('oo_followups', {
   title: 'Follow-ups per colleague',
-  description: 'Open action items from your Granola notes for each colleague: items from meetings of up to three people they attended, and items they own from any meeting (by full name, or by first name when they were one of the meeting\'s listed attendees), marked when they come from your private notes. Also the latest meeting of two or three people with them, as "last time".',
+  description: 'Open action items from your Granola notes for each colleague: items from meetings of up to three people they attended, and items they own from any meeting (by full name, or by first name when they were one of the meeting\'s listed attendees), marked when they come from your private notes. Also the latest meeting of two or three people with them, as "last time", with the headings of its summary as the topics it covered (up to six; generic ones such as Next steps or Action items left out, private notes never read for this).',
   inputs: ['gr_actions', 'gr_notes', 'users_all'],
   fn: (gr_actions, gr_notes, users_all) => {
     const toks = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
@@ -1560,7 +1564,20 @@ dash.calc('oo_followups', {
         if (!prev || String(r.meetingAt) > String(prev.meetingAt)) last.set(e, { meetingId: r.meetingId, meeting: r.meeting, meetingAt: r.meetingAt, url: r.url });
       }
     }
-    for (const [email, m] of last) out.push({ key: email + '|last', email, kind: 'last', id: null, item: m.meeting || 'Untitled meeting', owner: null, bucket: null, due: null, dueStatus: null, meeting: m.meeting, meetingId: m.meetingId, date: String(m.meetingAt || '').slice(0, 10) || null, url: m.url });
+    // what the last meeting covered: the headings of its summary (not private notes), in order, generic ones left out
+    const GENERIC = /^(next steps?|action items?|actions?|follow[- ]?ups?|to[- ]?dos?|tasks?|summary|overview|notes?|key (takeaways|points)|takeaways|attendees|participants|agenda|private notes)$/i;
+    const topics = new Map();
+    for (const r of gr_notes) {
+      const h = String(r.section || '').trim();
+      if (r.source !== 'summary' || !h || GENERIC.test(h)) continue;
+      if (!topics.has(r.meetingId)) topics.set(r.meetingId, []);
+      const t = topics.get(r.meetingId);
+      if (!t.includes(h)) t.push(h);
+    }
+    for (const [email, m] of last) {
+      const t = topics.get(m.meetingId) || [];
+      out.push({ key: email + '|last', email, kind: 'last', id: null, item: m.meeting || 'Untitled meeting', owner: null, bucket: null, due: null, dueStatus: null, meeting: m.meeting, meetingId: m.meetingId, date: String(m.meetingAt || '').slice(0, 10) || null, url: m.url, topics: t.slice(0, 6).join('\n'), topicsMore: Math.max(0, t.length - 6) });
+    }
     for (const a of gr_actions) {
       if (a.done) continue;
       const who = new Set();
