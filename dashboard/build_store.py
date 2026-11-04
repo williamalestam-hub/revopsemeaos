@@ -11,7 +11,7 @@ put('dash', 'meta', {"title": "EMEA RevOps OS"})
 put('dash', 'params', {"region": "All", "pq": "this", "crm": "opps", "onlyMissing": False, "orphanReason": "", "person": "", "grWindow": 30, "gr_since": "2026-10-04", "gr_until": "2026-11-03", "grOwner": "all", "checkArea": "All", "mgr": "", "grGroup": "meeting", "gr11": False, "dealOwnerId": "005Pn00000N96c1IAB", "dealFlag": "", "renewFlag": "", "grDue": False, "grShowDone": False, "ooWho": "", "ooRoot": "", "cal_from": "2026-11-03T00:00:00", "cal_to": "2026-11-17T00:00:00", "ldReady": "", "ldProb": "", "actRole": "", "actLook": False, "actLeft": False})
 for k, v in json.load(open('datasets.json')).items():
     put('datasets', k, {**v, "edit": EDIT})
-for f in ['index.html', 'os.css', 'os-core.js', 'os-calcs.js', 'os-draw.js']:
+for f in ['index.html', 'os.css', 'os-core.js', 'os-calcs.js', 'os-calcs-leads.js', 'os-calcs-act.js', 'os-draw.js']:
     put('files', f, {"text": open(f).read(), "edit": EDIT})
 for root, _, fs in os.walk('store'):
     for f in fs: print(os.path.join(root, f), os.path.getsize(os.path.join(root, f)))

@@ -247,6 +247,8 @@ dashboard/
   os.css              # the look: tokens, header, tabs, hero, tables, panel
   os-core.js          # loaders (Salesforce, HiBob, Granola), helpers, app shell, person panel, copy
   os-calcs.js         # dash.calc derivations (visible to readers in Sources)
+  os-calcs-leads.js   # the Leads calcs, its own file to stay under the 256 KB per-file limit
+  os-calcs-act.js     # the selling activity calcs, likewise
   os-draw.js          # charts, stats, tables, lists, badges, person panel
   build_store.py      # writes store/ JSON docs for the artifact's store
 ```
