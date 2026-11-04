@@ -913,6 +913,9 @@ OS.defList('oo-talk', ['oo_points'], ooPoints('talk'), (rows) => rows.map((r) =>
     go.type = 'button';
     go.dataset.nav = r.screen;
     if (r.view) go.dataset.navView = r.view;
+    // a point that names a data-check area (a leader's old deals: Conversion) opens that area for all of EMEA, whatever
+    // area or scope was picked before: the point counts the leader's whole team
+    if (r.area) { go.dataset.navArea = r.area; go.dataset.navScope = 'All'; }
     go.setAttribute('aria-label', 'Open in the app');
     go.appendChild(OS.icon(OS.ICON.go));
     li.append(go);
@@ -944,7 +947,8 @@ const ooOpsRow = (r, talk) => {
   go.type = 'button';
   go.dataset.nav = r.screen;
   go.dataset.navView = r.view;
-  // the line counts all of EMEA, so the view opens for all of EMEA (and all data-check areas)
+  // the line counts all of EMEA, so the view opens for all of EMEA. The checks line counts every data-check area but
+  // Conversion (the agenda leaves those checks out and says so); the view opens on all areas, Conversion included
   go.dataset.navScope = 'All';
   if (r.key === 'checks') go.dataset.navArea = 'All';
   go.setAttribute('aria-label', 'Open in the app');
@@ -1624,7 +1628,10 @@ dash.draw('kpi-conv', (el) => {
   const calc = el.dataset.calc, id = 'conv_' + calc;
   const key = calc === 'close' ? closeKey() : calc === 'cohorts' ? convKey() + '|New Business' : calc === 'time' ? convKey() + '|win' : convKey();
   // the close tiles wait for conv_mgr while a manager is picked (their team comes from it), as the close tables do
-  OS.value(el, calc === 'close' ? convCloseIds(id)() : [id], () => {
+  const ids = calc === 'close' ? convCloseIds(id)() : [id];
+  // while that loads, or when it couldn't: no row, tooltip or colour of the scope shown before
+  if (OS.state(...ids) !== 'ok') { markRow(el, 'key', key, null); el.title = ''; el.classList.remove('os-bad', 'os-warn', 'os-ok'); }
+  OS.value(el, ids, () => {
     const r = markRow(el, 'key', key, convRow(id, key)), f = keepField(el), v = r[f];
     if (el.hasAttribute('data-warn')) el.classList.toggle('os-warn', +v > 0);
     // only the win-rate and lost-at-4–6 tiles read the clean-up quarters (for their titles)
@@ -1748,7 +1755,8 @@ const convStepLabel = (r) => {
   if (a) box.append(a);
   return box;
 };
-OS.defTable('conv-step-table', ['conv_steps'], convStepRows, [
+// waits while the win rates or a team's managers load, never for one that failed: the leaks stand alone
+OS.defTable('conv-step-table', () => ['conv_steps'].concat(['conv_close', 'conv_mgr'].filter((id) => OS.state(id) === 'loading')), convStepRows, [
   { f: 'label', person: (r) => (r.level === 'manager' ? r.label : null), after: convStepLabel },
   { f: 'created', fmt: (v, r) => OS.num(v) + (r.cmpWhat ? ' of ' + OS.num(r.allCreated) : ''), num: true, tip: (r) => (r.cmpWhat ? r.cmpWhat + ' only, ' + OS.num(r.created) + ' of the ' + OS.num(r.allCreated) + ' created (their deals in other motions are never compared) · ' : '') + OS.num(r.won) + ' won · ' + OS.num(r.lost) + ' lost · ' + OS.num(r.open) + ' still open · ' + OS.usd(r.arr) + ' ARR' },
   { f: 'y2q', fmt: convPct, num: true, cls: (v, r) => (r.y2qFlag === 'below' ? 'os-bad' : r.y2qFlag === 'above' ? 'os-ok' : ''), tip: (r) => (r.peerLabel && r.y2qExp != null ? r.peerLabel + ' on the same quarters: ' + OS.pct(r.y2qExp) : '') },
@@ -1763,6 +1771,10 @@ OS.defTable('conv-step-table', ['conv_steps'], convStepRows, [
 // Monday summary for the scope: the leaks name our own teams and managers only, up to 6
 dash.draw('conv-monday', (box) => {
   const k = convKey(), ck = closeKey();
+  // offered once every part it carries has settled: a part still loading is never sent as "not available" or left out
+  // (conv_mgr: a manager's team, and a team's managers among its leaks)
+  const ids = ['conv_steps', 'conv_cohorts', 'conv_close', 'conv_reasons', 'conv_closeout', 'conv_sources'].concat(k !== 'All' && !k.startsWith('S|') ? ['conv_mgr'] : []);
+  if (ids.some((id) => OS.state(id) === 'loading')) { box.replaceChildren(); return; }
   const st = convRows('conv_steps'), co = convRow('conv_cohorts', k + '|New Business');
   if (!st.length && !co) { box.replaceChildren(); return; }
   const na = (what) => what + ': not available';
@@ -1776,16 +1788,20 @@ dash.draw('conv-monday', (box) => {
   const inScope = (r) => (k === 'All' ? r.level === 'team' || r.level === 'manager' : k === 'S|Field' ? r.level === 'team' && r.segment === 'Field' : r.key === k || (r.level === 'manager' && convRows('conv_mgr').some((m) => 'M|' + m.manager === r.key && m.team === k)));
   const leaks = st.filter((r) => r.leakBand && inScope(r)).sort((a, b) => b.leakBehind - a.leakBehind);
   const pool = (convRow('conv_steps', k) || convRow('conv_steps', 'All') || {});
-  // no leak: say whether anything was compared at all (a scope without peers, or with too few deals at every step)
+  // no leak: say whether anything was compared at all (a scope without peers, or with too few deals at every step). A
+  // scope without peers whose rows compared no step either (the SMB team, whose one manager holds every SMB deal) has
+  // no fair peers: its lowest step, as its segment and its tile give it
   const cmpd = st.filter((r) => inScope(r) && r.peerLabel), self = convRow('conv_steps', k);
-  const noLeak = !cmpd.length ? 'not compared here (no fair peers)' + (self && self.lowLabel ? '; the lowest step is ' + self.lowLabel.replace(/^S/, 's') + ' at ' + OS.pct(self.lowRate) : '')
+  const noLeak = !cmpd.length || (self && !self.peerLabel && cmpd.every((r) => !r.cmpSteps)) ? 'not compared here (no fair peers)' + (self && self.lowLabel ? '; the lowest step is ' + self.lowLabel.replace(/^S/, 's') + ' at ' + OS.pct(self.lowRate) : '')
     : cmpd.every((r) => !r.cmpSteps) ? 'no step has enough deals, here and among the peers, to compare'
     : 'no step leaks beyond the normal swing' + (cmpd.some((r) => r.cmpSteps < CONV_BANDS.length) ? ' (some steps had too few deals to compare)' : '');
   const lk = !st.length ? na('Where deals leak') + '.' : 'Where deals leak (created ' + pool.poolFrom + '–' + pool.poolTo + ', each against its peers on the same quarters): ' + (leaks.length ? leaks.slice(0, 6).map((r) => (r.level === 'manager' ? r.label + "'s team" + (r.cmpWhat ? ' (' + r.cmpWhat + ')' : '') : r.label) + ' ' + r.leakLabel.replace(/^S/, 's') + ', ' + OS.pct(r.leakRate) + ' vs ' + OS.pct(r.leakExp) + ', about ' + OS.num(r.leakBehind) + ' behind').join('; ') + (leaks.length > 6 ? ' and ' + (leaks.length - 6) + ' more' : '') : noLeak) + '.';
   const rs = convRows('conv_reasons').filter((r) => r.kind === 'reason' && r.scope === ck).slice(0, 3);
   const rising = cx && !cx.lastQCleanup ? convRows('conv_closeout').filter((r) => r.kind === 'reason' && r.scope === ck && r.rising).map((r) => r.group).slice(0, 3) : [];
-  const why = OS.state('conv_reasons') !== 'ok' ? na('Top lost reasons') + '.' : rs.length ? 'Top lost reasons: ' + rs.map((r) => r.group + ' ' + OS.num(r.n)).join(', ') + (rising.length ? '; rising last quarter: ' + rising.join(', ') : '') + '.' : '';
-  const s = !src ? na('By lead source') + '.' : src.bestSrc ? 'By lead source: ' + src.bestSrc + ' ' + OS.pct(src.bestWr) + ' to ' + src.worstSrc + ' ' + OS.pct(src.worstWr) + ' (' + OS.usd(src.bestYield) + ' and ' + OS.usd(src.worstYield) + ' won ARR per closed deal); BDR-sourced ' + convPct(src.bdrWr) + '.' : 'BDR-sourced win rate ' + convPct(src.bdrWr) + '.';
+  // with a manager picked, losses and sources are their team's (per team, as the win rate): each says so
+  const tn = mgrPick() ? ' (' + ck + ', the team most of them are in)' : '';
+  const why = ck == null || OS.state('conv_reasons') !== 'ok' ? na('Top lost reasons') + '.' : rs.length ? 'Top lost reasons' + tn + ': ' + rs.map((r) => r.group + ' ' + OS.num(r.n)).join(', ') + (rising.length ? '; rising last quarter: ' + rising.join(', ') : '') + '.' : '';
+  const s = !src ? na('By lead source') + '.' : src.bestSrc ? 'By lead source' + tn + ': ' + src.bestSrc + ' ' + OS.pct(src.bestWr) + ' to ' + src.worstSrc + ' ' + OS.pct(src.worstWr) + ' (' + OS.usd(src.bestYield) + ' and ' + OS.usd(src.worstYield) + ' won ARR per closed deal); BDR-sourced ' + convPct(src.bdrWr) + '.' : 'BDR-sourced win rate' + tn + ' ' + convPct(src.bdrWr) + '.';
   const old = co && co.staleOpen ? ' ' + ldPlural(co.staleOpen, 'open deal', 'open deals') + ' created 3+ quarters ago are still at stage 0–1.' : '';
   const b = convAsk('Monday summary: conversion, ' + convName(k), 'Write a 5-bullet Monday-meeting summary of New Business conversion for ' + convName(k) + ' from the EMEA RevOps OS. ' + wr + ' ' + y + ' ' + lk + ' ' + why + ' ' + s + old
     + ' Say what changed and what to ask the teams. Name our own teams and people only. Draft it for Slack and wait for my OK before posting.');
@@ -1819,6 +1835,8 @@ OS.defTable('conv-cohort-table', ['conv_cohorts'], convCohortRows, [
 dash.draw('conv-smb', (box) => {
   const k = convKey();
   if (!['All', 'S|SMB', 'S|Field', 'SMB'].includes(k) || convRt() !== 'New Business' || OS.state('conv_cohorts') !== 'ok') { box.replaceChildren(); return; }
+  // offered once the win rates and times have settled too, so no part of it is missing only because it is still loading
+  if (['conv_close', 'conv_time'].some((id) => OS.state(id) === 'loading')) { box.replaceChildren(); return; }
   const co = convRows('conv_cohorts'), seg = (s) => co.filter((r) => r.kind === 'cohort' && r.scope === s && r.rt === 'New Business');
   const sm = seg('S|SMB'), fi = seg('S|Field'), qs = sm.filter((r) => r.comparable && r.y2q != null).map((r) => r.cohort).sort((a, b) => a - b);
   const per = qs.map((q) => { const s = sm.find((r) => r.cohort === q), f = fi.find((r) => r.cohort === q); return s.label + ': SMB ' + OS.pct(s.y2q) + ' of ' + OS.num(s.n) + ' (' + convPct(s.y2qOpen) + ' still open), Field ' + (f && f.y2q != null ? OS.pct(f.y2q) + ' of ' + OS.num(f.n) + ' (' + convPct(f.y2qOpen) + ' still open)' : '—'); });
@@ -1827,8 +1845,8 @@ dash.draw('conv-smb', (box) => {
   const cs = c('S|SMB'), cf = c('S|Field'), ts = t('S|SMB'), tf = t('S|Field');
   const b = convAsk('Review SMB vs Field', 'From the EMEA RevOps OS, New Business, SMB against Field. Field deals take longer: compare each segment with its own earlier quarters, and read the share still open at 2 quarters before comparing the two. Won within 2 quarters by created quarter: ' + (per.join('; ') || 'none comparable yet') + '.'
     + (ls ? ' Won ARR within 2 quarters per deal created ' + (ls.y2qArr == null ? '—' : OS.usd(ls.y2qArr)) + ' against ' + (lf && lf.y2qArr != null ? OS.usd(lf.y2qArr) : '—') + ' for ' + ls.label + '.' : '')
-    + (cs && cf ? ' Closed in the last 4 quarters: win rate SMB ' + convPct(cs.winRate) + ' against Field ' + convPct(cf.winRate) + '; losses at stage 0–1 ' + convPct(cs.earlyShare) + ' against ' + convPct(cf.earlyShare) + '.' : '')
-    + (ts && tf ? ' Wins of the last 90 days (SMB: 30 days): median ' + (ts.median == null ? '—' : OS.num(ts.median)) + ' against ' + (tf.median == null ? '—' : OS.num(tf.median)) + ' days from creation for wins that took a day or more, ' + convPct(ts.oneGoShare) + ' against ' + convPct(tf.oneGoShare) + ' created and won within a day.' : '')
+    + (cs && cf ? ' Closed in the last 4 quarters: win rate SMB ' + convPct(cs.winRate) + ' against Field ' + convPct(cf.winRate) + '; losses at stage 0–1 ' + convPct(cs.earlyShare) + ' against ' + convPct(cf.earlyShare) + '.' : OS.state('conv_close') !== 'ok' ? ' Win rate: not available.' : '')
+    + (ts && tf ? ' Wins of the last 90 days (SMB: 30 days): median ' + (ts.median == null ? '—' : OS.num(ts.median)) + ' against ' + (tf.median == null ? '—' : OS.num(tf.median)) + ' days from creation for wins that took a day or more, ' + convPct(ts.oneGoShare) + ' against ' + convPct(tf.oneGoShare) + ' created and won within a day.' : OS.state('conv_time') !== 'ok' ? ' Time in stage: not available.' : '')
     + ' SMB created ' + sm.slice().sort((a, b2) => a.cohort - b2.cohort).map((r) => OS.num(r.n) + ' in ' + r.label).join(', ') + '. With my Salesforce access, check by created month whether SMB conversion holds as volume grows and what to watch next quarter.');
   box.replaceChildren(...(convBtn(b, 'Review SMB vs Field') ? [b] : []));
 });
@@ -1848,7 +1866,8 @@ const convReasonRows = () => {
   const tot = rs.find((r) => r.kind === 'scope');
   return (tot ? [{ ...tot, _cls: 'os-total' }] : []).concat(rs.filter((r) => r.kind === 'reason').map((r) => {
     const x = cx ? cx.get(r.key) : null;
-    return { ...r, lastQShare: x ? x.lastQShare : null, rising: x ? x.rising : null, lastQCleanup: x ? x.lastQCleanup : null, _cx: !!cx };
+    // _cx: false only when the losses by month couldn't load (null while they load), for the Last quarter tooltip
+    return { ...r, lastQShare: x ? x.lastQShare : null, rising: x ? x.rising : null, lastQCleanup: x ? x.lastQCleanup : null, _cx: OS.state('conv_closeout') === 'loading' ? null : !!cx };
   }));
 };
 const convLossAsk = (r) => {
@@ -1891,7 +1910,8 @@ OS.defTable('conv-src-table', convCloseIds('conv_sources'), convSrcRows, [
 dash.draw('conv-src-ask', (box) => {
   const k = closeKey(), rs = convRows('conv_sources');
   const tot = k == null ? null : rs.find((r) => r.key === k + '|All|All closed');
-  if (!tot) { box.replaceChildren(); return; }
+  // at All EMEA it also carries what was created by source: offered once that has settled
+  if (!tot || (k === 'All' && OS.state('cr_mix') === 'loading')) { box.replaceChildren(); return; }
   const pick = rs.filter((r) => r.scope === k && r.kind === 'source' && r.closed >= 20 && !(r.group === 'As in Sources' && r.value === 'Inbound')).sort((a, b) => b.closed - a.closed).slice(0, 12).sort((a, b) => a.order - b.order);
   const groups = [...new Set(pick.map((r) => r.group))].map((g) => g + ': ' + pick.filter((r) => r.group === g).map((r) => r.value + ': ' + OS.num(r.closed) + ' closed, ' + convPct(r.winRate) + ' won (' + convPct(r.arrWinRate) + ' by ARR; SMB ' + convPct(r.smbWinRate) + ', Field ' + convPct(r.fieldWinRate) + '), '
     + (r.avgWon == null ? '—' : OS.usd(r.avgWon)) + ' average won deal, ' + (r.wonArrPerClosed == null ? '—' : OS.usd(r.wonArrPerClosed)) + ' won ARR per closed deal, ' + (r.daysToWin == null ? '—' : OS.num(r.daysToWin)) + ' avg days to win, ' + OS.num(r.open) + ' open now').join('; '));

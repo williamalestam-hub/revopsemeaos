@@ -38,7 +38,7 @@ dash.calc('conv_mgr', {
 
 dash.calc('conv_cohorts', {
   title: 'Conversion by cohort',
-  description: 'New Business and Upsell opportunities created in each of the last 4 completed quarters and this one (in your Salesforce time zone), admin merges left out, for all EMEA, SMB, Field, each team and each manager (direct reports): how many were created, how many reached each stage (stage entry dates; a skipped stage is dated too, a later stage implies the earlier ones and a win passed every stage), how many are won, lost or still open, and the share won within 2 quarters: won by the end of the quarter after the one they were created in, the same age for every quarter, shown once that following quarter has ended and from 20 created, with the share still open at 2 quarters (Field deals take longer than SMB\'s, so each segment is compared with its own earlier quarters). An AE team is compared with the other AE teams, and a manager with the rest of their motion (AE teams or SMB) when 80% or more of the New Business they hold is in it, in the same quarter (30+ created on each side, 5+ points and twice the normal swing); BDR-, Engagement- and Leadership-owned deals are never compared and never part of anyone\'s peers. Such a manager\'s rows are their deals in that motion, the ones compared (cmpWhat names them when they hold other deals too; allN counts all of them); when those never reach 20 in a comparable quarter but all their deals do, the scope shows all their deals, not compared. Each is also compared with its own quarter before, except All EMEA and managers whose deals mix motions, whose totals move with the mix. A closed deal counts for the team that closed it: its owner\'s role at close when that is an EMEA sales role (also when the deal is owned outside EMEA today), else the current owner\'s; one since moved to someone in another role counts for its manager at close, otherwise for today\'s manager. Won of those closed so far is context only: wins come faster than losses, so it reads high for young quarters. Also open New Business created 3 or more quarters ago (older ones included) that never reached stage 2. Upsell shows outcomes only (its stages changed during 2026).',
+  description: 'New Business and Upsell opportunities created in each of the last 4 completed quarters and this one (in your Salesforce time zone), admin merges left out, for all EMEA, SMB, Field, each team and each manager (direct reports): how many were created, how many reached each stage (stage entry dates; a skipped stage is dated too, a later stage implies the earlier ones and a win passed every stage), how many are won, lost or still open, and the share won within 2 quarters: won by the end of the quarter after the one they were created in, the same age for every quarter, shown once that following quarter has ended and from 20 created, with the share still open at 2 quarters (Field deals take longer than SMB\'s, so each segment is compared with its own earlier quarters). An AE team is compared with the other AE teams, and a manager with the rest of their motion (AE teams or SMB) when 80% or more of the New Business they hold is in it, in the same quarter (30+ created on each side, 5+ points and twice the normal swing); BDR-, Engagement- and Leadership-owned deals are never compared and never part of anyone\'s peers. Such a manager\'s rows are their deals in that motion, the ones compared (cmpWhat names them when they hold other deals too; allN counts all of them); when those never reach 20 in a comparable quarter but all their deals do, their cohort rows and the scope show all their deals, not compared. Each is also compared with its own quarter before, except All EMEA and managers whose deals mix motions, whose totals move with the mix. A closed deal counts for the team that closed it: its owner\'s role at close when that is an EMEA sales role (also when the deal is owned outside EMEA today), else the current owner\'s; one since moved to someone in another role counts for its manager at close, otherwise for today\'s manager. Won of those closed so far is context only: wins come faster than losses, so it reads high for young quarters. Also open New Business created 3 or more quarters ago (older ones included) that never reached stage 2. Upsell shows outcomes only (its stages changed during 2026).',
   inputs: ['cv_open', 'cv_closed'],
   fn: (cv_open, cv_closed) => {
     const MIN_N = 20;
@@ -107,21 +107,30 @@ dash.calc('conv_cohorts', {
     const get = (k, rt, q) => cells.get(k + '|' + rt + '|' + q) || null;
     const dayOfQ = Math.floor((now.getTime() - qStart(cur)) / 864e5) + 1, daysInQ = Math.round((qStart(cur + 1) - qStart(cur)) / 864e5);
     const cmpName = (k) => (mot.get(k.slice(2)) || {}).main === 'SMB' ? 'SMB deals' : 'AE-team deals';
+    // a manager compared within a motion whose deals in it never reach 20 in a comparable quarter, while all their deals do
+    // in one: the quarter whose share all their deals show (their cohort rows and scope row alike, not compared), else null
+    const fewQ = (k, rt) => {
+      const P = peerOf(k), Q = [cur - 2, cur - 3, cur - 4];
+      if (!P || P[0] === k || Q.some((q) => (get(P[0], rt, q) || { n: 0 }).n >= MIN_N)) return null;
+      const q = Q.find((x) => (get(k, rt, x) || { n: 0 }).n >= MIN_N);
+      return q == null ? null : q;
+    };
     const out = [];
     for (const c0 of cells.values()) {
       if (internal(c0.k)) continue;
       // a manager compared within one motion shows the deals compared ('M|<manager>#<motion>'): a rate of all their deals
       // would sit beside a verdict on part of them. allN keeps all their deals; cmpWhat names the part when it is smaller.
-      const P = peerOf(c0.k), own = P ? P[0] : c0.k, c = own === c0.k ? c0 : get(own, c0.rt, c0.q) || fresh(own, c0.rt, c0.q);
+      // When those are too few to compare (fewQ), the rows are all their deals, with no peer or trend verdict.
+      const few = fewQ(c0.k, c0.rt) != null, P = peerOf(c0.k), own = P && !few ? P[0] : c0.k, c = own === c0.k ? c0 : get(own, c0.rt, c0.q) || fresh(own, c0.rt, c0.q);
       const ageQ = cur - c.q, comparable = ageQ >= 2, nb = c.rt === 'New Business', ok = comparable && c.n >= MIN_N;
       let peerN = null, peerY2q = null, y2qZ = null, y2qVerdict = null;
-      if (P && comparable) {
+      if (P && comparable && !few) {
         const mine = get(P[0], c.rt, c.q), pool = get(P[1], c.rt, c.q);
         const pn = (pool ? pool.n : 0) - (mine ? mine.n : 0), pw = (pool ? pool.y2qWon : 0) - (mine ? mine.y2qWon : 0);
         peerN = pn; peerY2q = pn >= MIN_N ? pw / pn : null;
         if (mine && mine.n > 0 && pn > 0) { y2qZ = z2(mine.y2qWon, mine.n, pw, pn); y2qVerdict = verdict(mine.y2qWon, mine.n, pw, pn); }
       }
-      const mixed = noTrend(c0.k);
+      const mixed = noTrend(c0.k) || few;
       const prev = comparable ? get(own, c.rt, c.q - 1) : null;
       const prevY2q = prev && prev.n >= MIN_N ? prev.y2qWon / prev.n : null;
       const [y2qLo, y2qHi] = ok ? wilson(c.y2qWon, c.n) : [null, null];
@@ -137,7 +146,7 @@ dash.calc('conv_cohorts', {
         y2qWon: c.y2qWon, y2qLost: c.y2qLost, y2q: ok ? c.y2qWon / c.n : null, y2qLo, y2qHi, y2qArr: ok ? c.y2qWonArr / c.n : null,
         y2qOpen: ok ? (c.n - c.y2qWon - c.y2qLost) / c.n : null, peerN, peerY2q, y2qZ, y2qVerdict,
         prevCohort: prev ? label(c.q - 1) : null, prevY2q, trendZ: !mixed && ok && prevY2q != null ? z2(c.y2qWon, c.n, prev.y2qWon, prev.n) : null,
-        trend: !mixed && ok && prevY2q != null ? verdict(c.y2qWon, c.n, prev.y2qWon, prev.n) : null, trendNote: mixed ? 'mix' : null,
+        trend: !mixed && ok && prevY2q != null ? verdict(c.y2qWon, c.n, prev.y2qWon, prev.n) : null, trendNote: few ? 'few' : mixed ? 'mix' : null,
         openWonBefore: c.openWonBefore, openLostBefore: c.openLostBefore, wonAfterLoss: c.wonAfterLoss, lostAfterWin: c.lostAfterWin, backdated: c.backdated, orderFixed: nb ? c.orderFixed : null,
       };
       for (let k = 1; k <= 6; k++) o['reach' + k] = nb && c.n ? c.s[k] / c.n : null;
@@ -165,12 +174,13 @@ dash.calc('conv_cohorts', {
         mainClass: m ? m.main : null, mainShare: m ? m.mainShare : null, mixed: m ? m.mixed : null,
       };
       // a manager compared within a motion whose deals in it never reach 20 in a comparable quarter, while all their deals
-      // do: all their deals, not compared (as their 1:1 agenda), with how many were in the motion (fewN)
-      const q0 = !L && P && P[0] !== scope ? [cur - 2, cur - 3, cur - 4].find((q) => (get(scope, rt, q) || { n: 0 }).n >= MIN_N) : undefined;
+      // do: all their deals, not compared (as their 1:1 agenda and their cohort rows), with how many were in the motion (fewN)
+      const q0 = fewQ(scope, rt);
       if (q0 != null) {
         const a = get(scope, rt, q0), [lo, hi] = wilson(a.y2qWon, a.n);
         Object.assign(o, { y2q: a.y2qWon / a.n, y2qWon: a.y2qWon, y2qN: a.n, y2qLo: lo, y2qHi: hi, y2qArr: a.y2qWonArr / a.n, y2qOpen: (a.n - a.y2qWon - a.y2qLost) / a.n,
-          y2qLost: a.y2qLost, y2qCohort: label(q0), y2qAllN: a.n, cmpWhat: null, trendNote: 'few', fewWhat: cmpName(scope), fewN: (get(P[0], rt, q0) || { n: 0 }).n });
+          y2qLost: a.y2qLost, y2qCohort: label(q0), y2qAllN: a.n, cmpWhat: null, peerY2q: null, peerN: null, y2qVerdict: null, prevCohort: null, prevY2q: null, trend: null,
+          trendNote: 'few', fewWhat: cmpName(scope), fewN: (get(P[0], rt, q0) || { n: 0 }).n });
       }
       if (scope === 'All' && rt === 'New Business' && L) {
         const s = row('S|SMB', rt, L.cohort), f = row('S|Field', rt, L.cohort), sp = row('S|SMB', rt, L.cohort - 1), ap = row('All', rt, L.cohort - 1);
@@ -736,7 +746,7 @@ dash.calc('conv_time', {
 
 dash.calc('oo_points_conv', {
   title: '1:1 numbers and talking points, conversion',
-  description: 'For each leader (someone with EMEA sales people below them), the conversion lines of their 1:1 agenda over the New Business their team holds (everyone below them; a closed deal counts for the team that closed it, by its owner\'s role at close when that is an EMEA sales role, else the current owner\'s, and for its manager at close when it has since moved to someone in another role): one numbers line (the share of their latest comparable quarter won within 2 quarters, against the quarter before and their peers) and up to 2 talking points: a step where the team\'s deals leak against its peers on the same created quarters, a share won within 2 quarters below the peers, old open deals still at stage 0–1, a drop on the quarter before, and for the top EMEA leader SMB against its own quarter before. Comparisons stay within one motion: the team\'s deals in AE teams against the other AE teams, or its SMB deals against the rest of SMB, and only when 80% or more of its deals are in that motion; a team that mixes motions, or whose deals in its motion never reach 20 in a comparable quarter, gets its numbers without comparisons (old open deals still count), and a leader whose deals are mostly BDR-owned gets no conversion lines (BDR-sourced deals are in How sources convert). Teams with fewer than 20 deals created in a finished quarter get nothing; nobody who isn\'t a leader gets conversion lines. Its own calc, so agendas still build when conversion can\'t be read, and then say so; the agenda merges it in after the core, routing and activity points of the same severity.',
+  description: 'For each leader (someone with EMEA sales people below them), the conversion lines of their 1:1 agenda over the New Business their team holds (everyone below them; a closed deal counts for the team that closed it, by its owner\'s role at close when that is an EMEA sales role, else the current owner\'s, and for its manager at close when it has since moved to someone in another role): one numbers line (the share of their latest comparable quarter won within 2 quarters, against the quarter before and their peers) and up to 2 talking points: a step where the team\'s deals leak against its peers on the same created quarters, a share won within 2 quarters below the peers, old open deals still at stage 0–1, a drop on the quarter before, and for the top EMEA leader SMB against its own quarter before. Comparisons stay within one motion: the team\'s deals in AE teams against the other AE teams, or its SMB deals against the rest of SMB, and only when 80% or more of its deals are in that motion; a team that mixes motions, or whose deals in its motion never reach 20 in a comparable quarter, gets its numbers without comparisons (old open deals still count); a team whose deals are mostly Engagement- or Leadership-owned gets all its deals, against its own quarter before only; and a leader whose deals are mostly BDR-owned gets no conversion lines (BDR-sourced deals are in How sources convert). Teams with fewer than 20 deals created in a finished quarter get nothing; nobody who isn\'t a leader gets conversion lines. Its own calc, so agendas still build when conversion can\'t be read, and then say so; the agenda merges it in after the core, routing and activity points of the same severity.',
   inputs: ['team_tree', 'cv_open', 'cv_closed'],
   fn: (team_tree, cv_open, cv_closed) => {
     const MIN_N = 20, MIN_CMP = 30, GAP = 0.05, Z = 2, MAX_TALK = 2, MIXED = 0.8, MIN_PEER_Q = 10;
@@ -803,9 +813,11 @@ dash.calc('oo_points_conv', {
       const push = (section, sev, text, extra) => out.push({ key: L.email + '|' + section + '|conv|' + n, email: L.email, name: L.name, section, sev, order: 3e6 + n++, text, screen: 'created', view: 'conversion', conv: true, ...(extra || {}) });
       const stale = old.filter((r) => r.mgr && sub.has(r.mgr)).reduce((a, r) => a + r.n, 0);
       // old open deals are worth closing whatever the motion, so every leader with lines can get this point
-      const staleLine = stale >= 5 ? [stale >= 20 ? 'medium' : 'low', num(stale) + ' open New Business deals created in ' + label(cur - 3) + ' or before are still at stage 0–1: progress or close them, so conversion and pipeline read true.', { screen: 'actions', view: 'checks' }] : null;
-      // 3) comparisons, within one motion only
-      const comp = mine.filter((r) => r.cls === main), C = byQ(comp), peersRecs = recs.filter((r) => r.cls === main && !(r.mgr && sub.has(r.mgr))), PQ = byQ(peersRecs);
+      // (its arrow opens Data checks › Conversion for all of EMEA: the point counts the leader's whole team)
+      const staleLine = stale >= 5 ? [stale >= 20 ? 'medium' : 'low', num(stale) + ' open New Business deals created in ' + label(cur - 3) + ' or before are still at stage 0–1: progress or close them, so conversion and pipeline read true.', { screen: 'actions', view: 'checks', area: 'Conversion' }] : null;
+      // 3) comparisons, within one motion only: the team's AE-team or SMB deals; a team mostly in another motion
+      // (Engagement, Leadership) is never compared, so it keeps all its deals, as the Conversion view shows them
+      const comp = main === 'AE' || main === 'SMB' ? mine.filter((r) => r.cls === main) : mine, C = byQ(comp), peersRecs = recs.filter((r) => r.cls === main && !(r.mgr && sub.has(r.mgr))), PQ = byQ(peersRecs);
       const peerPool = pool(PQ).n, canCmp = !L.isTop && !mixed && (main === 'AE' || main === 'SMB') && peerPool >= MIN_CMP;
       const peerLabel = main === 'AE' ? 'the rest of the AE teams' : 'the rest of SMB';
       const all1 = comp.length === mine.length;
@@ -975,12 +987,12 @@ dash.calc('conv_trust_close', {
     const T = (id, measure, value, severity, detail, fmt) => ({ key: 'trust|' + id, id, measure, value, fmt: fmt || 'n', detail, severity });
     return [
       T('merges', 'Admin merges left out', merges, 'info', num(merges) + ' New Business deals closed as Merged with Global Pilot or Record cleanup in the last 4 quarters and this one' + (peak ? ' (' + peak[0] + ': ' + num(peak[1]) + '; ' + usd(mergesArr) + ' ARR in all)' : '') + '; left out of every number here, still counted in Created opps\' totals.'),
-      T('reasons', 'Lost reasons on two lists', old, unl > 0 || (lost && blank / lost >= 0.05) ? 'warn' : 'info', 'In the last 4 quarters and this one, ' + num(old) + ' New Business losses use the list retired on 3 Nov 2026 and are counted under their new name; ' + num(nw) + ' use the new list; ' + num(blank) + ' have no reason; ' + num(unl) + ' use a value on neither list. Value not perceived (' + num(vnp) + ') has no clear new equivalent and keeps its name, as in Bookings. Why deals are lost shows the 4 completed quarters.'),
+      T('reasons', 'Lost reasons on two lists', old, unl > 0 || (lost && blank / lost >= 0.05) ? 'warn' : 'info', 'In the last 4 quarters and this one, ' + num(old) + ' New Business losses use the list retired on 3 Nov 2026: ' + num(old - vnp) + ' are counted under their new name, and Value not perceived (' + num(vnp) + ') has no clear new equivalent and keeps its name, as in Bookings; ' + num(nw) + ' use the new list; ' + num(blank) + ' have no reason; ' + num(unl) + ' use a value on neither list. Why deals are lost shows the 4 completed quarters.'),
       T('stage3', 'Stage 3 renamed', s3old + s3new, 'info', 'In the last 4 quarters and this one, Last Stage Before Close keeps "3 - Pilot Validation" on ' + num(s3old) + ' losses and says "3 - Validation" on ' + num(s3new) + '; both count as stage 3.'),
       T('atwin', 'Lost after a win, won from Qualification', atWin + from0, 'info', 'In the last 4 quarters and this one, ' + num(atWin) + ' losses had Closed Won as their last stage (won, reopened, then lost); ' + num(from0) + ' wins had stage 0 as their last stage, often logged at signature. They count as losses and wins.'),
       T('owner', 'Counted for the team that closed the deal', moved4, 'info', num(moved4) + ' of ' + num(closed4) + ' deals closed in the last 4 quarters now sit with someone in another role and count for the team that closed them; ' + num(blank4) + ' closed before about April 2026 count for the owner\'s team today' + (outside4 ? '; so do ' + num(outside4) + ' whose role at close is outside EMEA sales (another region\'s, RevOps or the like)' : '') + '.'),
       T('left', 'Closed by EMEA, owned outside EMEA today', left, closedAll && left / closedAll > 0.02 ? 'warn' : 'info', num(left) + ' New Business deals an EMEA seller closed in the last 4 quarters and this one now sit with an owner outside EMEA sales (strategic, another region, partnerships, RevOps or no role); they count for the team that closed them. Deals that moved outside EMEA after closing before about April 2026, when no closing role was stamped, can\'t be seen.'),
-      T('windowCap', 'Win-rate data near the 2,000-row limit', rows, rows >= 2000 ? 'bad' : rows >= 1600 ? 'warn' : 'info', 'Last 4 quarters ' + num(rows) + ' rows' + (rows >= 2000 ? ' (cut: totals too low)' : '') + '.'),
+      T('windowCap', 'Win-rate data near the 2,000-row limit', rows, rows >= 2000 ? 'bad' : rows >= 1600 ? 'warn' : 'info', 'Last 4 quarters and this one: ' + num(rows) + ' rows' + (rows >= 2000 ? ' (cut: totals too low)' : '') + '.'),
     ];
   },
 });

@@ -44,6 +44,8 @@
   .pal-kind { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .pal-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pal-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); white-space: nowrap; }
+  /* narrow (about 400px beside a chat): a Go to row keeps its destination, not its sub-label (still searched) */
+  @container main (max-width: 34rem) { .pal-go .pal-sub { display: none; } }
   .pal-hint { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-align: right; }
   .scope-note { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; margin: 0 0 var(--cds-gap-lg); padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: var(--cds-radius); background: color-mix(in srgb, var(--app-accent, var(--color-fg)) 12%, transparent); font-size: var(--cds-font-size-caption); }
   .scope-note span { flex: 1; min-width: 12rem; }

@@ -1103,7 +1103,8 @@ OS.oo = (() => {
       n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast) || (k === 'topics' && hasTopics) || (k === 'private' && hasPriv));
     });
     // which sections the agenda has: the Salesforce numbers and talking points of EMEA sales, the EMEA update and
-    // RevOps work for your manager, your reports and RevOps colleagues, or a note that it has your notes only
+    // RevOps work for RevOps colleagues (and your manager and reports when you are in RevOps), or a note that it has
+    // your notes only
     const rel = who ? OS.oo.kind(who) : null;
     document.querySelectorAll('[data-oo-sec]').forEach((n) => {
       const sec = n.dataset.ooSec;
@@ -1132,6 +1133,10 @@ OS.oo = (() => {
     });
     document.querySelectorAll('[data-seg-views]').forEach((g) => { g.hidden = !g.dataset.segViews.split(' ').includes(screen + ':' + view[screen]); });
     convApply();
+    // figures that stay all EMEA say so whenever a scope is picked: on the scope pill, or with Created opps › Conversion's
+    // Field · SMB switch, which sits above the Created figures (all EMEA on every view). Here, so a view switch updates it
+    const sp = dash.params(), seg = screen === 'created' && view.created === 'conversion' && (sp.cvSeg || 'all') !== 'all';
+    document.querySelectorAll('[data-scope-tag]').forEach((n) => { n.hidden = !(sp.mgr || (sp.region && sp.region !== 'All') || seg); });
     document.querySelectorAll('[data-detail]').forEach((d) => { d.hidden = !person; });
     document.querySelectorAll('.app').forEach((a) => a.classList.toggle('has-detail', !!person && !!a.querySelector('[data-detail]')));
     // the note above the activity tables of the view on screen, only when there is something to say: here rather than in
@@ -1141,14 +1146,19 @@ OS.oo = (() => {
   };
 
   // Created opps › Conversion: the Field · SMB switch only at All EMEA, the scope note's sentence for the scope picked, and the
-  // clean-up chip only when there is a clean-up quarter. conv_mgr and conv_closeout are read only while the view is open
-  // (reading them loads them); apply() and onData both run this, since they can load after the pick.
+  // clean-up chip only when there is a clean-up quarter. conv_mgr, conv_cohorts and conv_closeout are read only while the
+  // view is open (reading them loads them); apply() and onData both run this, since they can load after the pick.
   const convApply = () => {
     const p = dash.params(), mgr = p.mgr || '', reg = p.region || 'All', open = screen === 'created' && view.created === 'conversion';
     document.querySelectorAll('[data-cv-segs]').forEach((g) => { if (mgr || reg !== 'All') g.hidden = true; });
     const row = (id, pick) => (open && OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
     const mt = mgr ? row('conv_mgr', (r) => r.manager === mgr) : null;
-    const k = mgr ? 'mgr' : reg === 'BDR' ? 'bdr' : reg !== 'All' || (p.cvSeg || 'all') !== 'all' ? 'team' : 'all';
+    // a team or a segment: compared with its peers ('team'), or, with no fair peers (the segments, SMB, Engagement,
+    // Leadership), with its own earlier quarters only ('self')
+    const scope = reg !== 'All' ? reg : p.cvSeg === 'field' ? 'S|Field' : p.cvSeg === 'smb' ? 'S|SMB' : 'All';
+    const sr = scope === 'All' ? null : row('conv_cohorts', (r) => r.key === scope + '|New Business');
+    const peers = sr ? !!sr.peerLabel : !scope.startsWith('S|');
+    const k = mgr ? 'mgr' : reg === 'BDR' ? 'bdr' : scope !== 'All' ? (peers ? 'team' : 'self') : 'all';
     document.querySelectorAll('[data-cv-note-k]').forEach((n) => { const x = n.dataset.cvNoteK; n.hidden = !(x === k || (x === 'bdr' && mt && mt.team === 'BDR')); });
     const co = row('conv_closeout', (r) => r.key === 'All');
     document.querySelectorAll('[data-cv-clean]').forEach((b) => { b.hidden = !(co && co.closeoutQs && co.closeoutQs.length); });
@@ -1242,7 +1252,8 @@ OS.oo = (() => {
   const OPS_CHECKS = OS.CHECKS.filter((id) => !/^checks_conv/.test(id));
   const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
   // The weekly summary as lines, each with what it is about. Home's Copy summary reads it for the scope pill; the 1:1
-  // agendas of RevOps people (your manager, your reports, RevOps colleagues) read it for all EMEA.
+  // agendas with an EMEA update (RevOps colleagues, and your manager and reports when you are in RevOps) read it for all
+  // EMEA, without the conversion line and checks.
   const summaryLines = (sc) => {
     const p = dash.params();
     const mgr = sc ? sc.mgr || '' : p.mgr || '';
@@ -1306,12 +1317,13 @@ OS.oo = (() => {
     else add('stuck', na('Stuck in stage', 'risk_kpi'));
     if (rr) add('routing', `• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`, rr.missing ? 'high' : rr.weekOne ? 'low' : null);
     else add('routing', na('Routing', 'rr_kpi'));
-    const chk = sc && sc.mine === false ? OPS_CHECKS : OS.CHECKS;
+    // a 1:1 agenda's RevOps work counts every check but the conversion ones, and says so: its link opens every area
+    const chk = sc && sc.mine === false ? OPS_CHECKS : OS.CHECKS, chkName = sc && sc.mine === false ? 'Data checks outside Conversion' : 'Data checks';
     if (chk.some((id) => OS.state(id) === 'ok')) {
       const cs = OS.checkRows({ mgr, region: reg }, chk);
       const partial = chk.some((id) => failedSrc(id));
-      add('checks', `• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`, cs.some((c) => c.severity === 'high') ? 'high' : cs.length ? 'medium' : partial ? 'low' : null);
-    } else add('checks', na('Data checks', 'checks'));
+      add('checks', `• ${chkName}: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`, cs.some((c) => c.severity === 'high') ? 'high' : cs.length ? 'medium' : partial ? 'low' : null);
+    } else add('checks', na(chkName, 'checks'));
     if (lv) {
       const held = [lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '',
         lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : '',
@@ -1535,7 +1547,6 @@ OS.oo = (() => {
     document.querySelectorAll('[data-gr-due]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.grDue)));
     document.querySelectorAll('[data-gr-done]').forEach((b) => { b.setAttribute('aria-pressed', String(!!p.grShowDone)); b.hidden = !OS.done.can(); });
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
-    document.querySelectorAll('[data-scope-tag]').forEach((n) => { n.hidden = !(p.mgr || (p.region && p.region !== 'All')); });
     document.querySelectorAll('[data-legend]').forEach((n) => { n.hidden = n.dataset.legend !== (p.mgr ? 'mgr' : 'team'); });
     document.querySelectorAll('.os-region').forEach((sel) => { sel.value = p.region || 'All'; });
     document.querySelectorAll('.os-only-missing').forEach((c) => { c.checked = !!p.onlyMissing; });
