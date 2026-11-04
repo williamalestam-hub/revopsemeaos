@@ -2377,7 +2377,7 @@ dash.calc('ld_trust_cap', {
 
 dash.calc('checks_ld', {
   title: 'Data checks, leads',
-  description: 'Lead problems to act on from the Ready leads: EMEA sellers with demo requests in Ready for 2+ business days, sellers with 25 or more Ready leads waiting over 20 business days or Ready since before 19 May 2026, Ready leads held by EMEA sellers that LeanData routed to another region, Ready leads with no Ready Since stamp created after 19 May 2026, and suspected bulk Ready re-stamps. Routing problems are checks_ld_rt and the row cap checks_ld_cap. People who left with an EMEA role are not repeated: checks_lv already lists their leads.',
+  description: 'Lead problems to act on from the Ready leads: EMEA sellers with demo requests in Ready for 2+ business days, demo requests waiting that long with a queue or owners outside EMEA sales (all EMEA), sellers with 25 or more Ready leads waiting over 20 business days or Ready since before 19 May 2026, Ready leads held by EMEA sellers that LeanData routed to another region, Ready leads with no Ready Since stamp created after 19 May 2026, and suspected bulk Ready re-stamps. Routing problems are checks_ld_rt and the row cap checks_ld_cap. People who left with an EMEA role are not repeated: checks_lv already lists their leads.',
   inputs: ['ld_backlog', 'ld_trust'],
   fn: (ld_backlog, ld_trust) => {
     const plural = (n, one, many) => n.toLocaleString('en') + ' ' + (n === 1 ? one : many);
@@ -2390,6 +2390,12 @@ dash.calc('checks_ld', {
       if (o.stale >= 25) out.push({ ...base, id: 'lds:' + o.key, severity: o.stale >= 100 ? 'medium' : 'low', what: plural(o.stale, 'Ready lead', 'Ready leads') + ' waiting over 20 business days or Ready since before 19 May 2026', meta: [o.elsewhere ? o.elsewhere.toLocaleString('en') + ' routed to another region' : '', 'work, nurture, disqualify or reassign'].filter(Boolean).join(' · ') });
     }
     const all = { area: 'Leads', person: null, region: 'All', manager: null, screen: 'leads' };
+    // demo requests waiting with a queue or an owner outside EMEA sales: nobody in EMEA sales will see them
+    const other = ld_backlog.filter((o) => (o.kind === 'Queue' || o.kind === 'Outside EMEA sales') && o.demoOverdue > 0);
+    if (other.length) {
+      const n = other.reduce((s, o) => s + o.demoOverdue, 0);
+      out.push({ ...all, id: 'ldx', severity: 'high', title: 'Demo requests outside EMEA sales', what: plural(n, 'demo request', 'demo requests') + ' in Ready for 2+ business days with a queue or owners outside EMEA sales', meta: other.sort((a, b) => b.demoOverdue - a.demoOverdue).slice(0, 3).map((o) => o.owner + ' ' + o.demoOverdue).join(', ') + (other.length > 3 ? ' and ' + (other.length - 3) + ' more' : '') + ' · route or reassign them', view: 'ready' });
+    }
     for (const t of ld_trust) {
       if (t.id === 'region' && t.value > 0) out.push({ ...all, id: 'ldt:region', severity: 'low', title: 'Ready leads routed to another region', what: plural(t.value, 'Ready lead', 'Ready leads') + ' held by EMEA sellers are routed outside EMEA by LeanData', meta: 'confirm they belong to EMEA or reassign', view: 'ready' });
       if (t.id === 'stamp' && t.gap > 0) out.push({ ...all, id: 'ldt:stamp', severity: 'low', title: 'Ready with no Ready Since stamp', what: plural(t.gap, 'Ready lead', 'Ready leads') + ' created after 19 May 2026 with no Ready Since stamp', meta: 'their age and speed cannot be measured', view: 'ready' });
