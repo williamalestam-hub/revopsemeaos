@@ -126,19 +126,23 @@ Salesforce role and changing scope never re-runs a query.
     RevOps admin tasks are left out. The direction comes from `EmailMessage.Incoming`, because `Task.Inbound_Email__c`
     is hidden from EMEA profiles. People and accounts emailed are distinct per seller; team figures add them up.
   - *External meetings*: `Event`s with a contact, lead or account (not Legora's own), not all-day, owned by the
-    seller, whoever created them; one per start time per person; LeanData BookIt meetings marked Canceled or
-    Rescheduled left out. Held = started in the last 4 weeks, booked = starts in the next 2 (`Activity_in_Past__c`,
+    seller, whoever created them; one per start time per person (found within one account status, so a copy of the
+    same meeting on a record with another status, about 1–2% of meetings, counts again); LeanData BookIt meetings
+    marked Canceled or Rescheduled left out. Held = started in the last 4 weeks, booked = starts in the next 2 (`Activity_in_Past__c`,
     checked on every load). A meeting on the calendar counts as held; one with two of our people counts for each.
   - *Customers and prospects*: by the account's status today; Customer is a customer, everything else a prospect.
   - *The role's meetings*: customer meetings for Engagement Managers, prospect meetings for BDRs, all external
     meetings for AEs, SMB and leaders.
-  - *Changes* are like-for-like: only people who joined 8+ weeks ago and whose capture was on in the first week of
-    the earlier window; team changes add up those people, say how many, and need 20+ meetings (200+ emails) before.
+  - *Changes* are like-for-like: only current sellers who joined 8+ weeks ago, whose capture was on in the first week
+    of the earlier window and still looks on (people who left, nothing captured or a capture gap are left out); team
+    changes add up those people, say how many, and need 20+ meetings (200+ emails) before.
     Capture was switched on during 2026 (people with captured sent mail: 32 in March, 98 in September, 123 in
     October), so longer comparisons would measure the rollout, not selling.
   - *Flags* (active AEs, SMB reps, BDRs and Engagement Managers past their first 28 days; leaders and new joiners
-    are shown, never flagged): **Quiet** = nothing captured for 5+ business days (Mon–Fri, Paris, up to yesterday;
-    10+ is urgent; time off can't be seen); **Slowing** = the role's meetings down 30%+ on the 4 weeks before, from
+    are shown, never flagged): **Quiet** = nothing captured for 5+ business days (Mon–Fri on the Paris calendar, up
+    to the last day the queries read: yesterday, or the day before while your Salesforce time zone is still on an
+    earlier date than Paris; 10+ is urgent; time off can't be seen; never flagged while your access hides emails or
+    meetings); **Slowing** = the role's meetings down 30%+ on the 4 weeks before, from
     at least 8 and by more than twice the square root of the earlier count (for BDRs, emails the same way from 40);
     **Nothing booked** = no prospect meetings booked for the next 2 weeks after 4+ in the last 4 (customer meetings
     for Engagement Managers); **Below range** = under the 25th percentile of the role's meetings in both 4-week
@@ -147,8 +151,9 @@ Salesforce role and changing scope never re-runs a query.
   - *Usual range*: the middle half (25th–75th percentile) of EMEA sellers in the same role over the last 4 weeks.
     It describes peers, not a target.
   - *Access*: activity follows Salesforce sharing (Account, Opportunity and Lead are Public Read Only). If your
-    access shows activity for fewer than half the sellers, empty rows read Not visible; if it shows meetings but
-    almost no emails, emails show —.
+    access shows activity for fewer than half the sellers, empty rows read Not visible with blank numbers, a team
+    with such sellers shows no scorecard total, and summaries and agendas say for how many sellers it shows nothing; if it
+    shows meetings but almost no emails, emails show — (and the reverse for meetings, with no usual range).
 - **Book moves**: per AE team and SMB, active accounts to move from books at 2× the team median or more to
   books at half or less, largest gaps first, each move stopping at the median for both reps.
 - **People matching**: a HiBob person is matched to an active Salesforce user by work email (any role;
@@ -182,8 +187,8 @@ Each optional source is its own calculation, so a viewer whose access can't read
 without LeanData, routing pools, routing checks, routing gaps and pool seats show — or "not available", while the
 person panel, data checks, team scorecard, 1:1 agendas and Leavers (deals, renewals, accounts) keep working;
 without Lead access, the Leads screen and leavers' leads are missing; without HiBob, the Hiring screen and HiBob
-checks; without email message or event access, Activity, its scorecard columns and agenda lines show — while the
-rest of each screen keeps working. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
+checks; without email message or event access, Activity and its scorecard columns show —, and agendas leave out
+the activity lines (saying so when nothing else is flagged), while the rest of each screen keeps working. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
 "Connect … in your claude.ai connectors" (naming the one that is actually missing) rather than "Failed to load", and
 one turned off for the dashboard says so. The weekly summary waits for its sources and says "not available" for one
 that failed instead of leaving it out.
@@ -202,10 +207,17 @@ that failed instead of leaving it out.
   what happened in a meeting, or who booked a meeting for whom. About 1 in 8 of the people Outreach emailed had no
   mailbox copy, so emails read somewhat low. Activity is joined to people by name and counts for the record's
   current owner. One business calendar (Paris, no holidays), so a national holiday can make a country look quiet.
+  The windows follow each viewer's Salesforce time zone, so viewers in different zones differ by a few records at
+  the edges; a Salesforce user left on a zone far from where they work (say Los Angeles for someone in Europe) gets
+  windows that end at that zone's midnight, so set your Salesforce time zone to where you work.
   It was built and checked with RevOps access: before rollout, have one EMEA director compare 1:1s › Activity with
   RevOps totals. **Per-person activity shown to managers needs a check with HR and, where they exist, works councils
-  (for example in Germany and France) before rollout.** The design keeps flags on meetings against the person's own
-  past or their role's middle half, has no email leaderboards, words Quiet as a question, and never messages a rep.
+  (for example in Germany and France) before rollout.** What ships: Slowing compares the role's meetings with the
+  person's own past (a BDR's emails too), Below range uses the role's middle half, and Quiet and Nothing booked are
+  fixed thresholds; per-person email counts are shown and can be sorted, and only BDR Slowing uses them; a person's
+  Quiet talking point is worded as a question, while leader agendas and the Monday summary name quiet people;
+  nothing messages a rep automatically: a Quiet check-in is a Slack draft that Claude sends only after the
+  manager's OK.
 - **Last activity on accounts and deals** (`LastActivityDate`, behind Untouched accounts on Account books ›
   Engagement and stale deals) moves with automation and received mail: in 4 weeks a RevOps admin flow logged about
   20,000 Task/Other rows on EMEA owners' records, roughly one per received email, touching about 2,500 accounts. So

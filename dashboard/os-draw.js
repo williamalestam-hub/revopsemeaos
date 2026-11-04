@@ -908,7 +908,7 @@ OS.defList('oo-talk', ['oo_points'], ooPoints('talk'), (rows) => rows.map((r) =>
     li.append(go);
   }
   return li;
-}), { msg: () => (!OS.oo.who() ? 'nowho' : ooPoints('talk')().length ? null : ooPoints('numbers')().length ? 'empty' : 'nodata') });
+}), { msg: () => (!OS.oo.who() ? 'nowho' : ooPoints('talk')().length ? null : ooPoints('numbers')().length ? (OS.state('oo_points_act') === 'ok' ? 'empty' : 'emptycore') : 'nodata') });
 
 // ===================== TEAM SCORECARD =====================
 const ooRoot = () => {
@@ -969,7 +969,7 @@ OS.defTable('oo-team-table', ['team_tree'], () => {
   // routing gaps join from team_rr when LeanData loads, and selling activity from team_act; until then (or without them) they show —
   const rr = OS.state('team_rr') === 'ok' ? new Map((dash.data('team_rr').data || []).map((x) => [x.name, x.routingGaps])) : null;
   const act = OS.state('team_act') === 'ok' ? new Map((dash.data('team_act').data || []).map((x) => [x.name, x])) : null;
-  const NO_ACT = { actMeetings: null, actMeetCust: null, actMeetPros: null, actMeetPerSellerWk: null, actMeetChg: null, actCompared: null, actBooked: null, actBookedPros: null, actFlags: null, actQuiet: null, actSlowing: null, actNothingBooked: null, actNoCapture: null };
+  const NO_ACT = { actMeetings: null, actMeetCust: null, actMeetPros: null, actMeetPerSellerWk: null, actMeetChg: null, actCompared: null, actBooked: null, actBookedPros: null, actFlags: null, actQuiet: null, actSlowing: null, actNothingBooked: null, actNoCapture: null, actHidden: null };
   return root ? (dash.data('team_tree').data || []).filter((r) => r.manager === root).map((r) => ({ ...r, routingGaps: rr ? rr.get(r.name) || 0 : null, ...NO_ACT, ...(act ? act.get(r.name) || {} : {}), name: r.name }))
     .sort((a, b) => b.emeaPeople - a.emeaPeople || b.thisPipe - a.thisPipe) : [];
 }, [
@@ -983,7 +983,7 @@ OS.defTable('oo-team-table', ['team_tree'], () => {
   { f: 'winRate', fmt: (v) => (v == null ? '—' : OS.pct(v)), num: true },
   { f: 'pastDue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'riskReps', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
-  { f: 'actMeetings', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: (r) => (r.actMeetings == null ? '' : OS.num(r.actMeetCust) + ' with customers · ' + OS.num(r.actMeetPros) + ' with prospects') },
+  { f: 'actMeetings', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: (r) => (r.actHidden ? 'Your Salesforce access shows no activity for ' + OS.num(r.actHidden) + (r.actHidden === 1 ? ' person' : ' people') + ' in this team, so no total is shown' : r.actMeetings == null ? '' : OS.num(r.actMeetCust) + ' with customers · ' + OS.num(r.actMeetPros) + ' with prospects') },
   { f: 'actMeetPerSellerWk', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v)), num: true },
   { f: 'actMeetChg', fmt: (v) => (v == null ? '—' : (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%'), num: true, cls: (v) => (v != null && v <= -0.25 ? 'os-bad' : ''), tip: (r) => (r.actCompared != null ? 'like-for-like, ' + OS.num(r.actCompared) + ' people compared' : '') },
   { f: 'actBooked', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: (r) => (r.actBookedPros != null ? OS.num(r.actBookedPros) + ' with prospects' : '') },
@@ -1369,27 +1369,28 @@ dash.draw('kpi-act', (el) => OS.value(el, ['act_kpi'], () => {
 // the like-for-like change, with how many people it compares, or why there is none
 dash.draw('kpi-act-lfl', (el) => OS.value(el, ['act_kpi'], () => {
   const r = actRow(el), f = keepField(el), v = r[f];
-  if (f === 'emailsChg' && r.mailHidden) return 'not visible with your access';
+  if (f === 'emailsChg' ? r.mailHidden : r.meetHidden) return 'not visible with your access';
   if (v == null) return 'no like-for-like change yet';
   return actSigned(v) + ' like-for-like (' + OS.num(f === 'emailsChg' ? r.lflMailReps : r.lflMeetReps) + ' people)';
 }));
-// what the viewer's Salesforce access hides, as a sentence (hidden when nothing is)
+// what the viewer's Salesforce access hides, as a sentence; onData shows the note around it only when something is hidden
 dash.draw('act-access', (el) => {
   const g = actGlobal();
-  el.textContent = !g ? '' : g.limited ? 'Your Salesforce access shows activity for ' + OS.num(g.visibleSellers) + ' of ' + OS.num(g.sellers) + ' sellers; the rest show Not visible.'
-    : g.mailHidden ? 'Your access shows meetings but almost no captured emails, so emails show —.'
-    : g.meetHidden ? 'Your access shows emails but almost no meetings, so meeting counts read low.' : '';
-  el.hidden = !el.textContent;
+  el.textContent = !g ? '' : g.limited ? 'Your Salesforce access shows activity for ' + OS.num(g.visibleSellers) + ' of ' + OS.num(g.sellers) + ' sellers; the rest show Not visible, with blank numbers.'
+    : g.mailHidden ? 'Your access shows meetings but almost no captured emails, so emails show — and no one is flagged Quiet.'
+    : g.meetHidden ? 'Your access shows emails but almost no meetings, so meetings show — and only email-based flags remain.' : '';
 });
 
 // ----- people -----
 const actPrepAsk = (r) => {
   const chg = r.coreChg != null ? ACT_CORE[r.coreLabel] + ' ' + actSigned(r.coreChg) + ' like-for-like' : 'no like-for-like change: ' + (r.trendNote || 'not compared');
   const em = r.emails == null ? 'emails not visible with my access' : OS.num(r.emails) + ' emails sent to ' + OS.num(r.people) + ' people at ' + OS.num(r.accounts) + ' accounts';
+  const mt = r.meetings == null ? 'meetings not visible with my access' : OS.num(r.meetings) + ' external meetings (' + OS.num(r.meetCust) + ' with customers, ' + OS.num(r.meetPros) + ' with prospects), ' + OS.num(r.booked) + ' booked for the next 2 weeks';
   return actAsk('Prep 1:1 on activity: ' + r.name, 'Before my 1:1 with ' + actWho(r) + ', help me read their selling activity from the EMEA RevOps OS. Last 4 weeks (28 days to yesterday): '
-    + OS.num(r.meetings) + ' external meetings (' + OS.num(r.meetCust) + ' with customers, ' + OS.num(r.meetPros) + ' with prospects), ' + OS.num(r.booked) + ' booked for the next 2 weeks, ' + em + '. The 4 weeks before: '
-    + OS.num(r.meetPrev) + ' meetings, ' + (r.emails == null ? 'emails not visible' : OS.num(r.emailsPrev) + ' emails') + ' (' + chg + (r.emailsChg != null ? ', emails ' + actSigned(r.emailsChg) : '') + '). Last email ' + actTs(r.lastMail) + '; last meeting ' + actTs(r.lastMeet)
-    + '. Flags: ' + ((r.flags || []).join(', ') || 'none') + '.' + actOwner(r) + ' With my Salesforce access, break the last 8 weeks down by week: sent emails captured from their mailbox, external meetings (one per start time) with customers and prospects, and any Outreach calls and LinkedIn steps. Say what changed and suggest 2 or 3 questions for the 1:1.' + ACT_GUARD,
+    + mt + ', ' + em + '. The 4 weeks before: '
+    + (r.meetings == null ? 'meetings not visible' : OS.num(r.meetPrev) + ' meetings') + ', ' + (r.emails == null ? 'emails not visible' : OS.num(r.emailsPrev) + ' emails') + ' (' + chg + (r.emailsChg != null ? ', emails ' + actSigned(r.emailsChg) : '') + ').'
+    + (r.emails == null ? '' : ' Last email ' + actTs(r.lastMail) + '.') + (r.meetings == null ? '' : ' Last meeting ' + actTs(r.lastMeet) + '.')
+    + ' Flags: ' + ((r.flags || []).join(', ') || 'none') + '.' + actOwner(r) + ' With my Salesforce access, break the last 8 weeks down by week: sent emails captured from their mailbox, external meetings (one per start time) with customers and prospects, and any Outreach calls and LinkedIn steps. Say what changed and suggest 2 or 3 questions for the 1:1.' + ACT_GUARD,
   { person: r.name, userId: r.userId });
 };
 const actCaptureWhat = (r) => (r.status === 'No capture' ? (r.mailHidden ? 'no external meeting captured in the last 4 weeks (emails not visible with my access)' : r.meetHidden ? 'no sent email captured in the last 4 weeks (meetings not visible with my access)' : 'no sent email and no external meeting captured in the last 4 weeks')
@@ -1409,7 +1410,9 @@ const actActs = (r) => {
   if (ask) box.append(ask);
   return box.children.length ? box : null;
 };
-const actTouchTip = (r) => [r.idle != null ? actBd(r.idle) + ' with nothing captured since' : '', 'last email ' + actTs(r.lastMail), 'last meeting ' + actTs(r.lastMeet), r.nextMeet ? 'next meeting booked ' + actTs(r.nextMeet) : 'no meeting booked'].filter(Boolean).join(' · ');
+// with one channel hidden by the viewer's access, the last touch is the other channel's
+const actIdleTip = (r) => (r.idle == null ? '' : actBd(r.idle) + (r.mailHidden ? ' since their last meeting (emails not visible with your access)' : r.meetHidden ? ' since their last email (meetings not visible with your access)' : ' with nothing captured since'));
+const actTouchTip = (r) => [actIdleTip(r), r.mailHidden ? '' : 'last email ' + actTs(r.lastMail), r.meetHidden ? '' : 'last meeting ' + actTs(r.lastMeet), r.meetHidden || r.status === 'Not visible' ? '' : r.nextMeet ? 'next meeting booked ' + actTs(r.nextMeet) : 'no meeting booked'].filter(Boolean).join(' · ');
 const actRows = () => {
   const p = dash.params();
   return (dash.data('act_reps').data || []).filter((r) => inTeam(r) && (!p.actRole || r.kind === p.actRole) && (!p.actLook || actNeedsLook(r)) && (p.actLeft || r.status !== 'Left'))
@@ -1419,15 +1422,15 @@ OS.defTable('act-table', ['act_reps'], actRows, [
   { f: 'name', person: (r) => r.name, after: actActs },
   { f: 'region' },
   { f: 'kind' },
-  { f: 'meetings', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.meetings), tip: (r) => OS.num(r.events) + ' calendar records, ' + OS.num(r.dupes) + ' repeats removed' },
+  { f: 'meetings', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.meetings || 0), tip: (r) => (r.meetings == null ? (r.meetHidden || r.status === 'Not visible' ? 'not visible with your access' : '') : OS.num(r.events) + ' calendar records, ' + OS.num(r.dupes) + ' repeats removed') },
   { f: 'meetCust', fmt: OS.num, num: true },
   { f: 'meetPros', fmt: OS.num, num: true },
-  { f: 'coreChg', fmt: actSigned, num: true, cls: (v, r) => (r.trigger === 'meetings' ? 'os-bad' : ''), tip: (r) => (r.coreChg != null ? OS.num(r.coreNow) + ' vs ' + OS.num(r.corePrev) + ' ' + ACT_CORE[r.coreLabel] : r.trendNote || '') },
-  { f: 'booked', fmt: OS.num, num: true, cls: (v, r) => ((r.flags || []).includes('Nothing booked') ? 'os-warn' : ''), tip: (r) => OS.num(r.bookedCust) + ' with customers · ' + OS.num(r.bookedPros) + ' with prospects' + (r.nextMeet ? ' · next ' + actTs(r.nextMeet) : '') },
-  { f: 'emails', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.emails || 0) },
+  { f: 'coreChg', fmt: actSigned, num: true, cls: (v, r) => (r.trigger === 'meetings' ? 'os-bad' : ''), tip: (r) => (r.coreChg != null ? OS.num(r.coreNow) + ' vs ' + OS.num(r.corePrev) + ' ' + ACT_CORE[r.coreLabel] : r.meetHidden ? 'not visible with your access' : r.trendNote || '') },
+  { f: 'booked', fmt: OS.num, num: true, cls: (v, r) => ((r.flags || []).includes('Nothing booked') ? 'os-warn' : ''), tip: (r) => (r.booked == null ? '' : OS.num(r.bookedCust) + ' with customers · ' + OS.num(r.bookedPros) + ' with prospects' + (r.nextMeet ? ' · next ' + actTs(r.nextMeet) : '')) },
+  { f: 'emails', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.emails || 0), tip: (r) => (r.emails == null && (r.mailHidden || r.status === 'Not visible') ? 'not visible with your access' : '') },
   { f: 'people', fmt: OS.num, num: true, tip: (r) => (r.accounts != null ? OS.num(r.accounts) + ' accounts emailed' : '') },
-  { f: 'emailsChg', fmt: actSigned, num: true, cls: (v, r) => (r.trigger === 'emails' ? 'os-bad' : ''), tip: (r) => (r.emailsChg != null ? OS.num(r.emails) + ' vs ' + OS.num(r.emailsPrev) : r.emails == null ? 'not visible with your access' : r.trendNote || '') },
-  { f: 'coreWk', fmt: actWk, num: true, cls: (v, r) => ((r.flags || []).includes('Below range') ? 'os-warn' : ''), tip: (r) => ACT_CORE[r.coreLabel] + ' a week' + (r.rangeLo != null && r.kind !== 'Leader' ? '; usual for ' + ACT_ROLE[r.kind] + ': ' + actWk(r.rangeLo) + '–' + actWk(r.rangeHi) : '') },
+  { f: 'emailsChg', fmt: actSigned, num: true, cls: (v, r) => (r.trigger === 'emails' ? 'os-bad' : ''), tip: (r) => (r.emailsChg != null ? OS.num(r.emails) + ' vs ' + OS.num(r.emailsPrev) : r.mailHidden ? 'not visible with your access' : r.trendNote || '') },
+  { f: 'coreWk', fmt: actWk, num: true, cls: (v, r) => ((r.flags || []).includes('Below range') ? 'os-warn' : ''), tip: (r) => (r.coreWk == null ? '' : ACT_CORE[r.coreLabel] + ' a week' + (r.rangeLo != null && r.kind !== 'Leader' ? '; usual for ' + ACT_ROLE[r.kind] + ': ' + actWk(r.rangeLo) + '–' + actWk(r.rangeHi) : '')) },
   { f: 'lastTouch', fmt: actTs, cls: (v, r) => (r.status === 'Quiet' ? (r.idle >= 10 ? 'os-bad' : 'os-warn') : ''), tip: actTouchTip },
   { f: 'statusTxt', fmt: (v) => v || '', chip: actChip, after: actStatusAsk },
 ], { key: 'name', also: ['manager'] });
@@ -1436,11 +1439,16 @@ OS.defTable('act-table', ['act_reps'], actRows, [
 dash.draw('act-monday', (box) => {
   const k = OS.state('act_kpi') === 'ok' ? (dash.data('act_kpi').data || []).find((r) => r.region === scopeKey()) : null;
   const reps = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || []).filter((r) => inTeam(r) && r.active && r.kind !== 'Leader') : null;
-  if (!k || !reps) { box.replaceChildren(); return; }
+  // nothing to summarise when the viewer's access shows no activity for anyone in the scope
+  if (!k || !reps || (k.sellers && k.notVisible >= k.sellers)) { box.replaceChildren(); return; }
   const names = (f) => { const rs = reps.filter((r) => (r.flags || []).includes(f)); return rs.length ? rs.slice(0, 6).map((r) => r.name).join(', ') + (rs.length > 6 ? ' and ' + (rs.length - 6) + ' more' : '') : 'none'; };
-  const b = actAsk('Monday summary: activity, ' + ldTeamName(scopeKey()), 'Write a 5-bullet Monday-meeting summary of selling activity for ' + ldTeamName(scopeKey()) + ' from the EMEA RevOps OS: ' + OS.num(k.meetings) + ' external meetings (' + OS.num(k.meetCust) + ' with customers) and '
-    + (k.emails == null ? 'emails not visible with my access' : OS.num(k.emails) + ' emails') + ' in the last 4 weeks, ' + (k.meetChg != null ? 'meetings ' + actSigned(k.meetChg) + ' like-for-like (' + OS.num(k.lflMeetReps) + ' people compared)' : 'no like-for-like change yet') + ', ' + OS.num(k.booked) + ' booked for the next 2 weeks; quiet: ' + names('Quiet')
-    + '; slowing: ' + names('Slowing') + '; nothing booked: ' + names('Nothing booked') + '; nothing captured (check capture first): ' + names('No capture') + '. Name our own people only, no customer or prospect names. Draft it for Slack and wait for my OK before posting.', { team: scopeKey() });
+  // say what the viewer's access hides, so the summary doesn't present a part as the whole
+  const seen = (k.notVisible ? ' My Salesforce access shows no activity for ' + OS.num(k.notVisible) + ' of the ' + OS.num(k.sellers) + ' sellers here: say these numbers may be partial.' : '')
+    + (k.mailHidden ? ' My access shows almost no captured emails, so no one can be flagged Quiet.' : k.meetHidden ? ' My access shows almost no meetings, so only email-based flags apply.' : '');
+  const b = actAsk('Monday summary: activity, ' + ldTeamName(scopeKey()), 'Write a 5-bullet Monday-meeting summary of selling activity for ' + ldTeamName(scopeKey()) + ' from the EMEA RevOps OS: '
+    + (k.meetings == null ? 'meetings not visible with my access' : OS.num(k.meetings) + ' external meetings (' + OS.num(k.meetCust) + ' with customers)') + ' and '
+    + (k.emails == null ? 'emails not visible with my access' : OS.num(k.emails) + ' emails') + ' in the last 4 weeks, ' + (k.meetChg != null ? 'meetings ' + actSigned(k.meetChg) + ' like-for-like (' + OS.num(k.lflMeetReps) + ' people compared)' : 'no like-for-like change yet') + (k.booked == null ? '' : ', ' + OS.num(k.booked) + ' booked for the next 2 weeks') + '; quiet: ' + names('Quiet')
+    + '; slowing: ' + names('Slowing') + '; nothing booked: ' + names('Nothing booked') + '; nothing captured (check capture first): ' + names('No capture') + '.' + seen + ' Name our own people only, no customer or prospect names. Draft it for Slack and wait for my OK before posting.', { team: scopeKey() });
   if (b) { b.classList.remove('ibtn'); b.classList.add('btn'); b.append('Monday summary'); }
   box.replaceChildren(...(b ? [b] : []));
 });
@@ -1498,7 +1506,7 @@ OS.defTable('act-bdr-table', ['act_bdr'], () => (dash.data('act_bdr').data || []
   { f: 'prosChg', fmt: actSigned, num: true, tip: (r) => (r.prosChg != null ? OS.num(r.meetPros) + ' vs ' + OS.num(r.meetProsPrev) : '') },
   { f: 'bookedPros', fmt: OS.num, num: true },
   { f: 'meetPer100', fmt: actWk, num: true, tip: () => 'prospect meetings per 100 people emailed, same 4 weeks; — under 50 people' },
-  { f: 'lastTouch', fmt: actTs, tip: (r) => (r.idle != null ? actBd(r.idle) + ' with nothing captured since' : '') },
+  { f: 'lastTouch', fmt: actTs, tip: actIdleTip },
   { f: 'thisOpps', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.thisOpps) },
   { f: 'thisArr', fmt: OS.usd, num: true },
   { f: 'lastOpps', fmt: OS.num, num: true },
@@ -1525,10 +1533,11 @@ const actPersonValue = (fn) => (el) => {
 };
 dash.draw('pd-act-ts', actPersonValue((r, el) => actTs(r[el.dataset.f])));
 dash.draw('pd-act-chg', actPersonValue((r, el) => (r[el.dataset.f] != null ? actSigned(r[el.dataset.f]) + (el.dataset.f === 'coreChg' ? ' (' + OS.num(r.coreNow) + ' vs ' + OS.num(r.corePrev) + ' ' + ACT_CORE[r.coreLabel] + ')' : ' (' + OS.num(r.emails) + ' vs ' + OS.num(r.emailsPrev) + ')')
-  : r.emails == null && el.dataset.f === 'emailsChg' ? 'not visible with your access' : r.trendNote || '—')));
-dash.draw('pd-act-meet', actPersonValue((r) => OS.num(r.meetings) + ' (' + OS.num(r.meetCust) + ' customer · ' + OS.num(r.meetPros) + ' prospect)'));
+  : (el.dataset.f === 'emailsChg' ? r.mailHidden : r.meetHidden) ? 'not visible with your access' : r.trendNote || '—')));
+dash.draw('pd-act-meet', actPersonValue((r) => (r.meetings == null ? (r.meetHidden ? 'not visible with your access' : '—') : OS.num(r.meetings) + ' (' + OS.num(r.meetCust) + ' customer · ' + OS.num(r.meetPros) + ' prospect)')));
 dash.draw('pd-act-usual', actPersonValue((r) => (r.rangeLo != null && r.kind !== 'Leader' && ACT_ROLE[r.kind] ? ACT_ROLE[r.kind] + ': ' + actWk(r.rangeLo) + '–' + actWk(r.rangeHi) + ' ' + ACT_CORE[r.coreLabel] + ' a week; theirs ' + actWk(r.coreWk) : '—')));
 dash.draw('pd-act-em', (el) => {
   const r = actRep(), p = rowFor('person');
-  OS.value(el, ['act_reps'], () => (r ? OS.num(r.custMet) + (p && p.emCustomers != null ? ' of ' + OS.num(p.emCustomers) + ' in their Engagement Manager book' : '') : '—'));
+  // custMet counts every customer account met, not only their own book, so the book is a second figure, not a total
+  OS.value(el, ['act_reps'], () => (r && r.custMet != null ? OS.num(r.custMet) + (p && p.emCustomers > 0 ? '; ' + OS.num(p.emCustomers) + ' in their Engagement Manager book' : '') : '—'));
 });

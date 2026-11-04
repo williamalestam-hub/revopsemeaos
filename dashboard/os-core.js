@@ -1132,9 +1132,14 @@ OS.oo = (() => {
     if (act) {
       if (act.meetings || act.emails || act.sellers) {
         const sg = (v) => (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%';
-        add(`• Activity, last 4 weeks: ${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks${act.emails != null ? `, ${n(act.emails, 'email', 'emails')} sent` : ''}`
+        // a channel the viewer's access hides is named, not dropped or counted as zero, and so are the flags it switches off
+        const meet = act.meetings == null ? 'meetings not visible with your access' : `${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks`;
+        const flags = [act.mailHidden || act.meetHidden ? '' : `${OS.num(act.quiet)} quiet`, `${OS.num(act.slowing)} slowing`, act.meetHidden ? '' : `${OS.num(act.nothingBooked)} with nothing booked`, `${OS.num(act.noCapture)} with nothing captured`].filter(Boolean).join(', ');
+        if (act.sellers && act.notVisible >= act.sellers) add(`• Activity, last 4 weeks: not visible with your Salesforce access (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})`);
+        else add(`• Activity, last 4 weeks: ${meet}, ${act.emails != null ? `${n(act.emails, 'email', 'emails')} sent` : 'emails not visible with your access'}`
           + `${act.meetChg != null ? `; meetings ${sg(act.meetChg)} like-for-like (${n(act.lflMeetReps, 'person', 'people')} compared)` : ''}`
-          + `; ${OS.num(act.quiet)} quiet, ${OS.num(act.slowing)} slowing, ${OS.num(act.nothingBooked)} with nothing booked, ${OS.num(act.noCapture)} with nothing captured`);
+          + `; ${flags}`
+          + `${act.notVisible ? ` (your Salesforce access shows no activity for ${OS.num(act.notVisible)} of the ${n(act.sellers, 'seller', 'sellers')}, so these may be partial)` : ''}`);
       }
     } else add(na('Activity', 'act_kpi'));
     if (orph && !p.mgr && (!p.region || p.region === 'All')) add(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
@@ -1352,6 +1357,11 @@ OS.oo = (() => {
     document.querySelectorAll('[data-hello]').forEach((h) => { h.hidden = h.dataset.hello !== part; });
     OS.ask.refresh();
     document.querySelectorAll('[data-ask-agenda]').forEach((b) => { b.hidden = !OS.ask.can(); });
+    // 1:1s › Activity: the note on what the viewer's access hides, only when it hides something
+    if (screen === 'oneonone' && view.oneonone === 'activity') {
+      const g = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || [])[0] || null : null;
+      document.querySelectorAll('[data-act-access]').forEach((n) => { n.hidden = !(g && (g.limited || g.mailHidden || g.meetHidden)); });
+    }
     // data checks: say so when some sources failed while others loaded (only on the screens that list them)
     if (screen === 'home' || screen === 'actions') {
       const st = OS.CHECKS.map((id) => OS.state(id));
@@ -1389,6 +1399,7 @@ OS.oo = (() => {
       const actRep = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || []).find((r) => r.name === p.person) || null : null;
       document.querySelectorAll('[data-pd-act]').forEach((n) => { n.hidden = !actRep; });
       document.querySelectorAll('[data-pd-act-note]').forEach((n) => { n.hidden = !(actRep && actRep.status === 'Not visible'); });
+      document.querySelectorAll('[data-pd-act-dl]').forEach((n) => { n.hidden = !!(actRep && actRep.status === 'Not visible'); });
       document.querySelectorAll('[data-pd-act-em]').forEach((n) => { n.hidden = !(actRep && actRep.kind === 'EM'); });
       // open deals: point the deals query at this person, and show the section once it has
       if (row && row.userId && p.dealOwnerId !== row.userId) dash.setParams({ dealOwnerId: row.userId });

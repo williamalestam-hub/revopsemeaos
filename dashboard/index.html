@@ -453,6 +453,7 @@
                 <ul class="ag-bullets ag-talk" data-draw="oo-talk" data-source="oo_points oo_points_rr oo_points_act"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-talk"></span>
                   <p class="os-empty" data-msg-for="oo-talk" data-msg="empty" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance, data checks or activity to talk about.</p>
+                  <p class="os-empty" data-msg-for="oo-talk" data-msg="emptycore" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance or data checks to talk about. Activity points aren't included: they're still loading or couldn't be read.</p>
                 </div>
               </section>
             </div>
@@ -524,7 +525,7 @@
         </div>
         <div class="pane" id="act-people">
           <div class="pane-head">
-            <div><h2 class="pane-title">People</h2><p class="pane-note">Sent emails captured from each seller's mailbox (Outreach sends included) and external meetings on their Salesforce calendar: the last 4 weeks (28 days to yesterday) against the 4 weeks before, and meetings booked for the next 2 weeks. Changes compare only people whose capture covered both windows. Calls and LinkedIn aren't counted: see How far to trust these numbers. Follows the scope pill.</p></div>
+            <div><h2 class="pane-title">People</h2><p class="pane-note">Sent emails captured from each seller's mailbox (Outreach sends included) and external meetings on their Salesforce calendar: the last 4 weeks (28 days to yesterday) against the 4 weeks before, and meetings booked for the next 2 weeks. Changes compare only current sellers whose capture covered both windows. Calls and LinkedIn aren't counted: see How far to trust these numbers. Follows the scope pill.</p></div>
             <div class="tools"><span data-draw="act-monday" data-source="act_kpi act_reps"></span><button class="ibtn" type="button" data-copy-table="act-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           </div>
           <div class="pane-head">
@@ -542,7 +543,7 @@
             </div>
             <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="act-table-search" data-search="act-table" placeholder="Search people, teams or managers" aria-label="Search people"></label>
           </div>
-          <p class="pd-note act-access" data-draw="act-access" data-source="act_reps" hidden></p>
+          <p class="pd-note act-access" data-act-access hidden><span data-draw="act-access" data-source="act_reps"></span></p>
           <div class="pane-scroll">
             <table class="tbl" data-source="act_reps" data-row-key="name" data-sortable="act-table">
               <thead><tr>
@@ -571,7 +572,7 @@
               <p class="os-empty" data-msg-for="act-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
             </div>
           </div>
-          <div class="pane-foot"><p class="pane-note">Quiet: no sent email or external meeting captured for 5+ business days (Mon–Fri, Paris, no holidays); red from 10. Time off can't be seen, so ask first. Slowing: the role's meetings down 30% or more on the 4 weeks before, from at least 8 (a BDR's emails from at least 40) and by more than the normal swing. Nothing booked: no prospect meetings booked for the next 2 weeks after 4 or more in the last 4 (customer meetings for Engagement Managers). Below range: under the usual range for the role in both 4-week windows. New joiners (first 28 days) and leaders are shown, never flagged. Check capture means mailbox or calendar capture looks off: fix it before reading the numbers. The sparkle by a name preps a 1:1 on their activity; the one by a status drafts a check-in, a plan or a note to RevOps, and waits for your OK.</p></div>
+          <div class="pane-foot"><p class="pane-note">Quiet: no sent email or external meeting captured for 5+ business days (Mon–Fri, Paris, no holidays); the last-activity date turns red from 10. Time off can't be seen, so ask first. Slowing: the role's meetings down 30% or more on the 4 weeks before, from at least 8 (a BDR's emails from at least 40) and by more than the normal swing. Nothing booked: no prospect meetings booked for the next 2 weeks after 4 or more in the last 4 (customer meetings for Engagement Managers). Below range: under the usual range for the role in both 4-week windows. New joiners (first 28 days) and leaders are shown, never flagged. Check capture means mailbox or calendar capture looks off: fix it before reading the numbers. The sparkle by a name preps a 1:1 on their activity; the one by a status drafts a check-in, a plan or a note to RevOps, and waits for your OK.</p></div>
         </div>
         <div class="pane" id="act-ranges">
           <div class="pane-head"><div><h2 class="pane-title">Usual range by role <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">All EMEA, last 4 weeks: the middle half (25th to 75th percentile, median in brackets) of sellers in the same role who are past their first 28 days and have something captured. The role's meetings are customer meetings for Engagement Managers, prospect meetings for BDRs and all external meetings for AEs and SMB. It describes what peers do, not a target. Emails aren't flagged against it, because Outreach sequence volume and capture differences move them.</p></div><button class="ibtn" type="button" data-copy-table="act-range-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
@@ -617,7 +618,7 @@
             <ul>
               <li>Last 4 weeks: the 28 days to yesterday. The 4 weeks before: days 29–56 ago. Next 2 weeks: the 14 days from tomorrow. All in your Salesforce time zone, so today's activity shows tomorrow.</li>
               <li>Emails sent: email tasks with a sent Email Message, which is Einstein Activity Capture's copy of the seller's mailbox, dated by the email's date. Outreach sends count because they go out from the mailbox. Received mail, Outreach's own email log, automation emails with no captured message and RevOps admin tasks are left out. People and accounts emailed are distinct per seller; team figures add them up per seller.</li>
-              <li>External meetings: calendar records with a contact, lead or account (not Legora's own), not all-day, owned by the seller, whoever created them. One meeting per start time per person; LeanData BookIt meetings marked Canceled or Rescheduled are left out. A meeting with two of our people counts for each of them, and a meeting on the calendar counts as held.</li>
+              <li>External meetings: calendar records with a contact, lead or account (not Legora's own), not all-day, owned by the seller, whoever created them. One meeting per start time per person (repeats are found within one account status, so a copy of the meeting on a record with another status, about 1–2% of meetings, still counts again); LeanData BookIt meetings marked Canceled or Rescheduled are left out. A meeting with two of our people counts for each of them, and a meeting on the calendar counts as held.</li>
               <li>Customers and prospects: by the account's status today. Customer counts as a customer; everything else, contacts with no account and leads included, counts as a prospect.</li>
               <li>Changes are like-for-like: only people who joined 8+ weeks ago and whose capture was on in the first week of the earlier window. Mailbox and calendar capture were switched on for most sellers between May and October 2026, so longer comparisons would measure the rollout, not selling.</li>
               <li>Activity follows Salesforce sharing. If your access shows activity for fewer than half the sellers, empty rows read Not visible.</li>
@@ -1190,7 +1191,7 @@
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="act-bdr-table"></span>
               <p class="os-empty" data-msg-for="act-bdr-table" data-msg="empty" hidden>No EMEA BDRs with activity or sourced opportunities.</p>
               <p class="os-empty" data-msg-for="act-bdr-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
-              <p class="os-empty" data-msg-for="act-bdr-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include email messages, events or the Activity in Past field. Ask RevOps.</p>
+              <p class="os-empty" data-msg-for="act-bdr-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include email messages, events or the Activity in Past field, or the opportunity fields behind Created opps (Originating BDR, ARR). Ask RevOps.</p>
               <p class="os-empty" data-msg-for="act-bdr-table" data-msg="limit" hidden>Showing the first 400.</p>
             </div>
           </div>
@@ -2012,7 +2013,7 @@
     <section class="pd-sec" data-pd-act hidden>
       <h3>Activity, last 4 weeks</h3>
       <p class="pd-note" data-pd-act-note hidden>Your Salesforce access shows none of their activity.</p>
-      <dl class="pd-dl">
+      <dl class="pd-dl" data-pd-act-dl>
         <div><dt>External meetings</dt><dd data-draw="pd-act-meet" data-source="act_reps" data-f="meetings">—</dd></div>
         <div><dt>Booked, next 2 weeks</dt><dd data-draw="pd-num" data-source="act_reps" data-f="booked">—</dd></div>
         <div><dt>Next meeting</dt><dd data-draw="pd-act-ts" data-source="act_reps" data-f="nextMeet">—</dd></div>
