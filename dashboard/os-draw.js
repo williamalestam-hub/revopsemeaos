@@ -1370,7 +1370,7 @@ dash.draw('kpi-act', (el) => OS.value(el, ['act_kpi'], () => {
 // the like-for-like change, with how many people it compares, or why there is none
 dash.draw('kpi-act-lfl', (el) => OS.value(el, ['act_kpi'], () => {
   const r = actRow(el), f = keepField(el), v = r[f];
-  if ((f === 'emailsChg' ? r.mailHidden : r.meetHidden) || (r.sellers && r.notVisible >= r.sellers)) return 'not visible with your access';
+  if ((f === 'emailsChg' ? r.mailHidden : r.meetHidden) || r.blind) return 'not visible with your access';
   if (v == null) return 'no like-for-like change yet';
   return actSigned(v) + ' like-for-like (' + OS.num(f === 'emailsChg' ? r.lflMailReps : r.lflMeetReps) + ' people)';
 }));
@@ -1437,7 +1437,7 @@ dash.draw('act-monday', (box) => {
   const k = OS.state('act_kpi') === 'ok' ? (dash.data('act_kpi').data || []).find((r) => r.region === scopeKey()) : null;
   const reps = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || []).filter((r) => inTeam(r) && r.active && r.kind !== 'Leader') : null;
   // nothing to summarise when the viewer's access shows no activity for anyone in the scope
-  if (!k || !reps || (k.sellers && k.notVisible >= k.sellers)) { box.replaceChildren(); return; }
+  if (!k || !reps || k.blind) { box.replaceChildren(); return; }
   const names = (f) => { const rs = reps.filter((r) => (r.flags || []).includes(f)); return rs.length ? rs.slice(0, 6).map((r) => r.name).join(', ') + (rs.length > 6 ? ' and ' + (rs.length - 6) + ' more' : '') : 'none'; };
   // say what the viewer's access hides, so the summary doesn't present a part as the whole
   const seen = (k.notVisible ? ' My Salesforce access shows no activity for ' + OS.num(k.notVisible) + ' of the ' + OS.num(k.sellers) + ' sellers here: say these numbers may be partial.' : '')
@@ -1509,7 +1509,7 @@ OS.defTable('act-bdr-table', ['act_bdr'], () => (dash.data('act_bdr').data || []
   { f: 'meetPros', fmt: OS.num, num: true },
   { f: 'prosChg', fmt: actSigned, num: true, tip: (r) => (r.prosChg != null ? OS.num(r.meetPros) + ' vs ' + OS.num(r.meetProsPrev) : '') },
   { f: 'bookedPros', fmt: OS.num, num: true },
-  { f: 'meetPer100', fmt: actWk, num: true, tip: (r) => (r.meetHidden || r.status === 'Not visible' ? 'not visible with your access' : 'prospect meetings per 100 people emailed, same 4 weeks; — under 50 people') },
+  { f: 'meetPer100', fmt: actWk, num: true, tip: (r) => (r.mailHidden || r.meetHidden || r.status === 'Not visible' ? 'not visible with your access' : 'prospect meetings per 100 people emailed, same 4 weeks; — under 50 people') },
   { f: 'lastTouch', fmt: actTs, tip: actIdleTip },
   { f: 'thisOpps', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.thisOpps) },
   { f: 'thisArr', fmt: OS.usd, num: true },
@@ -1523,7 +1523,9 @@ dash.draw('act-bdr-plan', (box) => {
   const now = new Date(), qEnd = Date.UTC(now.getUTCFullYear(), Math.floor(now.getUTCMonth() / 3) * 3 + 3, 1);
   const weeks = Math.max(0, Math.ceil((qEnd - now.getTime()) / (7 * 864e5)));
   const b = actAsk('Plan BDR capacity', 'From the EMEA RevOps OS, EMEA BDRs: ' + OS.num(s.n) + ' active, ' + (s.people == null ? 'people emailed not visible with my access' : OS.num(s.people) + ' people emailed') + ' and ' + (s.meetPros == null ? 'prospect meetings not visible with my access' : OS.num(s.meetPros) + ' prospect meetings') + ' in the last 4 weeks, ' + OS.num(c.thisOpps) + ' opportunities sourced this quarter (' + OS.num(c.lastOpps) + ' last quarter), '
-    + OS.num(weeks) + ' weeks to quarter end.' + (s.notVisible ? ' My Salesforce access shows no activity for ' + OS.num(s.notVisible) + ' of the ' + OS.num(s.n) + ' BDRs: say the activity numbers are partial.' : '') + ' With my Salesforce access, project opportunities sourced by quarter end at the current weekly pace and say how many prospect meetings a week the team would need to match last quarter.' + ACT_GUARD, { team: 'BDR' });
+    + OS.num(weeks) + ' weeks to quarter end.'
+    + (!s.notVisible ? '' : s.n && s.notVisible >= s.n ? ' My Salesforce access shows no activity for any of the ' + OS.num(s.n) + ' BDRs: base the projection on sourced opportunities only.'
+      : ' My Salesforce access shows no activity for ' + OS.num(s.notVisible) + ' of the ' + OS.num(s.n) + ' BDRs: say the activity numbers are partial.') + ' With my Salesforce access, project opportunities sourced by quarter end at the current weekly pace and say how many prospect meetings a week the team would need to match last quarter.' + ACT_GUARD, { team: 'BDR' });
   if (b) { b.classList.remove('ibtn'); b.classList.add('btn'); b.append('Plan BDR capacity'); }
   box.replaceChildren(...(b ? [b] : []));
 });

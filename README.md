@@ -152,12 +152,13 @@ Salesforce role and changing scope never re-runs a query.
     It describes peers, not a target.
   - *Access*: activity follows Salesforce sharing (Account, Opportunity and Lead are Public Read Only). If your
     access shows activity for fewer than half the sellers, empty rows read Not visible with blank numbers, a scope
-    or team where it shows none reads blank rather than 0, a team with such sellers shows no scorecard total, and
-    summaries, agendas and the BDR capacity request say for how many it shows nothing. If, for the sellers it shows,
-    it shows meetings but almost no emails, emails show — and Quiet is off (the reverse for meetings, with no usual
-    range and Nothing booked off too), and capture gaps aren't flagged, since each is read off the other channel. A
-    note above the Activity table, the BDR table and the team scorecard says which applies. Below those thresholds
-    hidden activity can't be told from none, so it reads as nothing captured.
+    or team where it shows none reads blank rather than 0 (Leadership too, which has no sellers), a team with such
+    sellers shows no scorecard total, and summaries, agendas and the BDR capacity request say for how many it shows
+    nothing. If, for the sellers it shows, it shows meetings but almost no emails, emails show — and Quiet is off
+    (the reverse for meetings, with no usual range, and Nothing booked and Below range off too), and capture gaps
+    aren't flagged, since each is read off the other channel. Telling needs enough sellers: among those it shows,
+    at least 3 with 4+ meetings (or 40+ emails), and half of those it shows up to 10 (10 with full access). A note
+    above the Activity table, the BDR table and the team scorecard says which applies. Below those thresholds hidden activity can't be told from none, so it reads as nothing captured.
 - **Book moves**: per AE team and SMB, active accounts to move from books at 2× the team median or more to
   books at half or less, largest gaps first, each move stopping at the median for both reps.
 - **People matching**: a HiBob person is matched to an active Salesforce user by work email (any role;

@@ -1171,12 +1171,12 @@ OS.oo = (() => {
     if (ld) { if (ld.handoffs || ld.readyNow) add(`• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
     else add(na('Leads', 'ld_kpi'));
     if (act) {
-      if (act.meetings || act.emails || act.sellers) {
+      if (act.blind || act.meetings || act.emails || act.sellers) {
         const sg = (v) => (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%';
         // a channel the viewer's access hides is named, not dropped or counted as zero, and so are the flags it switches off
         const meet = act.meetings == null ? 'meetings not visible with your access' : `${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks`;
         const flags = [act.mailHidden || act.meetHidden ? '' : `${OS.num(act.quiet)} quiet`, `${OS.num(act.slowing)} slowing`, act.meetHidden ? '' : `${OS.num(act.nothingBooked)} with nothing booked`, `${OS.num(act.noCapture)} with ${act.mailHidden ? 'no meeting captured' : act.meetHidden ? 'no sent email captured' : 'nothing captured'}`].filter(Boolean).join(', ');
-        if (act.sellers && act.notVisible >= act.sellers) add(`• Activity, last 4 weeks: not visible with your Salesforce access (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})`);
+        if (act.blind) add(`• Activity, last 4 weeks: not visible with your Salesforce access${act.sellers ? ` (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})` : ''}`);
         else add(`• Activity, last 4 weeks: ${meet}, ${act.emails != null ? `${n(act.emails, 'email', 'emails')} sent` : 'emails not visible with your access'}`
           + `${act.meetChg != null ? `; meetings ${sg(act.meetChg)} like-for-like (${n(act.lflMeetReps, 'person', 'people')} compared)` : ''}`
           + `; ${flags}`

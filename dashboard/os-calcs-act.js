@@ -8,7 +8,7 @@
 
 dash.calc('act_reps', {
   title: 'Selling activity per person',
-  description: 'One row per EMEA seller: emails sent (captured from their mailbox) and external meetings in the last 4 weeks (28 days to yesterday) and the 4 weeks before, meetings booked for the next 2 weeks, split customer / prospect by the account status today; the change on the 4 weeks before for current sellers and leaders whose capture covered both windows; business days since the last email or meeting (Paris calendar, up to yesterday in Paris or your browser\'s time zone, whichever is earlier); and flags. Leaders are shown but never flagged; people in their first 28 days are New. When your access shows activity for fewer than half the sellers, or almost none of one channel, what it hides is blank, not zero; below that, hidden activity reads as nothing captured.',
+  description: 'One row per EMEA seller: emails sent (captured from their mailbox) and external meetings in the last 4 weeks (28 days to yesterday) and the 4 weeks before, meetings booked for the next 2 weeks, split customer / prospect by the account status today; the change on the 4 weeks before for current sellers and leaders whose capture covered both windows; business days since the last email or meeting (Paris calendar, up to yesterday in Paris or your browser\'s time zone, whichever is earlier); and flags. Leaders are shown but never flagged; people in their first 28 days are New. When your access shows activity for fewer than half the sellers, or almost none of one channel (it needs at least 3 sellers it shows to tell), what it hides is blank, not zero; below that, hidden activity reads as nothing captured.',
   inputs: ['act_mail', 'act_mail_prev', 'act_meet', 'act_meet_prev', 'roster'],
   fn: (act_mail, act_mail_prev, act_meet, act_meet_prev, roster) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -110,9 +110,12 @@ dash.calc('act_reps', {
     const anySeen = sellers.filter((r) => r.emails || r.meetings || r.emailsPrev || r.meetPrev).length;
     const limited = sellers.length >= 10 && anySeen < sellers.length / 2;
     const withMeet = sellers.filter((r) => r.meetings >= OFF_MEET), withMail = sellers.filter((r) => r.emails >= OFF_MAIL);
-    // a channel hidden for the sellers the viewer can see (with limited access too: these are only sellers with activity)
-    const mailHidden = withMeet.length >= 10 && withMeet.filter((r) => r.emails > 0).length < withMeet.length / 2;
-    const meetHidden = withMail.length >= 10 && withMail.filter((r) => r.meetings > 0).length < withMail.length / 2;
+    // a channel hidden for the sellers the viewer can see (with limited access too: these are only sellers with activity).
+    // The minimum scales with how many sellers it shows, so a first-line manager's team of 3-9 is checked too; full
+    // access keeps 10. With fewer than 3 sellers shown it can't tell.
+    const minN = Math.min(10, Math.max(3, Math.ceil(anySeen / 2)));
+    const mailHidden = withMeet.length >= minN && withMeet.filter((r) => r.emails > 0).length < withMeet.length / 2;
+    const meetHidden = withMail.length >= minN && withMail.filter((r) => r.meetings > 0).length < withMail.length / 2;
     // usual range per role: core meetings a week among active sellers past 28 days with something captured (none when meetings are hidden)
     const p25 = new Map();
     for (const k of ['AE', 'SMB', 'BDR', 'EM']) {
@@ -196,7 +199,7 @@ dash.calc('act_ranges', {
 
 dash.calc('act_kpi', {
   title: 'Selling activity headline',
-  description: 'Per team, per manager ("M|<manager>", direct reports) and for all EMEA: external meetings and emails sent in the last 4 weeks (customer / prospect), meetings booked for the next 2 weeks, meetings and emails per seller a week, the like-for-like change on the 4 weeks before (only current sellers and leaders whose capture covered both windows, with how many were compared), and how many sellers are quiet, slowing, have nothing booked, are below the usual range or have nothing captured. When your access shows activity for fewer than half the sellers, it also gives for how many in the scope it shows none, and a scope where it shows none at all is blank; a channel your access hides is blank.',
+  description: 'Per team, per manager ("M|<manager>", direct reports) and for all EMEA: external meetings and emails sent in the last 4 weeks (customer / prospect), meetings booked for the next 2 weeks, meetings and emails per seller a week, the like-for-like change on the 4 weeks before (only current sellers and leaders whose capture covered both windows, with how many were compared), and how many sellers are quiet, slowing, have nothing booked, are below the usual range or have nothing captured. When your access shows activity for fewer than half the sellers, it also gives for how many in the scope it shows none, and a scope where it shows none at all is blank; a channel your access hides is blank, and so are counts of flags that need it.',
   inputs: ['act_reps'],
   fn: (act_reps) => {
     const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
@@ -230,9 +233,11 @@ dash.calc('act_kpi', {
       if (g.meetHidden) for (const f of ['meetings', 'meetCust', 'meetPros', 'events', 'booked', 'bookedCust', 'bookedPros', 'custMet', 'meetPrev', 'meetWk', 'custShare', 'meetPerSellerWk', 'meetChg']) o[f] = null;
       // flags that can't fire with a channel hidden: Quiet needs both, Nothing booked needs meetings
       if (g.mailHidden || g.meetHidden) o.quiet = o.quietLong = null;
-      if (g.meetHidden) o.nothingBooked = null;
-      // a scope where the viewer's access shows no seller's activity: blank, not a row of zeros
-      if (o.sellers && o.notVisible >= o.sellers) for (const f of ['captured', 'meetings', 'meetCust', 'meetPros', 'events', 'booked', 'bookedCust', 'bookedPros', 'emails', 'emailsCust', 'emailsPros', 'people', 'accounts', 'custMet', 'meetPrev', 'emailsPrev',
+      if (g.meetHidden) o.nothingBooked = o.belowRange = null;
+      // a scope where the viewer's access shows no activity: blank, not a row of zeros. For a scope of sellers, every seller
+      // is Not visible; for one with none (Leadership), limited access and nothing visible in it.
+      o.blind = o.sellers ? o.notVisible >= o.sellers : !!g.limited && !rs.some((r) => r.emails || r.meetings || r.emailsPrev || r.meetPrev || r.booked);
+      if (o.blind) for (const f of ['captured', 'meetings', 'meetCust', 'meetPros', 'events', 'booked', 'bookedCust', 'bookedPros', 'emails', 'emailsCust', 'emailsPros', 'people', 'accounts', 'custMet', 'meetPrev', 'emailsPrev',
         'meetWk', 'emailsWk', 'custShare', 'meetPerSellerWk', 'emailsPerSellerWk', 'lflMeetReps', 'meetChg', 'lflMailReps', 'emailsChg', 'notCompared', 'quiet', 'quietLong', 'slowing', 'nothingBooked', 'belowRange', 'noCapture', 'captureGap', 'needLook', 'badge', 'checkCapture']) o[f] = null;
       return o;
     });
@@ -372,7 +377,7 @@ dash.calc('checks_act', {
 
 dash.calc('oo_points_act', {
   title: '1:1 numbers and talking points, activity',
-  description: 'The activity lines of each 1:1 agenda (for a leader, their whole team): numbers (meetings, emails, booked, the like-for-like change and the usual range for their role) and up to 3 talking points, most urgent first: nothing captured for 5+ business days, the role\'s meetings (or a BDR\'s emails) well down on the 4 weeks before, nothing booked for the next 2 weeks, no prospect meetings, below the usual range for the role, and capture problems. People in their first 28 days get the numbers only; a person, or a team, whose activity the viewer\'s access doesn\'t show gets a line saying so instead of zeros. Its own calc, so agendas still build when activity can\'t be read; the agenda merges it in by severity, after the core and routing points.',
+  description: 'The activity lines of each 1:1 agenda (for a leader, their whole team): numbers (meetings, emails, booked, the like-for-like change and the usual range for their role) and up to 3 talking points, most urgent first: nothing captured for 5+ business days, the role\'s meetings (or a BDR\'s emails) well down on the 4 weeks before, nothing booked for the next 2 weeks, no prospect meetings, below the usual range for the role, and capture problems. People in their first 28 days get the numbers only. When the viewer\'s access shows activity for fewer than half the sellers, a person, or a team, whose activity it doesn\'t show gets a line saying so instead of zeros; below that, hidden activity reads as nothing captured. Its own calc, so agendas still build when activity can\'t be read; the agenda merges it in by severity, after the core and routing points.',
   inputs: ['team_tree', 'act_reps', 'act_ranges', 'books_owner'],
   fn: (team_tree, act_reps, act_ranges, books_owner) => {
     const MAX_TALK = 3;
