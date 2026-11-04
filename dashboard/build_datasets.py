@@ -8,8 +8,9 @@ ROLES = ("'AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BEN
          "'DIR-EM-EMEA','DIR-BDR-EMEA'")
 OWNER = f"Owner.UserRole.Name IN ({ROLES})"
 # Closed deals count for the team that closed them: the owner's role stamped at close (Closed_Owner_Role__c, filled
-# since about April 2026), or the current owner's role when it is blank.
-CLOSED_BY = f"(Closed_Owner_Role__c IN ({ROLES}) OR (Closed_Owner_Role__c = null AND {OWNER}))"
+# since about April 2026) when it is an EMEA sales role, else the current owner's. The queries read deals that either
+# role puts in EMEA; the calcs decide which team each one counts for.
+CLOSED_BY = f"(Closed_Owner_Role__c IN ({ROLES}) OR {OWNER})"
 GEO = "Sales_Region__c IN ('Northern Europe','FME','DACH','Iberia','Southern Europe','MEA','LATAM')"
 CREATED_NOT_FLOW = "(RecordType.Name != 'Renewal' OR Upsell_Renewal_Created_By__c != 'Flow')"
 OPEN_WINDOW = "IsClosed = false AND (CloseDate = THIS_FISCAL_QUARTER OR CloseDate = NEXT_FISCAL_QUARTER)"
@@ -34,10 +35,10 @@ ds("pipe_stage", "Open pipeline by team",
    GROUP BY Owner.UserRole.Name, Owner.Manager.Name, RecordType.Name, StageName, Rep_Forecast_Category__c, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate)
    ORDER BY Owner.UserRole.Name, Owner.Manager.Name LIMIT 2000"""))
 ds("pipe_partner", "Pipeline owned outside EMEA sales",
-   "Open opportunities on EMEA-region accounts (the account's sales region) owned by the global partnership roles and strategic AEs, whose deals are in no EMEA team's totals: by owner role, account region, type and close quarter, in incremental ARR (USD).",
+   "Open opportunities on EMEA-region accounts (the account's sales region) whose owner isn't in an EMEA sales role (the global partnership roles, strategic AEs, other regions' sellers, users with no role), so they are in no EMEA team's totals: by owner role, account region, type and close quarter, in incremental ARR (USD).",
    SF(f"""SELECT Owner.UserRole.Name role, Account.Sales_Region__c region, RecordType.Name rt, FISCAL_YEAR(CloseDate) fy,
    FISCAL_QUARTER(CloseDate) fq, COUNT(Id) opps, SUM(Finance_ARR_USD__c) arrUsd FROM Opportunity
-   WHERE IsClosed = false AND (Owner.UserRole.Name LIKE '%Partnerships%' OR Owner.UserRole.Name = 'AE-STRAT') AND Account.{GEO}
+   WHERE IsClosed = false AND (Owner.UserRole.Name = null OR Owner.UserRole.Name NOT IN ({ROLES})) AND Account.{GEO}
    GROUP BY Owner.UserRole.Name, Account.Sales_Region__c, RecordType.Name, FISCAL_YEAR(CloseDate), FISCAL_QUARTER(CloseDate) LIMIT 2000"""))
 ds("pipe_rep", "Open pipeline by rep",
    "Open EMEA New Business and Upsell pipeline per rep for this and next quarter, in incremental ARR (USD).",

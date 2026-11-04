@@ -738,7 +738,7 @@ OS.links = (() => {
 // (checks_hb), leavers' leads (checks_lv), leads (checks_ld, checks_ld_rt, checks_ld_cap), activity capture (checks_act),
 // Salesforce values the pipeline logic depends on (checks_cfg) and conversion (checks_conv, checks_conv_lost, checks_conv_days).
 // Each is its own calc, so one failing leaves the rest.
-OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg', 'checks_conv', 'checks_conv_lost', 'checks_conv_days'];
+OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg', 'checks_closed', 'checks_conv', 'checks_conv_lost', 'checks_conv_days'];
 OS.checkRows = (sc, ids) => {
   // sc: { mgr, region } to read another scope than the scope pill's (the 1:1 agendas read all EMEA); ids: the check
   // sources to read, OS.CHECKS unless given (the 1:1 agendas' RevOps work leaves the conversion checks out)
@@ -938,6 +938,34 @@ OS.done = (() => {
 // Only drawings and handlers on the 1:1s screen call these, so its datasets load only there.
 OS.oo = (() => {
   const rowsOf = (id) => (OS.state(id) === 'ok' ? dash.data(id).data || [] : []);
+  // the Salesforce user behind an email, by the rule oo_upcoming uses: of the active users with it, never one whose
+  // name says it isn't a person (integration, API, sync, bot); prefer a name matching the email or the calendar name,
+  // then one with a role or a manager; null when there is none
+  const fold = (x) => String(x || '').replace(/[øØ]/g, 'o').replace(/[æÆ]/g, 'ae').replace(/ß/g, 'ss').replace(/[łŁ]/g, 'l').replace(/[đĐ]/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const toks = (x) => fold(x).split(/[^a-z]+/).filter(Boolean);
+  const SYSTEM = /\b(integration|api|sync|bot|automation|service|system)\b/i;
+  const userOf = (email, display) => {
+    const rows = rowsOf('users_all').filter((u) => String(u.email || '').toLowerCase() === email && !SYSTEM.test(u.name || ''));
+    if (rows.length <= 1) return rows[0] || null;
+    const next = rowsOf('oo_upcoming').find((r) => r.email === email);
+    const known = toks(email.split('@')[0]).concat(toks(display || (next && next.name)));
+    const score = (u) => (toks(u.name).some((w) => known.includes(w)) ? 2 : 0) + (u.role || u.manager ? 1 : 0);
+    return rows.slice().sort((a, b) => score(b) - score(a) || String(a.userId || '').localeCompare(String(b.userId || '')))[0];
+  };
+  // you: getUserInfo; when it couldn't be read, your own user found by your calendar's or Granola's email.
+  // null while getUserInfo loads (then who is your manager or report is unknown, not "no one")
+  const me = () => {
+    const st = OS.state('sf_me');
+    if (st === 'ok') return rowsOf('sf_me')[0] || null;
+    if (st === 'loading') return null;
+    const cal = rowsOf('cal_events').find((r) => r.calendar);
+    const gr = rowsOf('gr_notes').find((r) => r.me);
+    const email = (cal && cal.calendar) || (gr && gr.me) || '';
+    const u = email ? userOf(String(email).toLowerCase()) : null;
+    if (!u) return null;
+    const m = u.manager ? rowsOf('users_all').find((x) => x.name === u.manager) : null;
+    return { name: u.name, email: String(u.email || '').toLowerCase(), role: u.role || null, manager: u.manager || null, managerEmail: m ? String(m.email || '').toLowerCase() : null };
+  };
   const who = () => {
     const p = String(dash.params().ooWho || '');
     if (p.startsWith('n:')) {
@@ -959,7 +987,7 @@ OS.oo = (() => {
     if (t) return t.name;
     const n = nextFor(email);
     if (n && n.name) return n.name;
-    const u = rowsOf('users_all').find((r) => String(r.email || '').toLowerCase() === email);
+    const u = userOf(email);
     if (u) return u.name;
     return email.split('@')[0].split(/[._-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
   };
@@ -977,20 +1005,31 @@ OS.oo = (() => {
   const RANK = { high: 0, medium: 1, low: 2, '': 3 };
   const points = (email) => rowsOf('oo_points').concat(rowsOf('oo_points_rr'), rowsOf('oo_points_act'), rowsOf('oo_points_conv')).filter((r) => r.email === email)
     .sort((a, b) => (a.section === b.section ? 0 : a.section === 'numbers' ? -1 : 1) || (RANK[a.sev] ?? 3) - (RANK[b.sev] ?? 3) || a.order - b.order);
-  // Who they are to you: your manager, someone who reports to you, RevOps, EMEA sales (they have Salesforce numbers), or
-  // none of these. ops: their agenda gets the EMEA update and RevOps work. sales: true or false once oo_points has
-  // loaded, null while it loads or when it couldn't load (then the sales sections show their own message).
+  // Who they are to you: your manager, someone who reports to you, RevOps (by role), EMEA sales (they have Salesforce
+  // numbers), or none of these. ops: their agenda gets the EMEA update and RevOps work: RevOps colleagues always, your
+  // manager and your reports when you are in RevOps. sales: true or false once oo_points has loaded, null while it
+  // loads or when it couldn't load (the sales sections then show their own message). manager and report are null while
+  // you aren't known yet (getUserInfo loading, or not readable and no fallback), so nothing claims "neither".
   const kind = (email) => {
     if (!email || email.startsWith('n:')) return null;
-    const me = rowsOf('sf_me')[0] || null;
-    const u = rowsOf('users_all').find((r) => String(r.email || '').toLowerCase() === email) || null;
-    const manager = !!(me && me.managerEmail && me.managerEmail === email);
-    const report = !!(me && me.name && u && u.manager === me.name);
+    const i = me();
+    const u = userOf(email);
+    const manager = i ? !!(i.managerEmail && i.managerEmail === email) : null;
+    const report = i ? !!(i.name && u && u.manager === i.name) : null;
     const revops = !!(u && /REVOPS/i.test(u.role || ''));
+    const youOps = !!(i && /REVOPS/i.test(i.role || ''));
     const sales = OS.state('oo_points') === 'ok' ? points(email).length > 0 : null;
+    const known = manager !== null && report !== null;
     const label = [manager ? 'Your manager' : report ? 'Reports to you' : '', revops ? 'RevOps' : '', sales ? 'EMEA sales' : '',
-      !manager && !report && !revops && sales === false ? 'Not in EMEA sales or RevOps' : ''].filter(Boolean).join(' · ');
-    return { manager, report, revops, sales, ops: manager || report || revops, label };
+      !u && sales === false && OS.state('users_all') === 'ok' ? 'Not in Salesforce' : u && known && !manager && !report && !revops && sales === false ? 'Not in EMEA sales or RevOps' : ''].filter(Boolean).join(' · ');
+    return { manager, report, revops, sales, ops: revops || (youOps && !!(manager || report)), known, user: !!u, label };
+  };
+  // the agenda is built from what has loaded, so Copy, Send and Email all wait for the same sources: the points,
+  // follow-ups, you and the users, and for a RevOps agenda the weekly summary's sources too
+  const loading = (email) => {
+    if (['oo_points', 'oo_points_rr', 'oo_followups', 'sf_me', 'users_all'].some((id) => OS.state(id) === 'loading')) return true;
+    const k = kind(email);
+    return !!(k && k.ops && OS.summary && OS.summary.NUM.concat(OS.summary.OPS).some((id) => OS.state(id) === 'loading'));
   };
   // the EMEA update and RevOps work of an agenda: the weekly summary for all EMEA, without your own action items
   const OPS = {
@@ -999,8 +1038,8 @@ OS.oo = (() => {
     checks: ['talk', 'actions', 'checks'], leavers: ['talk', 'hiring', 'leavers'], leads: ['talk', 'leads', 'speed'],
     activity: ['talk', 'oneonone', 'activity'], books: ['talk', 'books', 'orphans'], engage: ['talk', 'books', 'engage'],
   };
-  const ops = (sec) => (OS.summary ? OS.summary.lines({ region: 'All', mine: false }).lines : []).filter((l) => OPS[l.key] && OPS[l.key][0] === sec)
-    .map((l) => ({ key: l.key, text: l.text, screen: OPS[l.key][1], view: OPS[l.key][2], na: / not available \(couldn't load\)$/.test(l.text) }));
+  const ops = (sec) => (OS.summary ? OS.summary.lines({ region: 'All', mine: false }).lines : []).filter((l) => OPS[l.key] && OPS[l.key][0] === sec && (sec === 'numbers' || l.sev))
+    .map((l) => ({ key: l.key, text: l.text, sev: l.sev || '', screen: OPS[l.key][1], view: OPS[l.key][2], na: / not available \(couldn't load\)$/.test(l.text) }));
   const lastOf = (email) => rowsOf('oo_followups').find((r) => r.email === email && r.kind === 'last') || null;
   const text = () => {
     const email = who();
@@ -1035,7 +1074,7 @@ OS.oo = (() => {
     lines.push('', 'Anything else');
     return lines.join('\n');
   };
-  return { rowsOf, who, nextFor, nameOf, when, text, points, kind, ops, lastOf };
+  return { rowsOf, who, nextFor, nameOf, when, text, points, kind, ops, lastOf, loading, userOf };
 })();
 
 // ---------- App shell ----------
@@ -1049,6 +1088,33 @@ OS.oo = (() => {
   const link = () => dash.setLink(view[screen] ? screen + '-' + view[screen] : screen);
   let lastPerson = null;
 
+  // 1:1s › Agendas: which fixed sentences and sections show, and whether Copy and Send wait. From apply(), so a screen
+  // or view switch with the data already loaded gets it right too (reading the 1:1 data loads it, on that screen only)
+  const syncAgenda = () => {
+    if (!(screen === 'oneonone' && view.oneonone === 'upcoming')) return;
+    const who = OS.oo.who();
+    const ready = OS.state('oo_upcoming') !== 'loading';
+    const booked = who && !who.startsWith('n:') ? OS.oo.nextFor(who) : null;
+    const hasLast = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last');
+    const hasTopics = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last' && r.topics);
+    const hasPriv = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'item' && r.priv && !OS.done.has(r));
+    document.querySelectorAll('[data-oo-note]').forEach((n) => {
+      const k = n.dataset.ooNote;
+      n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast) || (k === 'topics' && hasTopics) || (k === 'private' && hasPriv));
+    });
+    // which sections the agenda has: the Salesforce numbers and talking points of EMEA sales, the EMEA update and
+    // RevOps work for your manager, your reports and RevOps colleagues, or a note that it has your notes only
+    const rel = who ? OS.oo.kind(who) : null;
+    document.querySelectorAll('[data-oo-sec]').forEach((n) => {
+      const sec = n.dataset.ooSec;
+      n.hidden = sec === 'sales' ? !!(rel && rel.sales === false) : sec === 'ops' ? !(rel && rel.ops)
+        : sec === 'none' ? !(rel && rel.user && rel.known && !rel.ops && rel.sales === false)
+          : sec === 'nosf' ? !(rel && !rel.user && rel.sales === false && OS.state('users_all') === 'ok') : n.hidden;
+    });
+    // the agenda is built from what has loaded, so Copy, Send and Email wait for the same sources (OS.oo.loading)
+    const agendaLoading = OS.oo.loading(who);
+    document.querySelectorAll('[data-copy-agenda], [data-ask-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:') || agendaLoading; });
+  };
   const apply = () => {
     const person = dash.params().person || '';
     document.querySelectorAll('[data-page]').forEach((s) => { s.hidden = s.dataset.page !== screen; });
@@ -1071,6 +1137,7 @@ OS.oo = (() => {
     // the note above the activity tables of the view on screen, only when there is something to say: here rather than in
     // onData, so a screen or view switch with the data already loaded gets it right too
     document.querySelectorAll('[data-act-access]').forEach((n) => { if (n.dataset.actAccess === screen + ':' + view[screen]) n.hidden = !OS.actNote(n.dataset.ctx || 'activity'); });
+    syncAgenda();
   };
 
   // Created opps › Conversion: the Field · SMB switch only at All EMEA, the scope note's sentence for the scope picked, and the
@@ -1201,7 +1268,8 @@ OS.oo = (() => {
     const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
     const na = (what, id) => (failedSrc(id) ? `• ${what}: not available (couldn't load)` : null);
     const lines = [];
-    const add = (key, line) => { if (line) lines.push({ key, text: line.replace(/^• /, '') }); };
+    // sev: how much a line asks for (high, medium, low), from its counts; null when there is nothing to raise
+    const add = (key, line, sev) => { if (line) lines.push({ key, text: line.replace(/^• /, ''), sev: / not available \(couldn't load\)$/.test(line) ? 'low' : sev || null }); };
     if (pipe) add('pipe', `• Pipeline this quarter: ${OS.usd(pipe.thisPipe)} open (commit ${OS.usd(pipe.thisCommit)}, best case ${OS.usd(pipe.thisBest)}), ${OS.usd(pipe.won)} closed won`);
     else add('pipe', na('Pipeline', 'pipe_team'));
     if (cov && cov.avgBookings > 0) add('cover', cov.aheadOfUsual
@@ -1234,27 +1302,27 @@ OS.oo = (() => {
     else add('moves', na('Last 7 days', 'moves_kpi'));
     if (cr) add('created', `• Created: ${OS.num(cr.thisWeekOpps)} opps this week (${OS.num(cr.lastWeekOpps)} last week), ${OS.num(cr.thisQOpps)} this quarter (all EMEA)`);
     else add('created', na('Created', 'cr_kpi'));
-    if (rk) { if (rk.stuck) add('stuck', `• Stuck in stage: ${n(rk.stuck, 'deal', 'deals')} (${OS.usd(rk.stuckArr)}) closing this or next quarter, past twice the usual time in their stage`); }
+    if (rk) { if (rk.stuck) add('stuck', `• Stuck in stage: ${n(rk.stuck, 'deal', 'deals')} (${OS.usd(rk.stuckArr)}) closing this or next quarter, past twice the usual time in their stage`, 'medium'); }
     else add('stuck', na('Stuck in stage', 'risk_kpi'));
-    if (rr) add('routing', `• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
+    if (rr) add('routing', `• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`, rr.missing ? 'high' : rr.weekOne ? 'low' : null);
     else add('routing', na('Routing', 'rr_kpi'));
     const chk = sc && sc.mine === false ? OPS_CHECKS : OS.CHECKS;
     if (chk.some((id) => OS.state(id) === 'ok')) {
       const cs = OS.checkRows({ mgr, region: reg }, chk);
       const partial = chk.some((id) => failedSrc(id));
-      add('checks', `• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`);
+      add('checks', `• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`, cs.some((c) => c.severity === 'high') ? 'high' : cs.length ? 'medium' : partial ? 'low' : null);
     } else add('checks', na('Data checks', 'checks'));
     if (lv) {
       const held = [lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '',
         lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : '',
         lv.emCustomers ? 'Engagement Manager on ' + n(lv.emCustomers, 'customer', 'customers') : '', lv.pools ? n(lv.pools, 'LeanData pool seat', 'LeanData pool seats') : ''].filter(Boolean);
       const unknown = [lv.leads === null ? 'leads' : '', lv.pools === null ? 'pool seats' : ''].filter(Boolean).join(' and ');
-      if (lv.people && held.length) add('leavers', `• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}${unknown ? ` (${unknown} not available)` : ''}`);
-      else if (unknown) add('leavers', `• Leavers: ${unknown} of people who left not available (couldn't load)`);
+      if (lv.people && held.length) add('leavers', `• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}${unknown ? ` (${unknown} not available)` : ''}`, 'medium');
+      else if (unknown) add('leavers', `• Leavers: ${unknown} of people who left not available (couldn't load)`, 'low');
     } else add('leavers', na('Leavers', 'leavers_core'));
     const ldSpeed = !ld ? '' : ld.hRate != null ? `${OS.pct(ld.hRate)} of demo requests worked within 1 business day (${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)}, last 30 days)`
       : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : !ld.lEligible && ld.notScored > 0 ? 'speed not timed for SMB-owned leads (automation moves them out of Ready)' : 'no timed demo requests in the last 30 days';
-    if (ld) { if (ld.handoffs || ld.readyNow) add('leads', `• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
+    if (ld) { if (ld.handoffs || ld.readyNow) add('leads', `• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`, ld.demoWaiting || ld.stale || (ldRt && ldRt.routingIssues) ? 'medium' : null); }
     else add('leads', na('Leads', 'ld_kpi'));
     if (act) {
       if (act.blind || act.meetings || act.emails || act.sellers) {
@@ -1262,15 +1330,15 @@ OS.oo = (() => {
         // a channel the viewer's access hides is named, not dropped or counted as zero, and so are the flags it switches off
         const meet = act.meetings == null ? 'meetings not visible with your access' : `${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks`;
         const flags = [act.mailHidden || act.meetHidden ? '' : `${OS.num(act.quiet)} quiet`, `${OS.num(act.slowing)} slowing`, act.meetHidden ? '' : `${OS.num(act.nothingBooked)} with nothing booked`, `${OS.num(act.noCapture)} with ${act.mailHidden ? 'no meeting captured' : act.meetHidden ? 'no sent email captured' : 'nothing captured'}`].filter(Boolean).join(', ');
-        if (act.blind) add('activity', `• Activity, last 4 weeks: not visible with your Salesforce access${act.sellers ? ` (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})` : ''}`);
+        if (act.blind) add('activity', `• Activity, last 4 weeks: not visible with your Salesforce access${act.sellers ? ` (it shows no activity for any of the ${n(act.sellers, 'seller', 'sellers')})` : ''}`, 'low');
         else add('activity', `• Activity, last 4 weeks: ${meet}, ${act.emails != null ? `${n(act.emails, 'email', 'emails')} sent` : 'emails not visible with your access'}`
           + `${act.meetChg != null ? `; meetings ${sg(act.meetChg)} like-for-like (${n(act.lflMeetReps, 'person', 'people')} compared)` : ''}`
           + `; ${flags}`
-          + `${act.notVisible ? ` (your Salesforce access shows no activity for ${OS.num(act.notVisible)} of the ${n(act.sellers, 'seller', 'sellers')}, so these may be partial)` : ''}`);
+          + `${act.notVisible ? ` (your Salesforce access shows no activity for ${OS.num(act.notVisible)} of the ${n(act.sellers, 'seller', 'sellers')}, so these may be partial)` : ''}`, act.quiet || act.slowing || act.nothingBooked || act.noCapture ? 'medium' : act.notVisible ? 'low' : null);
       }
     } else add('activity', na('Activity', 'act_kpi'));
-    if (orph && !mgr && reg === 'All') add('books', `• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
-    if (eng) { if (eng.untouched) add('engage', `• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`); }
+    if (orph && !mgr && reg === 'All') add('books', `• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`, orph.accounts || orph.splitBooks ? 'medium' : null);
+    if (eng) { if (eng.untouched) add('engage', `• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`, 'medium'); }
     else add('engage', na('Engagement', 'engagement_kpi'));
     if (sc && sc.mine === false) return { label, lines };
     const gr = rowOf('gr_kpi', () => true);
@@ -1343,7 +1411,7 @@ OS.oo = (() => {
         });
       }
       closePalette();
-      if (t.dataset.fill && t.closest('[data-palette]')) dash.setParams({ region: 'All', mgr: '' });
+      if ((t.dataset.fill && t.closest('[data-palette]')) || t.dataset.navScope === 'All') dash.setParams({ region: 'All', mgr: '' });
       go(t.dataset.nav, t.dataset.navView);
       if (t.dataset.fill) OS.redraw(t.dataset.fill);
       return;
@@ -1466,30 +1534,6 @@ OS.oo = (() => {
     document.querySelectorAll('[data-gr-11]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.gr11)));
     document.querySelectorAll('[data-gr-due]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.grDue)));
     document.querySelectorAll('[data-gr-done]').forEach((b) => { b.setAttribute('aria-pressed', String(!!p.grShowDone)); b.hidden = !OS.done.can(); });
-    // 1:1s: which fixed sentences show, only while that screen is open (reading its data loads it)
-    if (screen === 'oneonone' && view.oneonone === 'upcoming') {
-      const who = OS.oo.who();
-      const ready = OS.state('oo_upcoming') !== 'loading';
-      const booked = who && !who.startsWith('n:') ? OS.oo.nextFor(who) : null;
-      const hasLast = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last');
-      const hasTopics = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'last' && r.topics);
-      const hasPriv = !!who && OS.oo.rowsOf('oo_followups').some((r) => r.email === who && r.kind === 'item' && r.priv && !OS.done.has(r));
-      document.querySelectorAll('[data-oo-note]').forEach((n) => {
-        const k = n.dataset.ooNote;
-        n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast) || (k === 'topics' && hasTopics) || (k === 'private' && hasPriv));
-      });
-      // which sections the agenda has: the Salesforce numbers and talking points of EMEA sales, the EMEA update and
-      // RevOps work for your manager, your reports and RevOps colleagues, or a note that it has your notes only
-      const rel = who ? OS.oo.kind(who) : null;
-      document.querySelectorAll('[data-oo-sec]').forEach((n) => {
-        const sec = n.dataset.ooSec;
-        n.hidden = sec === 'sales' ? !!(rel && rel.sales === false) : sec === 'ops' ? !(rel && rel.ops) : sec === 'none' ? !(rel && !rel.ops && rel.sales === false) : n.hidden;
-      });
-      // the agenda is built from what has loaded, so copying and sending wait for its sources
-      const agendaLoading = ['oo_points', 'oo_points_rr', 'oo_followups'].concat(rel && rel.ops ? OS.summary.NUM.concat(OS.summary.OPS) : [])
-        .some((id) => OS.state(id) === 'loading');
-      document.querySelectorAll('[data-copy-agenda], [data-ask-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:') || agendaLoading; });
-    }
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
     document.querySelectorAll('[data-scope-tag]').forEach((n) => { n.hidden = !(p.mgr || (p.region && p.region !== 'All')); });
     document.querySelectorAll('[data-legend]').forEach((n) => { n.hidden = n.dataset.legend !== (p.mgr ? 'mgr' : 'team'); });

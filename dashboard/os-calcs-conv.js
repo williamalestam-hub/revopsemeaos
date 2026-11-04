@@ -393,7 +393,7 @@ dash.calc('conv_close', {
 
 dash.calc('conv_reasons', {
   title: 'Why deals are lost',
-  description: 'New Business lost in the last 4 completed quarters (by the date actually closed; admin merges left out), for all EMEA, SMB, Field and each team (who closed them), by lost reason on the list used since 3 Nov 2026. Older reasons count under their new name, as in Pipeline › Bookings: Qualified Out as Not a fit, Timing as Deferred, Technical/Functional Gap as Product fit, Lost to Competitor as Chose an alternative, No Champion as Buyer engagement, Budget as Price and budget; Value not perceived has no clear new equivalent and stays apart as "Value not perceived (old list)". A value on neither list shows as Unlisted. Per reason: losses and their ARR, the share of the team\'s losses against the other AE teams, at which stage they left (0–1, 2–3, 4–6), each completed quarter and this one, and the older values it gathers. Whether a reason rose last quarter, and the figures without a clean-up quarter, are in conv_closeout.',
+  description: 'New Business lost in the last 4 completed quarters (by the date actually closed; admin merges left out), for all EMEA, SMB, Field and each team (who closed them), by lost reason on the list used since 3 Nov 2026. Older reasons count under their new name, as in Pipeline › Bookings: Qualified Out as Not a fit, Timing as Deferred, Technical/Functional Gap as Product fit, Lost to Competitor as Chose an alternative, No Champion as Buyer engagement, Budget as Price and budget; Value not perceived has no clear new equivalent and keeps its name, as in Bookings. A value on neither list shows as Unlisted. Per reason: losses and their ARR, the share of the team\'s losses against the other AE teams, at which stage they left (0–1, 2–3, 4–6), each completed quarter and this one, and the older values it gathers. Whether a reason rose last quarter, and the figures without a clean-up quarter, are in conv_closeout.',
   inputs: ['cv_window'],
   fn: (cv_window) => {
     const MIN_PEER = 20;
@@ -410,7 +410,7 @@ dash.calc('conv_reasons', {
     const stageNo = (v) => { if (!v) return null; if (/^closed won/i.test(v)) return 'W'; const n = parseInt(v, 10); return n >= 0 && n <= 6 ? n : null; };
     // the reason list changed on 3 Nov 2026: the same map as lost_reasons (Pipeline › Bookings)
     const REASON = { 'Qualified Out': 'Not a fit', 'Timing': 'Deferred', 'Technical/Functional Gap': 'Product fit', 'Lost to Competitor': 'Chose an alternative',
-      'No Champion': 'Buyer engagement', 'Budget': 'Price and budget', 'Value not perceived': 'Value not perceived (old list)' };
+      'No Champion': 'Buyer engagement', 'Budget': 'Price and budget', 'Value not perceived': 'Value not perceived' };
     const NEW = ['Chose an alternative', 'Product fit', 'Price and budget', 'Buyer engagement', 'Deferred', 'Not a fit', 'Customer experience and support', 'Other'];
     const group = (v) => (!v ? 'No reason given' : REASON[v] || (NEW.includes(v) ? v : 'Unlisted: ' + v));
     const last4 = [cur - 4, cur - 3, cur - 2, cur - 1];
@@ -430,7 +430,7 @@ dash.calc('conv_reasons', {
         if (isThis) { o.thisQLost += n; x.thisQ += n; continue; }
         o.lost4 += n; o.lostArr4 += arr; o.lostByQ[qx] += n; if (band !== 'other') o[band + 'N'] += n;
         x.n += n; x.arr += arr; x[band] += n; x.byQ[qx] += n;
-        if (raw && REASON[raw] && REASON[raw] !== raw + ' (old list)') x.olds[raw] = (x.olds[raw] || 0) + n;
+        if (raw && REASON[raw] && REASON[raw] !== raw) x.olds[raw] = (x.olds[raw] || 0) + n;
       }
     }
     const out = [];
@@ -471,7 +471,7 @@ dash.calc('conv_closeout', {
     const ADMIN = /^(merged with global pilot|record cleanup)$/i;
     const stageNo = (v) => { if (!v) return null; if (/^closed won/i.test(v)) return 'W'; const n = parseInt(v, 10); return n >= 0 && n <= 6 ? n : null; };
     const REASON = { 'Qualified Out': 'Not a fit', 'Timing': 'Deferred', 'Technical/Functional Gap': 'Product fit', 'Lost to Competitor': 'Chose an alternative',
-      'No Champion': 'Buyer engagement', 'Budget': 'Price and budget', 'Value not perceived': 'Value not perceived (old list)' };
+      'No Champion': 'Buyer engagement', 'Budget': 'Price and budget', 'Value not perceived': 'Value not perceived' };
     const NEW = ['Chose an alternative', 'Product fit', 'Price and budget', 'Buyer engagement', 'Deferred', 'Not a fit', 'Customer experience and support', 'Other'];
     const group = (v) => (!v ? 'No reason given' : REASON[v] || (NEW.includes(v) ? v : 'Unlisted: ' + v));
     const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -518,7 +518,7 @@ dash.calc('conv_closeout', {
         if (!clean) continue;
         o.lostC += n; o.arrC += arr; o.bC[bk] += n;
         x.nClean += n; x[band + 'Clean'] += n; x.arrClean += arr;
-        if (raw && REASON[raw] && REASON[raw] !== raw + ' (old list)') x.olds[raw] = (x.olds[raw] || 0) + n;
+        if (raw && REASON[raw] && REASON[raw] !== raw) x.olds[raw] = (x.olds[raw] || 0) + n;
       }
     }
     const share = (a, b) => (b > 0 ? a / b : null);
@@ -947,7 +947,7 @@ dash.calc('conv_trust_close', {
     const label = (i) => 'Q' + ((i % 4) + 1) + ' ' + Math.floor(i / 4);
     const ADMIN = /^(merged with global pilot|record cleanup)$/i;
     const REASON = { 'Qualified Out': 'Not a fit', 'Timing': 'Deferred', 'Technical/Functional Gap': 'Product fit', 'Lost to Competitor': 'Chose an alternative',
-      'No Champion': 'Buyer engagement', 'Budget': 'Price and budget', 'Value not perceived': 'Value not perceived (old list)' };
+      'No Champion': 'Buyer engagement', 'Budget': 'Price and budget', 'Value not perceived': 'Value not perceived' };
     const NEW = ['Chose an alternative', 'Product fit', 'Price and budget', 'Buyer engagement', 'Deferred', 'Not a fit', 'Customer experience and support', 'Other'];
     const usd = (v) => { const a = Math.abs(+v || 0); return '$' + (a >= 999500 ? (a / 1e6).toFixed(a >= 9.95e6 ? 0 : 1) + 'M' : a >= 999.5 ? Math.round(a / 1e3) + 'K' : String(Math.round(a))); };
     const num = (v) => Math.round(v).toLocaleString('en');
@@ -975,7 +975,7 @@ dash.calc('conv_trust_close', {
     const T = (id, measure, value, severity, detail, fmt) => ({ key: 'trust|' + id, id, measure, value, fmt: fmt || 'n', detail, severity });
     return [
       T('merges', 'Admin merges left out', merges, 'info', num(merges) + ' New Business deals closed as Merged with Global Pilot or Record cleanup in the last 4 quarters and this one' + (peak ? ' (' + peak[0] + ': ' + num(peak[1]) + '; ' + usd(mergesArr) + ' ARR in all)' : '') + '; left out of every number here, still counted in Created opps\' totals.'),
-      T('reasons', 'Lost reasons on two lists', old, unl > 0 || (lost && blank / lost >= 0.05) ? 'warn' : 'info', 'In the last 4 quarters and this one, ' + num(old) + ' New Business losses use the list retired on 3 Nov 2026 and are counted under their new name; ' + num(nw) + ' use the new list; ' + num(blank) + ' have no reason; ' + num(unl) + ' use a value on neither list. Value not perceived (' + num(vnp) + ') has no clear new equivalent and stays apart as "Value not perceived (old list)". Why deals are lost shows the 4 completed quarters.'),
+      T('reasons', 'Lost reasons on two lists', old, unl > 0 || (lost && blank / lost >= 0.05) ? 'warn' : 'info', 'In the last 4 quarters and this one, ' + num(old) + ' New Business losses use the list retired on 3 Nov 2026 and are counted under their new name; ' + num(nw) + ' use the new list; ' + num(blank) + ' have no reason; ' + num(unl) + ' use a value on neither list. Value not perceived (' + num(vnp) + ') has no clear new equivalent and keeps its name, as in Bookings. Why deals are lost shows the 4 completed quarters.'),
       T('stage3', 'Stage 3 renamed', s3old + s3new, 'info', 'In the last 4 quarters and this one, Last Stage Before Close keeps "3 - Pilot Validation" on ' + num(s3old) + ' losses and says "3 - Validation" on ' + num(s3new) + '; both count as stage 3.'),
       T('atwin', 'Lost after a win, won from Qualification', atWin + from0, 'info', 'In the last 4 quarters and this one, ' + num(atWin) + ' losses had Closed Won as their last stage (won, reopened, then lost); ' + num(from0) + ' wins had stage 0 as their last stage, often logged at signature. They count as losses and wins.'),
       T('owner', 'Counted for the team that closed the deal', moved4, 'info', num(moved4) + ' of ' + num(closed4) + ' deals closed in the last 4 quarters now sit with someone in another role and count for the team that closed them; ' + num(blank4) + ' closed before about April 2026 count for the owner\'s team today' + (outside4 ? '; so do ' + num(outside4) + ' whose role at close is outside EMEA sales (another region\'s, RevOps or the like)' : '') + '.'),

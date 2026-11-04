@@ -328,7 +328,7 @@ const checkItem = (c) => {
 // every check source that has loaded, merged (OS.checkRows); one source failing leaves the rest
 const allChecks = () => OS.checkRows();
 // the sources that can produce each area's checks
-const AREA_SRC = { Routing: ['checks_rr'], Hiring: ['checks', 'checks_hb'], Pipeline: ['checks', 'checks_cfg'], Books: ['checks'], Leavers: ['checks', 'checks_lv'], Leads: ['checks_ld', 'checks_ld_rt', 'checks_ld_cap'], Activity: ['checks_act'], Conversion: ['checks_conv', 'checks_conv_lost', 'checks_conv_days'] };
+const AREA_SRC = { Routing: ['checks_rr'], Hiring: ['checks', 'checks_hb'], Pipeline: ['checks', 'checks_cfg', 'checks_closed'], Books: ['checks'], Leavers: ['checks', 'checks_lv'], Leads: ['checks_ld', 'checks_ld_rt', 'checks_ld_cap'], Activity: ['checks_act'], Conversion: ['checks_conv', 'checks_conv_lost', 'checks_conv_days'] };
 const areaSrc = (area) => AREA_SRC[area] || OS.CHECKS;
 // a list waits only while none of its sources has loaded, then shows what did
 const checkIds = (srcs) => (srcs.some((id) => OS.state(id) === 'ok') ? [] : [srcs[0]]);
@@ -801,7 +801,7 @@ OS.defTable('partner-table', ['partner_pipe'], () => dash.data('partner_pipe').d
 OS.defChart('lost-chart', ['lost_reasons'], () => {
   const scope = mgrPick() ? 'M|' + mgrPick() : OS.region();
   return (dash.data('lost_reasons').data || []).filter((r) => r.scope === scope && r.thisOpps)
-    .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : r.was ? ' (was ' + r.was + ')' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
+    .map((r) => ({ label: r.reason + (r.admin ? ' (admin)' : ''), thisQ: r.thisOpps, lastQ: r.lastOpps, total: r.thisOpps }))
     .sort((a, b) => b.thisQ - a.thisQ || b.lastQ - a.lastQ);
 }, (box, rows) => OS.hbars(box, rows, [{ k: 'thisQ', name: 'This quarter', color: dash.colors[0] }], OS.num));
 const rampCls = (v) => (v === 'Ramping' || v === 'Sourcing' ? 'ok' : v === 'Not ramping' || v === 'No Salesforce user' ? 'bad' : v === 'Too early' ? 'warn' : '');
@@ -939,11 +939,14 @@ const ooOpsRow = (r, talk) => {
   const li = OS.el('li', talk ? 'ag-pt' : null);
   li.dataset.key = r.key;
   if (!talk) { li.textContent = r.text; return li; }
-  li.append(OS.el('span', 'itm-dot ' + (r.na ? 'low' : r.key === 'checks' || r.key === 'routing' ? 'high' : 'medium')), OS.el('span', 'ag-txt', r.text));
+  li.append(OS.el('span', 'itm-dot ' + (r.sev || 'low')), OS.el('span', 'ag-txt', r.text));
   const go = OS.el('button', 'ibtn');
   go.type = 'button';
   go.dataset.nav = r.screen;
   go.dataset.navView = r.view;
+  // the line counts all of EMEA, so the view opens for all of EMEA (and all data-check areas)
+  go.dataset.navScope = 'All';
+  if (r.key === 'checks') go.dataset.navArea = 'All';
   go.setAttribute('aria-label', 'Open in the app');
   go.appendChild(OS.icon(OS.ICON.go));
   li.append(OS.el('span', 'ag-acts'), go);
@@ -1103,8 +1106,8 @@ dash.draw('pd-act', (box) => {
 });
 dash.draw('oo-mail', (box) => {
   const w = OS.oo.who();
-  // no email link until the agenda's sources have loaded: a half-built agenda would go out as if complete
-  const loading = ['oo_points', 'oo_points_rr', 'oo_followups'].some((id) => OS.state(id) === 'loading');
+  // no email link until the agenda's sources have loaded (as Copy and Send): a half-built agenda would go out as if complete
+  const loading = !!w && OS.oo.loading(w);
   const text = w && !w.startsWith('n:') && !loading ? OS.oo.text() : '';
   const name = w ? OS.oo.nameOf(w) : '';
   const a = text ? OS.links.mail(w, '1:1 agenda', text) : null;
@@ -1127,7 +1130,7 @@ OS.defTable('mv-table', ['pipe_moves'], () => (dash.data('pipe_moves').data || [
   { f: 'pulled', fmt: OS.num, num: true },
   { f: 'up', fmt: OS.num, num: true }, { f: 'down', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'intoCommit', fmt: OS.num, num: true }, { f: 'outCommit', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
-], { key: 'owner' });
+], { key: 'key' });
 
 // ===================== COVERAGE =====================
 const covKey = () => (mgrPick() ? 'M|' + mgrPick() : OS.region() === 'All' ? 'All|All' : OS.region() + '|All');

@@ -241,7 +241,7 @@
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
             <p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access, so this list may be incomplete.</p>
-            <ul class="ilist" data-draw="home-checks" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg checks_conv checks_conv_lost checks_conv_days"></ul>
+            <ul class="ilist" data-draw="home-checks" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg checks_closed checks_conv checks_conv_lost checks_conv_days"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-checks"></span>
               <p class="os-empty" data-msg-for="home-checks" data-msg="empty" hidden>No problems found.</p>
             </div>
@@ -376,7 +376,7 @@
               <button class="btn" type="button" data-copy-checks><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
           </div>
-          <div class="pane-scroll"><p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access (Salesforce, LeanData, HiBob or lead data), so this list may be incomplete.</p><ul class="ilist" data-draw="check-list" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg checks_conv checks_conv_lost checks_conv_days"></ul>
+          <div class="pane-scroll"><p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access (Salesforce, LeanData, HiBob or lead data), so this list may be incomplete.</p><ul class="ilist" data-draw="check-list" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg checks_closed checks_conv checks_conv_lost checks_conv_days"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="check-list"></span>
               <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
               <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
@@ -467,12 +467,14 @@
               </section>
               <section class="ag-sec" data-oo-sec="ops" hidden>
                 <h3>RevOps work</h3>
-                <ul class="ag-bullets ag-talk" data-draw="oo-ops" data-source="risk_kpi rr_kpi checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg leavers_core leavers_leads leavers_pools ld_kpi ld_kpi_rt act_kpi orphan_kpi engagement_kpi"></ul>
+                <p class="ag-last">All of EMEA, what needs action; each line opens its view for all of EMEA.</p>
+                <ul class="ag-bullets ag-talk" data-draw="oo-ops" data-source="risk_kpi rr_kpi checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap checks_act checks_cfg checks_closed leavers_core leavers_leads leavers_pools ld_kpi ld_kpi_rt act_kpi orphan_kpi engagement_kpi"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-ops"></span>
                   <p class="os-empty" data-msg-for="oo-ops" data-msg="empty" hidden>Nothing open: no stuck deals, routing gaps, data checks, leavers' records, lead or activity problems.</p>
                 </div>
               </section>
               <p class="pd-note" data-oo-sec="none" hidden>They aren't in EMEA sales or RevOps, so there are no Salesforce numbers or talking points for them. This agenda has your Granola notes only.</p>
+              <p class="pd-note" data-oo-sec="nosf" hidden>No active Salesforce user has their email, so there are no Salesforce numbers or talking points for them. This agenda has your Granola notes only.</p>
             </div>
           </div>
         </div>
@@ -691,7 +693,7 @@
         </div>
         <div class="pane" id="pipe-partner">
           <div class="pane-head">
-            <div><h2 class="pane-title">Owned outside EMEA sales</h2><p class="pane-note">Open deals on EMEA-region accounts (the account's sales region) owned by the global partnership roles and strategic AEs. Team totals follow the owner's role, so none of these are in them. All of EMEA whatever the scope; New Business and Upsell ARR, renewals counted apart.</p></div>
+            <div><h2 class="pane-title">Owned outside EMEA sales <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">Open deals on EMEA-region accounts (the account's sales region) whose owner isn't in an EMEA sales role: the global partnership roles, strategic AEs, other regions' sellers and users with no role. Team totals follow the owner's role, so none of these are in them. All of EMEA whatever the scope; New Business and Upsell ARR, renewals counted apart.</p></div>
             <button class="ibtn" type="button" data-copy-table="partner-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
           </div>
           <div class="pane-scroll">
@@ -709,7 +711,7 @@
               <tbody data-draw="partner-table"></tbody>
             </table>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="partner-table"></span>
-              <p class="os-empty" data-msg-for="partner-table" data-msg="empty" hidden>No open deals on EMEA accounts owned by partnership roles or strategic AEs.</p>
+              <p class="os-empty" data-msg-for="partner-table" data-msg="empty" hidden>No open deals on EMEA accounts owned outside EMEA sales.</p>
             </div>
           </div>
         </div>
@@ -767,7 +769,7 @@
         </div>
         <div class="grid2">
           <div class="pane" id="bk-lost">
-            <div class="pane-head"><div><h2 class="pane-title">Why deals were lost</h2><p class="pane-note">Lost New Business and Upsell this quarter by lost reason. Admin merges are marked and left out of win rates. <button class="lnk" type="button" data-nav="created" data-nav-view="conversion">Where and why over 4 quarters: Conversion</button></p></div></div>
+            <div class="pane-head"><div><h2 class="pane-title">Why deals were lost</h2><p class="pane-note">Lost New Business and Upsell this quarter by lost reason, for the team that closed them. Admin merges are marked and left out of win rates. Reasons from before the 3 Nov 2026 list count under their new names: Qualified Out as Not a fit, Timing as Deferred, Technical/Functional Gap as Product fit, Lost to Competitor as Chose an alternative, No Champion as Buyer engagement, Budget as Price and budget. Value not perceived is from the old list and has no new equivalent. <button class="lnk" type="button" data-nav="created" data-nav-view="conversion">Where and why over 4 quarters: Conversion</button></p></div></div>
             <div class="pane-body"><div class="os-chart" data-draw="lost-chart" data-source="lost_reasons"></div><div class="msgs"><span class="msg-slot" data-draw="msg" data-for="lost-chart"></span>
               <p class="os-empty" data-msg-for="lost-chart" data-msg="empty" hidden>No lost deals for this team this quarter yet.</p>
             </div></div>
@@ -952,7 +954,7 @@
         <div class="pane" id="mv-pane">
           <div class="pane-head"><div><h2 class="pane-title">What changed in the last 7 days</h2><p class="pane-note">New Business and Upsell per rep, for the Monday forecast call. Each deal counts once per column at its current ARR, comparing where it was at the start of the week with where it is now, so a push that was pulled back doesn't count. Deals created this week count as created (and as won or lost if they closed). Admin merges are left out of lost. Riskiest movement first.</p></div><button class="ibtn" type="button" data-copy-table="mv-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
-            <table class="tbl" data-source="pipe_moves" data-row-key="owner">
+            <table class="tbl" data-source="pipe_moves" data-row-key="key">
               <thead><tr>
                 <th data-field="owner">Rep</th>
                 <th data-field="region">Team</th>
@@ -1289,7 +1291,7 @@
           </div>
         </div>
         <div class="pane" id="cv-loss-pane">
-          <div class="pane-head"><div><h2 class="pane-title">Why deals are lost, and where</h2><p class="pane-note">New Business lost in the last 4 completed quarters, by the team that closed them, on the reason list used since 3 Nov 2026 (older reasons under their new name, as in Bookings; Value not perceived stays apart). Where = the last stage before Closed Lost. Admin merges are left out. With a manager picked, the team most of their reports are in.</p></div>
+          <div class="pane-head"><div><h2 class="pane-title">Why deals are lost, and where</h2><p class="pane-note">New Business lost in the last 4 completed quarters, by the team that closed them, on the reason list used since 3 Nov 2026 (older reasons under their new name, as in Bookings; Value not perceived keeps its name). Where = the last stage before Closed Lost. Admin merges are left out. With a manager picked, the team most of their reports are in.</p></div>
             <div class="tools"><button class="fchip" type="button" data-cv-clean aria-pressed="false" hidden>Leave out the clean-up quarter</button><span class="pd-note" data-draw="conv-clean-why" data-source="conv_closeout"></span><button class="ibtn" type="button" data-copy-table="conv-reason-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div></div>
           <div class="pane-scroll">
             <table class="tbl" data-source="conv_reasons conv_closeout conv_mgr" data-row-key="key">
