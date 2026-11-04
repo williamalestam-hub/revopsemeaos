@@ -254,10 +254,11 @@ D["gr_notes"] = {"title": "Granola meeting notes",
 # ---------- Movement, aging, coverage, engagement ----------
 NB_UP = "RecordType.Name IN ('New Business','Upsell')"
 # days in stage past which an open deal counts as stuck: about 2x the open-deal median per stage, rounded to 5, at least 30
-STUCK = ("((StageName = '0 - Qualification' AND LastStageChangeInDays > 35) OR (StageName = '1 - Solution agreement' AND LastStageChangeInDays > 55)"
-         " OR (StageName = '2 - Scope agreement' AND LastStageChangeInDays > 60) OR (StageName = '3 - Pilot Validation' AND LastStageChangeInDays > 40)"
-         " OR (StageName = '4 - Commercial agreement' AND LastStageChangeInDays > 30) OR (StageName = '5 - Vendor assessment' AND LastStageChangeInDays > 45)"
-         " OR (StageName = '6 - Opt-out' AND LastStageChangeInDays > 40))")
+# by the stage number, not its name: stage 3 was renamed from '3 - Pilot Validation' to '3 - Validation' on 3 Nov 2026
+STUCK = ("((StageName LIKE '0%' AND LastStageChangeInDays > 35) OR (StageName LIKE '1%' AND LastStageChangeInDays > 55)"
+         " OR (StageName LIKE '2%' AND LastStageChangeInDays > 60) OR (StageName LIKE '3%' AND LastStageChangeInDays > 40)"
+         " OR (StageName LIKE '4%' AND LastStageChangeInDays > 30) OR (StageName LIKE '5%' AND LastStageChangeInDays > 45)"
+         " OR (StageName LIKE '6%' AND LastStageChangeInDays > 40))")
 ds("mv_outcomes", "Won and lost, last 7 days",
    "EMEA New Business and Upsell deals closed won or lost in the last 7 days (by the date actually closed; admin merges and record clean-ups left out of lost), per owner, in incremental ARR (USD).",
    SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Owner.Manager.Name manager, IsWon won, COUNT(Id) n, SUM(Finance_ARR_USD__c) arr
