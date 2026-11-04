@@ -584,7 +584,8 @@ dash.draw('mgr-list', (ul) => {
   };
   if (s0 !== 'ok') { ul.replaceChildren(); ul.classList.toggle('dash-skeleton', s0 === 'loading'); return; }
   ul.classList.remove('dash-skeleton');
-  ul.replaceChildren(...(q ? [] : [item('', 'Everyone in the team', null)]), ...names.map((n) => item(n, n, counts.get(n))));
+  // a search no manager matches says so, like the other search boxes
+  ul.replaceChildren(...(q ? (names.length ? [] : [OS.el('li', 'os-empty', 'No manager matches. Try part of a name.')]) : [item('', 'Everyone in the team', null)]), ...names.map((n) => item(n, n, counts.get(n))));
 });
 dash.draw('scope-label', (el) => {
   const m = mgrPick();
@@ -1038,7 +1039,7 @@ OS.defTable('oo-team-table', ['team_tree'], () => {
   { f: 'riskReps', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'actMeetings', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: (r) => (r.actHidden ? 'Your Salesforce access shows no activity for ' + OS.num(r.actHidden) + (r.actHidden === 1 ? ' person' : ' people') + ' in this team, so no total is shown' : r.actMeetings == null ? '' : OS.num(r.actMeetCust) + ' with customers · ' + OS.num(r.actMeetPros) + ' with prospects') },
   { f: 'actMeetPerSellerWk', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v)), num: true },
-  { f: 'actMeetChg', fmt: (v) => (v == null ? '—' : (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%'), num: true, cls: (v) => (v != null && v <= -0.25 ? 'os-bad' : ''), tip: (r) => (r.actCompared != null ? 'like-for-like, ' + OS.num(r.actCompared) + ' people compared' : '') },
+  { f: 'actMeetChg', fmt: (v) => OS.signedPct(v), num: true, cls: (v) => (v != null && v <= -0.25 ? 'os-bad' : ''), tip: (r) => (r.actCompared != null ? 'like-for-like, ' + OS.num(r.actCompared) + ' people compared' : '') },
   { f: 'actBooked', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: (r) => (r.actBookedPros != null ? OS.num(r.actBookedPros) + ' with prospects' : '') },
   { f: 'actFlags', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, cls: (v) => (v > 0 ? 'os-warn' : ''), tip: (r) => (r.actFlags == null ? '' : [r.actQuiet == null ? '' : OS.num(r.actQuiet) + ' quiet', OS.num(r.actSlowing) + ' slowing', r.actNothingBooked == null ? '' : OS.num(r.actNothingBooked) + ' nothing booked',
     OS.num(r.actNoCapture) + (r.actMailHidden ? ' no meeting captured' : r.actMeetHidden ? ' no sent email captured' : ' nothing captured')].filter(Boolean).join(' · ')) },
@@ -1394,7 +1395,7 @@ OS.defTable('ld-src-table', ['ld_sources'], () => (dash.data('ld_sources').data 
 // Requests to Claude carry counts and the names of our own people only, and end with ACT_GUARD (defined at the top).
 const ACT_ROLE = { AE: 'AEs', SMB: 'SMB', BDR: 'BDRs', EM: 'Engagement Managers', Leader: 'leaders' };
 const ACT_CORE = { customer: 'customer meetings', prospect: 'prospect meetings', external: 'external meetings' };
-const actSigned = (v) => (v == null ? '—' : (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%');
+const actSigned = (v) => OS.signedPct(v);
 const actWk = (v) => (v == null ? '—' : d3.format('.1f')(v));
 // times are epoch ms; the calendar is Paris, as in the calcs
 const actTs = (t) => (t == null ? '—' : new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Paris' }).replace(',', ''));
@@ -1447,7 +1448,7 @@ const actCaptureWhat = (r) => (r.status === 'No capture' ? (r.mailHidden ? 'no e
   : r.mailOff ? (r.emails === 0 ? OS.num(r.meetings) + ' meetings but no sent email captured in 4 weeks' : 'no sent email captured since ' + actTs(r.lastMail) + ' while meetings continue')
   : r.calOff ? (r.meetings === 0 ? OS.num(r.emails) + ' emails sent but no external meeting captured in 4 weeks' : 'no external meeting captured since ' + actTs(r.lastMeet) + ' while emails continue') : 'a capture gap');
 const actStatusAsk = (r) => {
-  if (r.status === 'Quiet') return actAsk('Draft a check-in: ' + r.name, r.name + ' has no sent email or external meeting captured since ' + actTs(r.lastTouch) + ' (' + actBd(r.idle) + '). They may be away or working outside Salesforce. Draft a short, friendly Slack message from me asking how things are going and whether anything is blocking them, without mentioning customers. Show me the message and the recipient and wait for my OK before sending.', { person: r.name, userId: r.userId });
+  if (r.status === 'Quiet') return actAsk('Draft a check-in: ' + r.name, r.name + ' has no sent email or external meeting captured since ' + actTs(r.lastTouch) + ' (' + actBd(r.idle) + '). They may be away or working outside Salesforce. Draft a short, friendly Slack message from me asking how things are going and whether anything is blocking them, without mentioning customers. Show me the message and the recipient and wait for my OK before sending.' + ACT_GUARD, { person: r.name, userId: r.userId });
   if (r.status === 'Nothing booked') return actAsk('Plan the next 2 weeks: ' + r.name, 'Read only: for ' + actWho(r) + ', count ' + (r.kind === 'EM' ? 'customer' : 'prospect') + ' meetings held per week over the last 8 weeks and booked per week for the next 4 (counts only), and suggest how they could fill the next 2 weeks. Don\'t contact anyone or change anything.' + actOwner(r) + ACT_GUARD, { person: r.name, userId: r.userId });
   if (r.status === 'No capture' || r.status === 'Capture gap') return actAsk('Check capture: ' + r.name, 'The EMEA RevOps OS shows ' + actCaptureWhat(r) + ' for ' + actWho(r) + (r.joined ? ', in Salesforce or at Legora since ' + OS.day(r.joined) : '') + '. With my Salesforce access, count their captured sent emails and external calendar events per week over the last 12 weeks (counts only), say whether mailbox or calendar capture looks off and when it stopped, and draft a short note to RevOps with the facts. Show me the draft and wait for my OK before sending; change no settings or records.' + actOwner(r) + ACT_GUARD, { person: r.name, userId: r.userId });
   return null;
@@ -1502,7 +1503,7 @@ dash.draw('act-monday', (box) => {
       : k.meetHidden ? 'meetings like-for-like not visible with my access' + (k.emailsChg != null ? ', emails ' + actSigned(k.emailsChg) + ' like-for-like (' + OS.num(k.lflMailReps) + ' people compared)' : '') : 'no like-for-like change yet')
     + (k.booked == null ? '' : ', ' + OS.num(k.booked) + ' booked for the next 2 weeks') + (k.mailHidden || k.meetHidden ? '' : '; quiet: ' + names('Quiet'))
     + '; slowing: ' + names('Slowing') + (k.meetHidden ? '' : '; nothing booked: ' + names('Nothing booked'))
-    + '; ' + (k.mailHidden ? 'no meeting captured' : k.meetHidden ? 'no sent email captured' : 'nothing captured') + ' (check capture first): ' + names('No capture') + '.' + seen + ' Name our own people only, no customer or prospect names. Draft it for Slack and wait for my OK before posting.', { team: scopeKey() });
+    + '; ' + (k.mailHidden ? 'no meeting captured' : k.meetHidden ? 'no sent email captured' : 'nothing captured') + ' (check capture first): ' + names('No capture') + '.' + seen + ' Name our own people only. Draft it for Slack and wait for my OK before posting.' + ACT_GUARD, { team: scopeKey() });
   if (b) { b.classList.remove('ibtn'); b.classList.add('btn'); b.append('Monday summary'); }
   box.replaceChildren(...(b ? [b] : []));
 });
@@ -1899,7 +1900,7 @@ const convSrcRows = () => {
 OS.defTable('conv-src-table', convCloseIds('conv_sources'), convSrcRows, [
   { f: 'groupHead' }, { f: 'value' },
   { f: 'closed', fmt: OS.num, num: true, tip: (r) => OS.num(r.won) + ' won · ' + OS.num(r.lost) + ' lost' },
-  { f: 'winRate', fmt: convPct, num: true, cls: (v, r) => (r.mark === 'low' ? 'os-bad' : r.mark === 'high' ? 'os-ok' : ''), tip: (r) => (r.gap != null ? (r.gap < 0 ? '−' : '+') + Math.abs(Math.round(r.gap * 100)) + ' points against the rest of the team' : '') },
+  { f: 'winRate', fmt: convPct, num: true, cls: (v, r) => (r.mark === 'low' ? 'os-bad' : r.mark === 'high' ? 'os-ok' : ''), tip: (r) => (r.gap != null ? OS.signedPct(r.gap).replace('%', '') + ' points against the rest of the team' : '') },
   { f: 'smbWinRate', fmt: convPct, num: true }, { f: 'fieldWinRate', fmt: convPct, num: true }, { f: 'arrWinRate', fmt: convPct, num: true },
   { f: 'avgWon', fmt: (v) => (v == null ? '—' : OS.usd(v)), num: true },
   { f: 'wonArrPerClosed', fmt: (v) => (v == null ? '—' : OS.usd(v)), num: true, bar: (l) => d3.max(l.filter((r) => !r._cls), (r) => r.wonArrPerClosed || 0) || 1 },

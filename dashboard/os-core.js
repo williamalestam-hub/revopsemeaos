@@ -284,6 +284,8 @@ window.OS = (() => {
   const usd = (v) => (v == null || Number.isNaN(+v) ? '—' : (v < 0 ? '−$' : '$') + compact.format(Math.abs(+v)));
   const num = (v) => (v == null || Number.isNaN(+v) ? '—' : d3.format(',')(Math.round(+v)));
   const pct = (v) => (v == null || Number.isNaN(+v) ? '—' : d3.format('.0%')(+v));
+  // a change in whole percent with its sign; one that rounds to 0 shows as 0%, not −0% or +0%
+  const signedPct = (v) => { if (v == null || Number.isNaN(+v)) return '—'; const a = Math.abs(Math.round(+v * 100)); return (a === 0 ? '' : v < 0 ? '−' : '+') + a + '%'; };
   const day = (v) => (v ? d3.utcFormat('%-d %b %Y')(new Date(String(v).slice(0, 10) + 'T00:00:00Z')) : '—');
   const shortDay = (v) => (v ? d3.utcFormat('%-d %b')(new Date(String(v).slice(0, 10) + 'T00:00:00Z')) : '—');
   const region = () => (dash.params().region || 'All');
@@ -639,7 +641,7 @@ window.OS = (() => {
     });
   };
 
-  return { usd, num, pct, day, shortDay, region, sorts, queries, state, value, el, personBtn, initials, hue, icon, ICON, defTable, defList, defChart, drawMsg, redraw, tableText, vbars, hbars, searchFilter };
+  return { usd, num, pct, signedPct, day, shortDay, region, sorts, queries, state, value, el, personBtn, initials, hue, icon, ICON, defTable, defList, defChart, drawMsg, redraw, tableText, vbars, hbars, searchFilter };
 })();
 
 // ---------- Acting on things ----------
@@ -1275,7 +1277,7 @@ OS.oo = (() => {
     const ldRt = rowOf('ld_kpi_rt', (r) => r.region === scope);
     const act = rowOf('act_kpi', (r) => r.region === scope);
     const x = (v) => (v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '×');
-    const signed = (v) => (v < 0 ? '−' : '+') + OS.usd(Math.abs(v));
+    const signed = (v) => { const a = OS.usd(Math.abs(v)); return (a === '$0' ? '' : v < 0 ? '−' : '+') + a; };
     const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
     const na = (what, id) => (failedSrc(id) ? `• ${what}: not available (couldn't load)` : null);
     const lines = [];
@@ -1338,7 +1340,7 @@ OS.oo = (() => {
     else add('leads', na('Leads', 'ld_kpi'));
     if (act) {
       if (act.blind || act.meetings || act.emails || act.sellers) {
-        const sg = (v) => (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%';
+        const sg = OS.signedPct;
         // a channel the viewer's access hides is named, not dropped or counted as zero, and so are the flags it switches off
         const meet = act.meetings == null ? 'meetings not visible with your access' : `${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks`;
         const flags = [act.mailHidden || act.meetHidden ? '' : `${OS.num(act.quiet)} quiet`, `${OS.num(act.slowing)} slowing`, act.meetHidden ? '' : `${OS.num(act.nothingBooked)} with nothing booked`, `${OS.num(act.noCapture)} with ${act.mailHidden ? 'no meeting captured' : act.meetHidden ? 'no sent email captured' : 'nothing captured'}`].filter(Boolean).join(', ');
@@ -1349,7 +1351,10 @@ OS.oo = (() => {
           + `${act.notVisible ? ` (your Salesforce access shows no activity for ${OS.num(act.notVisible)} of the ${n(act.sellers, 'seller', 'sellers')}, so these may be partial)` : ''}`, act.quiet || act.slowing || act.nothingBooked || act.noCapture ? 'medium' : act.notVisible ? 'low' : null);
       }
     } else add('activity', na('Activity', 'act_kpi'));
-    if (orph && !mgr && reg === 'All') add('books', `• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`, orph.accounts || orph.splitBooks ? 'medium' : null);
+    if (!mgr && reg === 'All') {
+      if (orph) add('books', `• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`, orph.accounts || orph.splitBooks ? 'medium' : null);
+      else add('books', na('Account books', 'orphan_kpi'));
+    }
     if (eng) { if (eng.untouched) add('engage', `• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`, 'medium'); }
     else add('engage', na('Engagement', 'engagement_kpi'));
     if (sc && sc.mine === false) return { label, lines };
