@@ -1,0 +1,26 @@
+const fs=require("fs"); process.chdir('/home/user/revopsemeaos/dashboard');
+const html=fs.readFileSync("index.html","utf8"); const js=["os-core.js","os-calcs.js","os-calcs-leads.js","os-calcs-act.js","os-calcs-conv.js","os-draw.js"].map(f=>fs.readFileSync(f,"utf8")).join("\n");
+const draws=new Set([...html.matchAll(/data-draw="([^"]+)"/g)].map(m=>m[1]));
+const regA=[...js.matchAll(/(?:dash\.draw|OS\.defTable|OS\.defList|OS\.defChart)\(\s*["\x27]([^"\x27]+)["\x27]\s*,/g)].map(m=>m[1]); const reg=new Set(regA);
+console.log("draw w/o handler:", [...draws].filter(d=>!reg.has(d)), "handler w/o html:", [...reg].filter(d=>!draws.has(d)));
+const ds=new Set(Object.keys(JSON.parse(fs.readFileSync("datasets.json","utf8"))));
+const calcA=[...js.matchAll(/dash\.calc\(\s*["\x27]([^"\x27]+)["\x27]/g)].map(m=>m[1]); const calcs=new Set(calcA);
+console.log("dup calcs:", calcA.filter((x,i)=>calcA.indexOf(x)!==i), "dup draws:", regA.filter((x,i)=>regA.indexOf(x)!==i), "calc=dataset:", calcA.filter(c=>ds.has(c)));
+const srcs=new Set([...html.matchAll(/data-source="([^"]+)"/g)].flatMap(m=>m[1].split(/\s+/)));
+console.log("unknown sources:", [...srcs].filter(s=>!ds.has(s)&&!calcs.has(s)));
+for (const m of js.matchAll(/inputs:\s*\[([^\]]*)\]/g)) { for (const i of m[1].split(",").map(x=>x.trim().replace(/["\x27]/g,"")).filter(Boolean)) if(!ds.has(i)&&!calcs.has(i)) console.log("bad input", i); }
+const loaders=new Set([...js.matchAll(/dash\.loader\(\s*["\x27]([^"\x27]+)["\x27]/g)].map(m=>m[1])); for (const lst of js.matchAll(/\[((?:\s*\x27[a-z_0-9]+\x27\s*,?)+)\s*\]\.forEach\(\(id\) => dash\.loader\(id/g)) for (const m of lst[1].matchAll(/\x27([a-z_0-9]+)\x27/g)) loaders.add(m[1]);
+console.log("datasets w/o loader:", [...ds].filter(d=>!loaders.has(d)));
+const used=new Set([...js.matchAll(/inputs:\s*\[([^\]]*)\]/g)].flatMap(m=>m[1].split(",").map(x=>x.trim().replace(/["\x27]/g,"")))); for (const s of srcs) used.add(s); for (const m of js.matchAll(/dash\.data\(\s*["\x27]([^"\x27]+)/g)) used.add(m[1]); for (const x of [...ds, ...calcs]) if (new RegExp("[\x27\"]"+x+"[\x27\"]").test(js.replace(/dash\.calc\(\s*\x27[^\x27]+\x27/g, ""))) used.add(x);
+console.log("unused datasets/calcs:", [...ds, ...calcs].filter(x=>!used.has(x)));
+const msgFor=new Set([...html.matchAll(/data-msg-for="([^"]+)"/g)].map(m=>m[1])); const slots=new Set([...html.matchAll(/data-draw="msg" data-for="([^"]+)"/g)].map(m=>m[1]));
+console.log("msg-for w/o slot:", [...msgFor].filter(x=>!slots.has(x)));
+const views=[...html.matchAll(/data-view-panel="([^"]+)"/g)].map(m=>m[1]); const tabs=[...html.matchAll(/data-view-tab="([^"]+)"/g)].map(m=>m[1]);
+console.log("tabs w/o panel:", tabs.filter(t=>!views.includes(t)), "panels w/o tab:", views.filter(v=>!tabs.includes(v)));
+const pages=[...html.matchAll(/data-page="([^"]+)"/g)].map(m=>m[1]); const navs=[...html.matchAll(/data-nav="([^"]+)"(?: data-nav-view="([^"]+)")?/g)];
+console.log("bad nav:", navs.filter(m=>!pages.includes(m[1]) || (m[2] && !views.includes(m[1]+":"+m[2]))).map(m=>m[0]));
+for (const m of js.matchAll(/view: \x27([a-z]+)\x27/g)) if (!views.some(v=>v.endsWith(':'+m[1]))) console.log('bad check view', m[1]);
+const ids=[...html.matchAll(/ id="([^"]+)"/g)].map(m=>m[1]); console.log("duplicate ids:", [...new Set(ids.filter((x,i)=>ids.indexOf(x)!==i))]);
+const d=fs.readFileSync("os-draw.js","utf8"); let bad=0,n=0;
+for (const m of html.matchAll(/<table[^>]*data-row-key="([^"]+)"[^>]*>([\s\S]*?)<tbody data-draw="([^"]+)"/g)) { const ths=[...m[2].matchAll(/<th[^>]*data-field="([^"]+)"/g)].map(x=>x[1]); const i=d.indexOf("defTable(\x27"+m[3]+"\x27"); const seg=d.slice(i, d.indexOf("], {", i)); const cols=[...seg.matchAll(/\{ f: \x27([A-Za-z0-9_]+)\x27/g)].map(x=>x[1]); n++; if (ths.join()!==cols.join()) { bad++; console.log("MISMATCH", m[3], ths.join(), "|", cols.join()); } } console.log(n, "tables,", bad, "mismatches");
+const sizes={}; for (const f of ["index.html","os-core.js","os-calcs.js","os-calcs-leads.js","os-calcs-act.js","os-calcs-conv.js","os-draw.js","os.css"]) sizes[f]=fs.statSync(f).size; console.log('sizes', JSON.stringify(sizes));
