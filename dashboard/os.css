@@ -495,3 +495,9 @@
   .ld-flow-h { flex: 1 1 100%; font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
   .ld-arrow { color: var(--cds-chart-muted); }
   .ld-flow-note { flex: 1 1 100%; }
+  /* Activity: the role's meetings label under a range, the access note, the not-counted and definitions lists */
+  .act-sub { display: block; font-size: .72rem; color: var(--color-fg-muted); white-space: nowrap; }
+  .act-access { padding: var(--cds-pad-sm) var(--cds-pad-lg); border-bottom: 1px solid var(--line); color: var(--color-warn); }
+  .act-notes h3 { margin: var(--cds-pad-sm) 0 4px; font-size: var(--cds-font-size-caption); font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
+  .act-notes ul { margin: 0 0 var(--cds-pad-sm); padding-left: 1.1rem; display: grid; gap: 4px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); max-width: 100ch; }
+  .stat-sub .lnk { color: var(--color-fg); }

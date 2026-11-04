@@ -620,6 +620,54 @@
    }
   }
  },
+ "act_mail": {
+  "title": "Emails sent, last 4 weeks",
+  "description": "Emails EMEA sellers sent in the 28 days to yesterday (by the email's date), as Einstein Activity Capture copied them from their mailbox (Outreach sends included): email tasks with a sent, not incoming, Email Message. Per owner and the account's status today: emails, distinct people and accounts emailed, and when the last one was captured. Received mail, Outreach's own email log (it repeats the mailbox copy and logs prospect replies as outbound), automation emails with no captured message and RevOps admin tasks are left out. Counts only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Account.Account_Status__c acct, COUNT(Id) emails, COUNT_DISTINCT(WhoId) people, COUNT_DISTINCT(AccountId) accounts, MAX(CreatedDate) lastAt FROM Task WHERE TaskSubtype = 'Email' AND Id IN (SELECT ActivityId FROM EmailMessage WHERE Incoming = false AND CreatedDate = LAST_N_DAYS:35) AND ActivityDate = LAST_N_DAYS:28 AND ActivityDate < TODAY AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Account.Account_Status__c LIMIT 2000"
+   }
+  }
+ },
+ "act_mail_prev": {
+  "title": "Emails sent, the 4 weeks before",
+  "description": "The same sent emails dated 29 to 56 days ago, per owner and account status, with the first and last capture time, so the page can tell whether capture covered the whole earlier window. Counts only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Account.Account_Status__c acct, COUNT(Id) emails, COUNT_DISTINCT(WhoId) people, COUNT_DISTINCT(AccountId) accounts, MIN(CreatedDate) firstAt, MAX(CreatedDate) lastAt FROM Task WHERE TaskSubtype = 'Email' AND Id IN (SELECT ActivityId FROM EmailMessage WHERE Incoming = false AND CreatedDate = LAST_N_DAYS:63) AND ActivityDate = LAST_N_DAYS:56 AND ActivityDate < LAST_N_DAYS:28 AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Account.Account_Status__c LIMIT 2000"
+   }
+  }
+ },
+ "act_meet": {
+  "title": "Meetings, last 4 weeks and next 2",
+  "description": "Calendar records of EMEA sellers with a contact, lead or account (not Legora's own), not all-day, that started in the 28 days to yesterday (past = true) or start in the 14 days from tomorrow (past = false). Per owner, past or booked, and the account's status: records, meetings (distinct start times), distinct accounts and people, and the first and last start. LeanData BookIt meetings marked Canceled or Rescheduled are left out. Counts only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Activity_in_Past__c past, Account.Account_Status__c acct, COUNT(Id) events, COUNT_DISTINCT(StartDateTime) meetings, COUNT_DISTINCT(AccountId) accounts, COUNT_DISTINCT(WhoId) people, MIN(StartDateTime) firstAt, MAX(StartDateTime) lastAt FROM Event WHERE ((StartDateTime = LAST_N_DAYS:28 AND StartDateTime < TODAY) OR StartDateTime = NEXT_N_DAYS:14) AND IsAllDayEvent = false AND (WhoId != null OR AccountId != null) AND (NOT Account.Name LIKE 'Legora%') AND (BookIt_Meeting_Status__c = null OR BookIt_Meeting_Status__c NOT IN ('Canceled','Rescheduled')) AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Activity_in_Past__c, Account.Account_Status__c LIMIT 2000"
+   }
+  }
+ },
+ "act_meet_prev": {
+  "title": "Meetings, the 4 weeks before",
+  "description": "The same meetings that started 29 to 56 days ago, per owner and account status, with the first and last start, so the page can tell whether calendar capture covered the whole earlier window. Counts only.",
+  "source": {
+   "kind": "query",
+   "connector": "Salesforce",
+   "tool": "soqlQuery",
+   "args": {
+    "q": "SELECT Owner.Name owner, Owner.UserRole.Name role, Account.Account_Status__c acct, COUNT(Id) events, COUNT_DISTINCT(StartDateTime) meetings, COUNT_DISTINCT(AccountId) accounts, COUNT_DISTINCT(WhoId) people, MIN(StartDateTime) firstAt, MAX(StartDateTime) lastAt FROM Event WHERE StartDateTime = LAST_N_DAYS:56 AND StartDateTime < LAST_N_DAYS:28 AND IsAllDayEvent = false AND (WhoId != null OR AccountId != null) AND (NOT Account.Name LIKE 'Legora%') AND (BookIt_Meeting_Status__c = null OR BookIt_Meeting_Status__c NOT IN ('Canceled','Rescheduled')) AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA') GROUP BY Owner.Name, Owner.UserRole.Name, Account.Account_Status__c LIMIT 2000"
+   }
+  }
+ },
  "cal_events": {
   "title": "Your calendar, next 14 days",
   "description": "Your Google Calendar events from today for the next 14 days (regular events only), with who is invited; the page keeps the 1:1s with a colleague.",

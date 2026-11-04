@@ -37,10 +37,10 @@ manager, their team (with a "Prep a 1:1" button).
 | Screen | What it answers | Sources |
 |---|---|---|
 | Home | Headline numbers, your next steps from meetings, the most urgent data checks, pipeline by team, created per week | all of the below |
-| 1:1s | An agenda for each 1:1 with a colleague in the next 14 days (from your calendar), or for anyone you pick: open follow-ups from your Granola notes with them (tick them off as you go), the last 1:1 note, their numbers (for a leader, their whole team's) and talking points (past-due and pushed-out deals, early-stage deals closing this quarter, missing next steps, risky large deals and renewals, routing gaps, book balance, data checks). Copy the agenda into the invite or your notes. **Team scorecard**: each direct report with their whole team's numbers, starting from you, or from the top EMEA leader when no EMEA people report to you | Google Calendar `list_events`, Salesforce `getUserInfo` and `User`, Granola, the Salesforce sources |
+| 1:1s | An agenda for each 1:1 with a colleague in the next 14 days (from your calendar), or for anyone you pick: open follow-ups from your Granola notes with them (tick them off as you go), the last 1:1 note, their numbers (for a leader, their whole team's) and talking points (past-due and pushed-out deals, early-stage deals closing this quarter, missing next steps, risky large deals and renewals, routing gaps, book balance, data checks). Activity numbers and up to 3 activity talking points join each agenda once they load. Copy the agenda into the invite or your notes. **Team scorecard**: each direct report with their whole team's numbers, selling activity included, starting from you, or from the top EMEA leader when no EMEA people report to you. **Activity**: per seller, emails sent and external meetings in the last 4 weeks against the 4 weeks before (like-for-like), meetings booked for the next 2 weeks, last activity and flags (quiet, slowing, nothing booked, below the usual range for the role, check capture), the usual range by role, and how far to trust the numbers | Google Calendar `list_events`, Salesforce `getUserInfo` and `User`, Granola, the Salesforce sources, `Task` + `EmailMessage` and `Event` (counts only) |
 | Action items | Next steps from your Granola notes (yours / unassigned / with others, with a link to each note, copy as checklist), with due dates read from the wording (overdue / due soon), plus data checks: routing gaps, joiners with no Salesforce user, selling titles outside EMEA sales roles, manager differences, past-due opps, orphan accounts, split books, people who left who still own deals or leads | Granola `list_meetings` + `get_meetings`; the Salesforce and HiBob sources |
 | Pipeline | Open NB + Upsell pipeline by team → manager → rep; **Forecast** roll-up (won, won + commit, won + best case); **Top deals**: the 300 largest open deals with risk flags (past due, Commit at early stage, early stage closing this quarter, stale 30d+, no next step, next step overdue, stuck in stage) and a risk score; **Rep risk** with stuck deals; renewals at stake; **This week**: what moved in the last 7 days per rep (created, won, lost, close dates pushed out of or pulled into this quarter, stage up or down, into or out of Commit); **Coverage**: open pipeline against what the team usually books, win rate, expected close and sales cycle | `Opportunity`, `OpportunityHistory`, `OpportunityFieldHistory` |
-| Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards | `Opportunity` |
+| Created opps | Created this week/quarter, 13-week and 12-month trends, source mix (BDR / Inbound / Rep / Expansion), rep and BDR leaderboards, and **BDR activity**: people emailed, prospect meetings held and booked, meetings per 100 people emailed, next to what each BDR sourced | `Opportunity`, `Task` + `EmailMessage`, `Event` (counts only) |
 | Hiring & new joiners | HiBob headcount for GTM / Engagement / Growth EMEA, joiners in the last 90 days, matched to their Salesforce user (by work email, then name) and routing pools; ramp of recent joiners; selling titles without an EMEA sales role and HiBob vs Salesforce manager differences are flagged; **Leavers**: people whose Salesforce user is inactive but who still own deals, renewals, leads or accounts or keep a pool seat, with a hand-over request for your Claude | HiBob `commons_searchEmployees`, `User`, `Lead` (counts), LeanData pools |
 | Routing pools | Every EMEA LeanData pool and its members, 90-day assignments and how evenly they're spread, reps missing from routing, joiners due in week 2, inactive members, members getting none | `LeanData__Round_Robin_Setting__c`, `LeanData__Log__c` (counts only), `User` |
 | Account books | Book size per rep (incl. EM book), territory coverage by Sales Region, orphan accounts with reason, split books, routing vs book mismatches, **Engagement**: active accounts nobody has touched in 90 days (or ever) and customers without an active Engagement Manager, and **Plan moves**: suggested account moves from Heavy to Light books within each team, untouched accounts first | `Account`, `Opportunity`, LeanData pools |
@@ -116,6 +116,39 @@ Salesforce role and changing scope never re-runs a query.
   worked leads back in a queue, and open leads of inactive users or of users outside EMEA sales (strategic and
   partnership owners are marked review, not counted). Reached a person: LeanData's Last Routed Date at or after
   Ready Since, within 5 minutes counts as fast.
+- **Activity** (1:1s › Activity, Team scorecard, agendas, person panel, Created opps › BDRs): emails sent and
+  external meetings of EMEA sellers, from what Salesforce captures. Counts only: no subject, email text, name of a
+  person or company outside Legora, or record Id is read. *Last 4 weeks* = the 28 days to yesterday; *the 4 weeks
+  before* = days 29–56 ago; *next 2 weeks* = the 14 days from tomorrow, all in your Salesforce time zone.
+  - *Emails sent*: email tasks with a sent `EmailMessage` (Einstein Activity Capture's copy of the seller's
+    mailbox, Outreach sends included), dated by the email's date. Received mail, Outreach's own email log (it
+    repeats the mailbox copy and logs prospect replies as outbound), automation emails with no captured message and
+    RevOps admin tasks are left out. The direction comes from `EmailMessage.Incoming`, because `Task.Inbound_Email__c`
+    is hidden from EMEA profiles. People and accounts emailed are distinct per seller; team figures add them up.
+  - *External meetings*: `Event`s with a contact, lead or account (not Legora's own), not all-day, owned by the
+    seller, whoever created them; one per start time per person; LeanData BookIt meetings marked Canceled or
+    Rescheduled left out. Held = started in the last 4 weeks, booked = starts in the next 2 (`Activity_in_Past__c`,
+    checked on every load). A meeting on the calendar counts as held; one with two of our people counts for each.
+  - *Customers and prospects*: by the account's status today; Customer is a customer, everything else a prospect.
+  - *The role's meetings*: customer meetings for Engagement Managers, prospect meetings for BDRs, all external
+    meetings for AEs, SMB and leaders.
+  - *Changes* are like-for-like: only people who joined 8+ weeks ago and whose capture was on in the first week of
+    the earlier window; team changes add up those people, say how many, and need 20+ meetings (200+ emails) before.
+    Capture was switched on during 2026 (people with captured sent mail: 32 in March, 98 in September, 123 in
+    October), so longer comparisons would measure the rollout, not selling.
+  - *Flags* (active AEs, SMB reps, BDRs and Engagement Managers past their first 28 days; leaders and new joiners
+    are shown, never flagged): **Quiet** = nothing captured for 5+ business days (Mon–Fri, Paris, up to yesterday;
+    10+ is urgent; time off can't be seen); **Slowing** = the role's meetings down 30%+ on the 4 weeks before, from
+    at least 8 and by more than twice the square root of the earlier count (for BDRs, emails the same way from 40);
+    **Nothing booked** = no prospect meetings booked for the next 2 weeks after 4+ in the last 4 (customer meetings
+    for Engagement Managers); **Below range** = under the 25th percentile of the role's meetings in both 4-week
+    windows, with 5+ peers; **No capture** / **Capture gap** = mailbox or calendar capture looks off (a data check,
+    not performance).
+  - *Usual range*: the middle half (25th–75th percentile) of EMEA sellers in the same role over the last 4 weeks.
+    It describes peers, not a target.
+  - *Access*: activity follows Salesforce sharing (Account, Opportunity and Lead are Public Read Only). If your
+    access shows activity for fewer than half the sellers, empty rows read Not visible; if it shows meetings but
+    almost no emails, emails show —.
 - **Book moves**: per AE team and SMB, active accounts to move from books at 2× the team median or more to
   books at half or less, largest gaps first, each move stopping at the median for both reps.
 - **People matching**: a HiBob person is matched to an active Salesforce user by work email (any role;
@@ -149,7 +182,8 @@ Each optional source is its own calculation, so a viewer whose access can't read
 without LeanData, routing pools, routing checks, routing gaps and pool seats show — or "not available", while the
 person panel, data checks, team scorecard, 1:1 agendas and Leavers (deals, renewals, accounts) keep working;
 without Lead access, the Leads screen and leavers' leads are missing; without HiBob, the Hiring screen and HiBob
-checks. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
+checks; without email message or event access, Activity, its scorecard columns and agenda lines show — while the
+rest of each screen keeps working. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
 "Connect … in your claude.ai connectors" (naming the one that is actually missing) rather than "Failed to load", and
 one turned off for the dashboard says so. The weekly summary waits for its sources and says "not available" for one
 that failed instead of leaving it out.
@@ -162,6 +196,21 @@ that failed instead of leaving it out.
 - HiBob hides people in the Hired state from this connection, so signed-but-not-started joiners
   and open requisitions aren't visible. Both need an ATS connector or wider HiBob access.
 - LeanData vacation schedules live in a long-text JSON field; out-of-office isn't shown.
+- **Activity** doesn't count calls (about 175 in 4 weeks, nearly all Outreach dials, mostly unanswered; call
+  result, type and duration are hidden from EMEA profiles), LinkedIn beyond Outreach steps (about 700 in 4 weeks,
+  4 BDRs), replies, meetings that aren't on the Salesforce calendar or are with people who aren't in Salesforce,
+  what happened in a meeting, or who booked a meeting for whom. About 1 in 8 of the people Outreach emailed had no
+  mailbox copy, so emails read somewhat low. Activity is joined to people by name and counts for the record's
+  current owner. One business calendar (Paris, no holidays), so a national holiday can make a country look quiet.
+  It was built and checked with RevOps access: before rollout, have one EMEA director compare 1:1s › Activity with
+  RevOps totals. **Per-person activity shown to managers needs a check with HR and, where they exist, works councils
+  (for example in Germany and France) before rollout.** The design keeps flags on meetings against the person's own
+  past or their role's middle half, has no email leaderboards, words Quiet as a question, and never messages a rep.
+- **Last activity on accounts and deals** (`LastActivityDate`, behind Untouched accounts on Account books ›
+  Engagement and stale deals) moves with automation and received mail: in 4 weeks a RevOps admin flow logged about
+  20,000 Task/Other rows on EMEA owners' records, roughly one per received email, touching about 2,500 accounts. So
+  Untouched and stale counts are lower bounds. Per-account rep touches can't be read from Account, because Task
+  can't be the inner object of a semi-join.
 - Lead speed covers EMEA sellers except SMB: demo requests LeanData converts to a contact on arrival are followed
   up on the contact, and SMB leads are moved out of Ready by automation, so neither is timed. One business calendar
   (Paris, no holidays) for all of EMEA, so MEA and holiday weeks look slower than they are. Leads count for their

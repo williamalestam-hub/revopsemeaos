@@ -20,6 +20,8 @@ const statusCls = (v) => (/^In routing$/.test(v) ? 'ok'
   : /Overdue|Missing|^No Salesforce|outside EMEA/.test(v) ? 'bad'
   : /week 2|next week|Week 1|none assigned|New joiner|Not started/i.test(v) ? 'warn' : '');
 const ago = (n) => (n == null ? '' : n === 0 ? 'today' : n + 'd ago');
+// every request about selling activity ends with this (see ACTIVITY)
+const ACT_GUARD = ' Counts only, by week and by customer or prospect: no names of people or companies outside Legora, no subjects or email text in chat. Read only: change nothing and send nothing without my OK.';
 const monthLabel = (m, i) => d3.utcFormat(i === 0 || m.endsWith('-01') ? "%b '%y" : '%b')(new Date(m + '-01T00:00:00Z'));
 
 // Action-item counts: the headline calc, unless some items were ticked off in this app; then the count of what is
@@ -306,7 +308,9 @@ const checkItem = (c) => {
   if (c.view) go.dataset.navView = c.view;
   go.appendChild(OS.icon(OS.ICON.go));
   }
-  const how = c.how ? c.how + (c.area === 'Leads' ? LD_GUARD : '') : c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
+  const how = c.how ? c.how + (c.area === 'Leads' ? LD_GUARD : c.area === 'Activity' ? (c.userId ? ' Their Salesforce user: OwnerId = ' + c.userId + '.' : '') + ACT_GUARD : '')
+    : c.area === 'Activity' ? (c.userId ? ' Their Salesforce user: OwnerId = ' + c.userId + '.' : '') + ' Count their captured sent emails and external calendar events per week over the last 8 weeks and tell me what looks off.' + ACT_GUARD
+    : c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
     : c.area === 'Pipeline' ? ' Pull their past-due opportunities and propose a new close date, stage or closing each one.'
     : c.area === 'Books' ? ' ' + booksHow(c) + ' List the accounts behind it and propose who should own them; if your count differs from the check\'s, stop and tell me.'
     : c.area === 'Hiring' ? ' Compare their HiBob record with their Salesforce user (role, manager, active) and propose the fix.'
@@ -322,7 +326,7 @@ const checkItem = (c) => {
 // every check source that has loaded, merged (OS.checkRows); one source failing leaves the rest
 const allChecks = () => OS.checkRows();
 // the sources that can produce each area's checks
-const AREA_SRC = { Routing: ['checks_rr'], Hiring: ['checks', 'checks_hb'], Pipeline: ['checks'], Books: ['checks'], Leavers: ['checks', 'checks_lv'], Leads: ['checks_ld', 'checks_ld_rt', 'checks_ld_cap'] };
+const AREA_SRC = { Routing: ['checks_rr'], Hiring: ['checks', 'checks_hb'], Pipeline: ['checks'], Books: ['checks'], Leavers: ['checks', 'checks_lv'], Leads: ['checks_ld', 'checks_ld_rt', 'checks_ld_cap'], Activity: ['checks_act'] };
 const areaSrc = (area) => AREA_SRC[area] || OS.CHECKS;
 // a list waits only while none of its sources has loaded, then shows what did
 const checkIds = (srcs) => (srcs.some((id) => OS.state(id) === 'ok') ? [] : [srcs[0]]);
@@ -337,8 +341,9 @@ OS.defList('check-list', () => checkIds(areaSrc(checkArea())), () => {
   const area = checkArea();
   return allChecks().filter((c) => area === 'All' || c.area === area);
 }, (rows) => rows.map(checkItem), { msg: checkMsg(checkArea) });
-// Home's top 7: at most 2 lead checks, so they don't crowd out the rest
-OS.defList('home-checks', () => checkIds(OS.CHECKS), () => { let n = 0; return allChecks().filter((c) => c.area !== 'Leads' || n++ < 2).slice(0, 7); }, (rows) => rows.map(checkItem), { msg: checkMsg(() => 'All') });
+// Home's top 7: at most 2 lead checks and 2 activity checks, so they don't crowd out the rest
+const HOME_CAP = { Leads: 2, Activity: 2 };
+OS.defList('home-checks', () => checkIds(OS.CHECKS), () => { const n = {}; return allChecks().filter((c) => !HOME_CAP[c.area] || (n[c.area] = (n[c.area] || 0) + 1) <= HOME_CAP[c.area]).slice(0, 7); }, (rows) => rows.map(checkItem), { msg: checkMsg(() => 'All') });
 
 // ===================== HIRING =====================
 // with LeanData the hiring numbers include pool status; without it they fall back to people_core (pools show —)
@@ -534,6 +539,13 @@ dash.draw('pd-chips', (el) => {
   if (hiring && hiring !== routing && hiring !== 'In routing') chips.push([hiring, statusCls(hiring)]);
   if (h && h.mgrDiffers) chips.push([h.sfManager ? 'Manager differs from HiBob' : 'No manager in Salesforce', 'warn']);
   if (r && r.pastDue > 0) chips.push([OS.num(r.pastDue) + ' past due', 'bad']);
+  // selling activity: one chip per flag (Quiet bad, the rest amber; capture problems as Check capture), or New
+  const a = rowFor('act_reps');
+  if (a) {
+    const ACT_TXT = { Quiet: ['Quiet ' + (a.idle != null ? a.idle + ' business days' : ''), 'bad'], Slowing: ['Slowing', 'warn'], 'Nothing booked': ['Nothing booked', 'warn'], 'Below range': ['Below usual range', 'warn'], 'No capture': ['Check capture', 'warn'], 'Capture gap': ['Check capture', 'warn'] };
+    for (const f of a.flags || []) if (ACT_TXT[f]) chips.push([ACT_TXT[f][0].trim(), ACT_TXT[f][1]]);
+    if (a.status === 'New' && !chips.some(([t]) => /new/i.test(t))) chips.push(['First 28 days', '']);
+  }
   el.replaceChildren(...chips.map(([t, c]) => OS.el('span', 'chip ' + c, t)));
 });
 dash.draw('pd-pools', (el) => {
@@ -583,11 +595,13 @@ dash.draw('scope-label', (el) => {
 OS.defTable('pd-team-table', ['person'], () => {
   const p = dash.params().person;
   const rr = OS.state('rr_people') === 'ok' ? new Map((dash.data('rr_people').data || []).map((x) => [x.name, x.status])) : null;
-  return p ? (dash.data('person').data || []).filter((r) => r.manager === p && r.isActive !== false && r.inRoster).map((r) => ({ ...r, routing: rr ? rr.get(r.name) || null : null })) : [];
+  const act = OS.state('act_reps') === 'ok' ? new Map((dash.data('act_reps').data || []).map((x) => [x.name, x.meetings])) : null;
+  return p ? (dash.data('person').data || []).filter((r) => r.manager === p && r.isActive !== false && r.inRoster).map((r) => ({ ...r, routing: rr ? rr.get(r.name) || null : null, actMeetings: act ? act.get(r.name) ?? null : null })) : [];
 }, [
   { f: 'name', person: (r) => r.name },
   { f: 'thisPipe', fmt: OS.usd, num: true },
   { f: 'crOpps', fmt: OS.num, num: true },
+  { f: 'actMeetings', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true },
   { f: 'routing', chip: (v) => statusCls(v || '') },
 ], { key: 'name' });
 
@@ -878,7 +892,8 @@ OS.defList('oo-talk', ['oo_points'], ooPoints('talk'), (rows) => rows.map((r) =>
   li.dataset.key = r.key;
   li.append(OS.el('span', 'itm-dot ' + (r.sev || 'low')), OS.el('span', 'ag-txt', r.text));
   const acts = OS.el('span', 'ag-acts');
-  const ask = OS.links.ask(OS.ask.data('1:1 point: ' + r.text, 'I have a 1:1 with ' + r.name + '. Help me prepare this point from the EMEA RevOps OS: ' + r.text + ' Pull the records behind it and suggest what to ask or agree.', { kind: 'talking_point', person: r.name }));
+  const ask = OS.links.ask(OS.ask.data('1:1 point: ' + r.text, 'I have a 1:1 with ' + r.name + '. Help me prepare this point from the EMEA RevOps OS: ' + r.text
+    + (r.act ? ' With my Salesforce access, count the activity behind it by week and suggest what to ask or agree.' + ACT_GUARD : ' Pull the records behind it and suggest what to ask or agree.'), { kind: 'talking_point', person: r.name }));
   if (ask) acts.append(ask);
   const sf = r.oppId ? OS.links.sf('Opportunity', r.oppId) : null;
   if (sf) acts.append(sf);
@@ -932,6 +947,13 @@ dash.draw('kpi-team-rr', (el) => OS.value(el, ['team_rr'], () => {
   const v = r[keepField(el)];
   return v == null ? '—' : OS.num(v);
 }));
+// selling activity comes from team_act, so it is its own mark too
+dash.draw('kpi-team-act', (el) => OS.value(el, ['team_act'], () => {
+  const root = ooRoot();
+  const r = markRow(el, 'name', root, root ? ooRows('team_act').find((x) => x.name === root) : null);
+  const v = r[keepField(el)];
+  return v == null ? '—' : OS.num(v);
+}));
 const agendaBtn = (r) => {
   if (!r.email) return null;
   const b = OS.el('button', 'ibtn ibtn-sm');
@@ -944,9 +966,11 @@ const agendaBtn = (r) => {
 };
 OS.defTable('oo-team-table', ['team_tree'], () => {
   const root = ooRoot();
-  // routing gaps join from team_rr when LeanData loads; until then (or without it) they show —
+  // routing gaps join from team_rr when LeanData loads, and selling activity from team_act; until then (or without them) they show —
   const rr = OS.state('team_rr') === 'ok' ? new Map((dash.data('team_rr').data || []).map((x) => [x.name, x.routingGaps])) : null;
-  return root ? (dash.data('team_tree').data || []).filter((r) => r.manager === root).map((r) => ({ ...r, routingGaps: rr ? rr.get(r.name) || 0 : null }))
+  const act = OS.state('team_act') === 'ok' ? new Map((dash.data('team_act').data || []).map((x) => [x.name, x])) : null;
+  const NO_ACT = { actMeetings: null, actMeetCust: null, actMeetPros: null, actMeetPerSellerWk: null, actMeetChg: null, actCompared: null, actBooked: null, actBookedPros: null, actFlags: null, actQuiet: null, actSlowing: null, actNothingBooked: null, actNoCapture: null };
+  return root ? (dash.data('team_tree').data || []).filter((r) => r.manager === root).map((r) => ({ ...r, routingGaps: rr ? rr.get(r.name) || 0 : null, ...NO_ACT, ...(act ? act.get(r.name) || {} : {}), name: r.name }))
     .sort((a, b) => b.emeaPeople - a.emeaPeople || b.thisPipe - a.thisPipe) : [];
 }, [
   { f: 'name', person: (r) => r.name, after: agendaBtn },
@@ -959,6 +983,11 @@ OS.defTable('oo-team-table', ['team_tree'], () => {
   { f: 'winRate', fmt: (v) => (v == null ? '—' : OS.pct(v)), num: true },
   { f: 'pastDue', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'riskReps', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
+  { f: 'actMeetings', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: (r) => (r.actMeetings == null ? '' : OS.num(r.actMeetCust) + ' with customers · ' + OS.num(r.actMeetPros) + ' with prospects') },
+  { f: 'actMeetPerSellerWk', fmt: (v) => (v == null ? '—' : d3.format('.1f')(v)), num: true },
+  { f: 'actMeetChg', fmt: (v) => (v == null ? '—' : (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%'), num: true, cls: (v) => (v != null && v <= -0.25 ? 'os-bad' : ''), tip: (r) => (r.actCompared != null ? 'like-for-like, ' + OS.num(r.actCompared) + ' people compared' : '') },
+  { f: 'actBooked', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, tip: (r) => (r.actBookedPros != null ? OS.num(r.actBookedPros) + ' with prospects' : '') },
+  { f: 'actFlags', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, cls: (v) => (v > 0 ? 'os-warn' : ''), tip: (r) => (r.actFlags == null ? '' : OS.num(r.actQuiet) + ' quiet · ' + OS.num(r.actSlowing) + ' slowing · ' + OS.num(r.actNothingBooked) + ' nothing booked · ' + OS.num(r.actNoCapture) + ' nothing captured') },
   { f: 'routingGaps', fmt: (v) => (v == null ? '—' : OS.num(v)), num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
   { f: 'checks', fmt: OS.num, num: true },
 ], { key: 'name' });
@@ -1021,7 +1050,7 @@ dash.draw('pd-act', (box) => {
   if (sf) out.push(sf);
   const lvAll = n ? OS.leavers() : null;
   const left = lvAll ? lvAll.rows.find((r) => r.name === n) || null : null;
-  const ask = left ? lvAsk(left) : n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book and open follow-ups with me, and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
+  const ask = left ? lvAsk(left) : n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book, open follow-ups with me and their selling activity in the last 4 weeks (counts only, no names of people or companies outside Legora), and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
   if (ask) out.push(ask);
   box.replaceChildren(...out);
 });
@@ -1304,3 +1333,202 @@ OS.defTable('ld-src-table', ['ld_sources'], () => (dash.data('ld_sources').data 
   { f: 'readyNow', fmt: OS.num, num: true },
   { f: 'over20', fmt: OS.num, num: true, cls: ldWarn },
 ], { key: 'key' });
+
+// ===================== ACTIVITY =====================
+// Emails sent and external meetings of EMEA sellers: people (act_reps, scoped with inTeam), the headline per scope
+// (act_kpi), the usual range by role (act_ranges) and checks on the data (act_trust), both all EMEA, and BDRs (act_bdr).
+// Requests to Claude carry counts and the names of our own people only, and end with ACT_GUARD (defined at the top).
+const ACT_ROLE = { AE: 'AEs', SMB: 'SMB', BDR: 'BDRs', EM: 'Engagement Managers', Leader: 'leaders' };
+const ACT_CORE = { customer: 'customer meetings', prospect: 'prospect meetings', external: 'external meetings' };
+const actSigned = (v) => (v == null ? '—' : (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%');
+const actWk = (v) => (v == null ? '—' : d3.format('.1f')(v));
+// times are epoch ms; the calendar is Paris, as in the calcs
+const actTs = (t) => (t == null ? '—' : new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Paris' }).replace(',', ''));
+const actBd = (n) => (n == null ? '' : n === 1 ? '1 business day' : OS.num(n) + ' business days');
+const actLabel = (s) => (s === 'No capture' || s === 'Capture gap' ? 'Check capture' : s === 'Active' ? '' : s || '');
+const actChip = (v) => (v === 'Quiet' ? 'bad' : v === 'Slowing' || v === 'Nothing booked' || v === 'Below range' || v === 'Check capture' ? 'warn' : '');
+const actLookFlags = ['Quiet', 'Slowing', 'Nothing booked', 'Below range'];
+const actNeedsLook = (r) => (r.flags || []).some((f) => actLookFlags.includes(f));
+const actAsk = (label, text, extra) => OS.links.ask(OS.ask.data(label, text, { kind: 'activity', ...extra }));
+const actWho = (r) => r.name + ' (' + (ACT_ROLE[r.kind] ? r.kind : 'no sales role') + ', ' + r.region + ldMgr(r) + ')';
+const actOwner = (r) => (r.userId ? ' Their Salesforce user: OwnerId = ' + r.userId + '.' : '');
+const actGlobal = () => (OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || [])[0] || null : null);
+
+// ----- headline tiles: the act_kpi row for the scope picked, or for the team the mark names (data-team) -----
+const actRow = (el) => {
+  const key = el.dataset.team || scopeKey();
+  return markRow(el, 'region', key, (dash.data('act_kpi').data || []).find((r) => r.region === key));
+};
+dash.draw('kpi-act', (el) => OS.value(el, ['act_kpi'], () => {
+  const r = actRow(el), f = keepField(el), v = r[f], fmt = el.dataset.fmt;
+  if (el.hasAttribute('data-warn')) el.classList.toggle('os-warn', +v > 0);
+  if (fmt === 'signed') return actSigned(v);
+  if (fmt === 'wk') return actWk(v);
+  return v == null ? '—' : OS.num(v);
+}));
+// the like-for-like change, with how many people it compares, or why there is none
+dash.draw('kpi-act-lfl', (el) => OS.value(el, ['act_kpi'], () => {
+  const r = actRow(el), f = keepField(el), v = r[f];
+  if (f === 'emailsChg' && r.mailHidden) return 'not visible with your access';
+  if (v == null) return 'no like-for-like change yet';
+  return actSigned(v) + ' like-for-like (' + OS.num(f === 'emailsChg' ? r.lflMailReps : r.lflMeetReps) + ' people)';
+}));
+// what the viewer's Salesforce access hides, as a sentence (hidden when nothing is)
+dash.draw('act-access', (el) => {
+  const g = actGlobal();
+  el.textContent = !g ? '' : g.limited ? 'Your Salesforce access shows activity for ' + OS.num(g.visibleSellers) + ' of ' + OS.num(g.sellers) + ' sellers; the rest show Not visible.'
+    : g.mailHidden ? 'Your access shows meetings but almost no captured emails, so emails show —.'
+    : g.meetHidden ? 'Your access shows emails but almost no meetings, so meeting counts read low.' : '';
+  el.hidden = !el.textContent;
+});
+
+// ----- people -----
+const actPrepAsk = (r) => {
+  const chg = r.coreChg != null ? ACT_CORE[r.coreLabel] + ' ' + actSigned(r.coreChg) + ' like-for-like' : 'no like-for-like change: ' + (r.trendNote || 'not compared');
+  const em = r.emails == null ? 'emails not visible with my access' : OS.num(r.emails) + ' emails sent to ' + OS.num(r.people) + ' people at ' + OS.num(r.accounts) + ' accounts';
+  return actAsk('Prep 1:1 on activity: ' + r.name, 'Before my 1:1 with ' + actWho(r) + ', help me read their selling activity from the EMEA RevOps OS. Last 4 weeks (28 days to yesterday): '
+    + OS.num(r.meetings) + ' external meetings (' + OS.num(r.meetCust) + ' with customers, ' + OS.num(r.meetPros) + ' with prospects), ' + OS.num(r.booked) + ' booked for the next 2 weeks, ' + em + '. The 4 weeks before: '
+    + OS.num(r.meetPrev) + ' meetings, ' + (r.emails == null ? 'emails not visible' : OS.num(r.emailsPrev) + ' emails') + ' (' + chg + (r.emailsChg != null ? ', emails ' + actSigned(r.emailsChg) : '') + '). Last email ' + actTs(r.lastMail) + '; last meeting ' + actTs(r.lastMeet)
+    + '. Flags: ' + ((r.flags || []).join(', ') || 'none') + '.' + actOwner(r) + ' With my Salesforce access, break the last 8 weeks down by week: sent emails captured from their mailbox, external meetings (one per start time) with customers and prospects, and any Outreach calls and LinkedIn steps. Say what changed and suggest 2 or 3 questions for the 1:1.' + ACT_GUARD,
+  { person: r.name, userId: r.userId });
+};
+const actCaptureWhat = (r) => (r.status === 'No capture' ? (r.mailHidden ? 'no external meeting captured in the last 4 weeks (emails not visible with my access)' : r.meetHidden ? 'no sent email captured in the last 4 weeks (meetings not visible with my access)' : 'no sent email and no external meeting captured in the last 4 weeks')
+  : r.mailOff ? (r.emails === 0 ? OS.num(r.meetings) + ' meetings but no sent email captured in 4 weeks' : 'no sent email captured since ' + actTs(r.lastMail) + ' while meetings continue')
+  : r.calOff ? (r.meetings === 0 ? OS.num(r.emails) + ' emails sent but no external meeting captured in 4 weeks' : 'no external meeting captured since ' + actTs(r.lastMeet) + ' while emails continue') : 'a capture gap');
+const actStatusAsk = (r) => {
+  if (r.status === 'Quiet') return actAsk('Draft a check-in: ' + r.name, r.name + ' has no sent email or external meeting captured since ' + actTs(r.lastTouch) + ' (' + actBd(r.idle) + '). They may be away or working outside Salesforce. Draft a short, friendly Slack message from me asking how things are going and whether anything is blocking them, without mentioning customers. Show me the message and the recipient and wait for my OK before sending.', { person: r.name, userId: r.userId });
+  if (r.status === 'Nothing booked') return actAsk('Plan the next 2 weeks: ' + r.name, 'Read only: for ' + actWho(r) + ', count ' + (r.kind === 'EM' ? 'customer' : 'prospect') + ' meetings held per week over the last 8 weeks and booked per week for the next 4 (counts only), and suggest how they could fill the next 2 weeks. Don\'t contact anyone or change anything.' + actOwner(r) + ACT_GUARD, { person: r.name, userId: r.userId });
+  if (r.status === 'No capture' || r.status === 'Capture gap') return actAsk('Check capture: ' + r.name, 'The EMEA RevOps OS shows ' + actCaptureWhat(r) + ' for ' + actWho(r) + (r.joined ? ', in Salesforce or at Legora since ' + OS.day(r.joined) : '') + '. With my Salesforce access, count their captured sent emails and external calendar events per week over the last 12 weeks (counts only), say whether mailbox or calendar capture looks off and when it stopped, and draft a short note to RevOps with the facts. Show me the draft and wait for my OK before sending; change no settings or records.' + actOwner(r) + ACT_GUARD, { person: r.name, userId: r.userId });
+  return null;
+};
+const actActs = (r) => {
+  const box = OS.el('span', 'row-acts');
+  const sf = r.userId ? OS.links.sf('User', r.userId) : null;
+  if (sf) box.append(sf);
+  const ask = r.status === 'Left' || r.status === 'Not visible' ? null : actPrepAsk(r);
+  if (ask) box.append(ask);
+  return box.children.length ? box : null;
+};
+const actTouchTip = (r) => [r.idle != null ? actBd(r.idle) + ' with nothing captured since' : '', 'last email ' + actTs(r.lastMail), 'last meeting ' + actTs(r.lastMeet), r.nextMeet ? 'next meeting booked ' + actTs(r.nextMeet) : 'no meeting booked'].filter(Boolean).join(' · ');
+const actRows = () => {
+  const p = dash.params();
+  return (dash.data('act_reps').data || []).filter((r) => inTeam(r) && (!p.actRole || r.kind === p.actRole) && (!p.actLook || actNeedsLook(r)) && (p.actLeft || r.status !== 'Left'))
+    .map((r) => ({ ...r, statusTxt: actLabel(r.status) }));
+};
+OS.defTable('act-table', ['act_reps'], actRows, [
+  { f: 'name', person: (r) => r.name, after: actActs },
+  { f: 'region' },
+  { f: 'kind' },
+  { f: 'meetings', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.meetings), tip: (r) => OS.num(r.events) + ' calendar records, ' + OS.num(r.dupes) + ' repeats removed' },
+  { f: 'meetCust', fmt: OS.num, num: true },
+  { f: 'meetPros', fmt: OS.num, num: true },
+  { f: 'coreChg', fmt: actSigned, num: true, cls: (v, r) => (r.trigger === 'meetings' ? 'os-bad' : ''), tip: (r) => (r.coreChg != null ? OS.num(r.coreNow) + ' vs ' + OS.num(r.corePrev) + ' ' + ACT_CORE[r.coreLabel] : r.trendNote || '') },
+  { f: 'booked', fmt: OS.num, num: true, cls: (v, r) => ((r.flags || []).includes('Nothing booked') ? 'os-warn' : ''), tip: (r) => OS.num(r.bookedCust) + ' with customers · ' + OS.num(r.bookedPros) + ' with prospects' + (r.nextMeet ? ' · next ' + actTs(r.nextMeet) : '') },
+  { f: 'emails', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.emails || 0) },
+  { f: 'people', fmt: OS.num, num: true, tip: (r) => (r.accounts != null ? OS.num(r.accounts) + ' accounts emailed' : '') },
+  { f: 'emailsChg', fmt: actSigned, num: true, cls: (v, r) => (r.trigger === 'emails' ? 'os-bad' : ''), tip: (r) => (r.emailsChg != null ? OS.num(r.emails) + ' vs ' + OS.num(r.emailsPrev) : r.emails == null ? 'not visible with your access' : r.trendNote || '') },
+  { f: 'coreWk', fmt: actWk, num: true, cls: (v, r) => ((r.flags || []).includes('Below range') ? 'os-warn' : ''), tip: (r) => ACT_CORE[r.coreLabel] + ' a week' + (r.rangeLo != null && r.kind !== 'Leader' ? '; usual for ' + ACT_ROLE[r.kind] + ': ' + actWk(r.rangeLo) + '–' + actWk(r.rangeHi) : '') },
+  { f: 'lastTouch', fmt: actTs, cls: (v, r) => (r.status === 'Quiet' ? (r.idle >= 10 ? 'os-bad' : 'os-warn') : ''), tip: actTouchTip },
+  { f: 'statusTxt', fmt: (v) => v || '', chip: actChip, after: actStatusAsk },
+], { key: 'name', also: ['manager'] });
+
+// Monday summary for the scope: up to 6 of our own people per list, to stay under the request limit
+dash.draw('act-monday', (box) => {
+  const k = OS.state('act_kpi') === 'ok' ? (dash.data('act_kpi').data || []).find((r) => r.region === scopeKey()) : null;
+  const reps = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || []).filter((r) => inTeam(r) && r.active && r.kind !== 'Leader') : null;
+  if (!k || !reps) { box.replaceChildren(); return; }
+  const names = (f) => { const rs = reps.filter((r) => (r.flags || []).includes(f)); return rs.length ? rs.slice(0, 6).map((r) => r.name).join(', ') + (rs.length > 6 ? ' and ' + (rs.length - 6) + ' more' : '') : 'none'; };
+  const b = actAsk('Monday summary: activity, ' + ldTeamName(scopeKey()), 'Write a 5-bullet Monday-meeting summary of selling activity for ' + ldTeamName(scopeKey()) + ' from the EMEA RevOps OS: ' + OS.num(k.meetings) + ' external meetings (' + OS.num(k.meetCust) + ' with customers) and '
+    + (k.emails == null ? 'emails not visible with my access' : OS.num(k.emails) + ' emails') + ' in the last 4 weeks, ' + (k.meetChg != null ? 'meetings ' + actSigned(k.meetChg) + ' like-for-like (' + OS.num(k.lflMeetReps) + ' people compared)' : 'no like-for-like change yet') + ', ' + OS.num(k.booked) + ' booked for the next 2 weeks; quiet: ' + names('Quiet')
+    + '; slowing: ' + names('Slowing') + '; nothing booked: ' + names('Nothing booked') + '; nothing captured (check capture first): ' + names('No capture') + '. Name our own people only, no customer or prospect names. Draft it for Slack and wait for my OK before posting.', { team: scopeKey() });
+  if (b) { b.classList.remove('ibtn'); b.classList.add('btn'); b.append('Monday summary'); }
+  box.replaceChildren(...(b ? [b] : []));
+});
+
+// ----- usual range by role (all EMEA) -----
+const actRange = (r, f, fmt) => (r[f + '25'] == null ? '—' : fmt(r[f + '25']) + '–' + fmt(r[f + '75']) + ' (' + fmt(r[f + 'Med']) + ')');
+OS.defTable('act-range-table', ['act_ranges'], () => (dash.data('act_ranges').data || []).map((r) => ({ ...r,
+  coreRange: actRange(r, 'coreWk', actWk), meetRange: actRange(r, 'meetWk', actWk), custRange: actRange(r, 'custMeetWk', actWk), prosRange: actRange(r, 'prosMeetWk', actWk),
+  emailsRange: actRange(r, 'emailsWk', OS.num), peopleRange: actRange(r, 'people', OS.num) })), [
+  { f: 'label' },
+  { f: 'n', fmt: OS.num, num: true },
+  { f: 'coreRange', num: true, after: (r) => OS.el('span', 'act-sub', r.coreLabel) },
+  { f: 'meetRange', num: true }, { f: 'custRange', num: true }, { f: 'prosRange', num: true },
+  { f: 'emailsRange', num: true }, { f: 'peopleRange', num: true },
+], { key: 'kind' });
+
+// ----- how far to trust these numbers (all EMEA) -----
+OS.defList('act-trust-list', ['act_trust'], () => dash.data('act_trust').data || [], (rows) => rows.map((t) => {
+  const li = OS.el('li', 'itm');
+  li.dataset.key = t.id;
+  const main = OS.el('div', 'itm-main');
+  const val = t.value == null ? '—' : OS.num(t.value);
+  main.append(OS.el('span', 'itm-title', t.measure + ': ' + val), OS.el('span', 'itm-detail', t.detail));
+  const meta = OS.el('div', 'itm-meta');
+  const ask = actAsk('Explain: ' + t.measure, 'Explain how "' + t.measure + '" (' + val + ') is worked out on the EMEA RevOps OS Activity view. The dashboard says: ' + t.detail + ' If it looks off, check it with my Salesforce access.' + ACT_GUARD, { check: t.id });
+  if (ask) meta.append(ask);
+  li.append(OS.el('span', 'itm-dot ' + (LD_SEV[t.severity] || 'low')), main, meta);
+  return li;
+}));
+
+// ----- BDRs (Created opps › BDRs, all EMEA) -----
+const actBdrSum = () => {
+  const rs = (dash.data('act_bdr').data || []).filter((b) => b.active);
+  const big = rs.filter((b) => b.people != null && b.people >= 50);
+  const pe = big.reduce((s, b) => s + b.people, 0);
+  return { n: rs.filter((b) => b.role === 'BDR-EMEA').length, people: rs.some((b) => b.people != null) ? rs.reduce((s, b) => s + (b.people || 0), 0) : null,
+    meetPros: rs.reduce((s, b) => s + (b.meetPros || 0), 0), per100: pe ? big.reduce((s, b) => s + (b.meetPros || 0), 0) / pe * 100 : null };
+};
+dash.draw('kpi-act-bdr', (el) => OS.value(el, ['act_bdr'], () => {
+  const v = actBdrSum()[el.dataset.k];
+  return v == null ? '—' : el.dataset.k === 'per100' ? actWk(v) : OS.num(v);
+}));
+const crBdrSum = () => (dash.data('cr_bdrs').data || []).reduce((a, b) => ({ thisOpps: a.thisOpps + (+b.thisOpps || 0), thisArr: a.thisArr + (+b.thisArr || 0), lastOpps: a.lastOpps + (+b.lastOpps || 0) }), { thisOpps: 0, thisArr: 0, lastOpps: 0 });
+dash.draw('kpi-cr-bdr', (el) => OS.value(el, ['cr_bdrs'], () => { const v = crBdrSum()[el.dataset.k]; return el.dataset.k === 'thisArr' ? OS.usd(v) : OS.num(v); }));
+const actBdrAsk = (r) => actAsk('Funnel review: ' + r.name, 'From the EMEA RevOps OS: in the last 4 weeks ' + r.name + ' emailed ' + (r.people == null ? 'an unknown number of (not visible with my access)' : OS.num(r.people)) + ' people (' + (r.emails == null ? 'emails not visible' : OS.num(r.emails) + ' emails, ' + (r.emailsChg != null ? actSigned(r.emailsChg) + ' like-for-like' : 'no like-for-like change')) + '), held '
+  + OS.num(r.meetPros) + ' prospect meetings (' + (r.prosChg != null ? actSigned(r.prosChg) + ' like-for-like' : 'no like-for-like change') + ') and has ' + OS.num(r.bookedPros) + ' booked for the next 2 weeks; they sourced ' + OS.num(r.thisOpps) + ' opportunities this quarter (' + OS.num(r.lastOpps) + ' last quarter).' + actOwner(r)
+  + ' With my Salesforce access, add their Outreach sequence emails, LinkedIn steps and calls per week for the last 8 weeks (counts by week and step type only, no sequence, contact or company names) and where people drop out between email, meeting and opportunity. Suggest one or two changes to try.' + ACT_GUARD, { person: r.name, userId: r.userId });
+OS.defTable('act-bdr-table', ['act_bdr'], () => (dash.data('act_bdr').data || []).map((r) => ({ ...r, statusTxt: actLabel(r.status) })), [
+  { f: 'name', person: (r) => r.name, after: (r) => { const box = OS.el('span', 'row-acts'); const sf = r.userId ? OS.links.sf('User', r.userId) : null; if (sf) box.append(sf); const a = r.active ? actBdrAsk(r) : null; if (a) box.append(a); return box.children.length ? box : null; } },
+  { f: 'manager' },
+  { f: 'people', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.people || 0) },
+  { f: 'emails', fmt: OS.num, num: true },
+  { f: 'emailsChg', fmt: actSigned, num: true, tip: (r) => (r.emailsChg != null ? OS.num(r.emails) + ' vs ' + OS.num(r.emailsPrev) : '') },
+  { f: 'meetPros', fmt: OS.num, num: true },
+  { f: 'prosChg', fmt: actSigned, num: true, tip: (r) => (r.prosChg != null ? OS.num(r.meetPros) + ' vs ' + OS.num(r.meetProsPrev) : '') },
+  { f: 'bookedPros', fmt: OS.num, num: true },
+  { f: 'meetPer100', fmt: actWk, num: true, tip: () => 'prospect meetings per 100 people emailed, same 4 weeks; — under 50 people' },
+  { f: 'lastTouch', fmt: actTs, tip: (r) => (r.idle != null ? actBd(r.idle) + ' with nothing captured since' : '') },
+  { f: 'thisOpps', fmt: OS.num, num: true, bar: (l) => d3.max(l, (r) => r.thisOpps) },
+  { f: 'thisArr', fmt: OS.usd, num: true },
+  { f: 'lastOpps', fmt: OS.num, num: true },
+  { f: 'statusTxt', fmt: (v) => v || '', chip: actChip },
+], { key: 'name', also: ['manager'] });
+// capacity at the current pace, from the BDR numbers above
+dash.draw('act-bdr-plan', (box) => {
+  if (OS.state('act_bdr') !== 'ok' || OS.state('cr_bdrs') !== 'ok') { box.replaceChildren(); return; }
+  const s = actBdrSum(), c = crBdrSum();
+  const now = new Date(), qEnd = Date.UTC(now.getUTCFullYear(), Math.floor(now.getUTCMonth() / 3) * 3 + 3, 1);
+  const weeks = Math.max(0, Math.ceil((qEnd - now.getTime()) / (7 * 864e5)));
+  const b = actAsk('Plan BDR capacity', 'From the EMEA RevOps OS, EMEA BDRs: ' + OS.num(s.n) + ' active, ' + (s.people == null ? 'people emailed not visible with my access' : OS.num(s.people) + ' people emailed') + ' and ' + OS.num(s.meetPros) + ' prospect meetings in the last 4 weeks, ' + OS.num(c.thisOpps) + ' opportunities sourced this quarter (' + OS.num(c.lastOpps) + ' last quarter), '
+    + OS.num(weeks) + ' weeks to quarter end. With my Salesforce access, project opportunities sourced by quarter end at the current weekly pace and say how many prospect meetings a week the team would need to match last quarter.' + ACT_GUARD, { team: 'BDR' });
+  if (b) { b.classList.remove('ibtn'); b.classList.add('btn'); b.append('Plan BDR capacity'); }
+  box.replaceChildren(...(b ? [b] : []));
+});
+
+// ----- person panel -----
+const actRep = () => rowFor('act_reps');
+const actPersonValue = (fn) => (el) => {
+  const r = actRep();
+  if (r && el.dataset.f) { el.dataset.field = el.dataset.f; setWhere(el, 'name', r.name); } else { delete el.dataset.field; delete el.dataset.where; }
+  OS.value(el, ['act_reps'], () => (r ? fn(r, el) : '—'));
+};
+dash.draw('pd-act-ts', actPersonValue((r, el) => actTs(r[el.dataset.f])));
+dash.draw('pd-act-chg', actPersonValue((r, el) => (r[el.dataset.f] != null ? actSigned(r[el.dataset.f]) + (el.dataset.f === 'coreChg' ? ' (' + OS.num(r.coreNow) + ' vs ' + OS.num(r.corePrev) + ' ' + ACT_CORE[r.coreLabel] + ')' : ' (' + OS.num(r.emails) + ' vs ' + OS.num(r.emailsPrev) + ')')
+  : r.emails == null && el.dataset.f === 'emailsChg' ? 'not visible with your access' : r.trendNote || '—')));
+dash.draw('pd-act-meet', actPersonValue((r) => OS.num(r.meetings) + ' (' + OS.num(r.meetCust) + ' customer · ' + OS.num(r.meetPros) + ' prospect)'));
+dash.draw('pd-act-usual', actPersonValue((r) => (r.rangeLo != null && r.kind !== 'Leader' && ACT_ROLE[r.kind] ? ACT_ROLE[r.kind] + ': ' + actWk(r.rangeLo) + '–' + actWk(r.rangeHi) + ' ' + ACT_CORE[r.coreLabel] + ' a week; theirs ' + actWk(r.coreWk) : '—')));
+dash.draw('pd-act-em', (el) => {
+  const r = actRep(), p = rowFor('person');
+  OS.value(el, ['act_reps'], () => (r ? OS.num(r.custMet) + (p && p.emCustomers != null ? ' of ' + OS.num(p.emCustomers) + ' in their Engagement Manager book' : '') : '—'));
+});

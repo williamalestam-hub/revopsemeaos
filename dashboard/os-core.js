@@ -38,7 +38,7 @@ const sfRows = ({ answer, args }, capped = true) => {
   'rr_members', 'rr_assign', 'roster',
   'bk_owner', 'bk_pipe', 'bk_em', 'bk_terr', 'bk_orphans', 'bk_books', 'deals', 'pipe_slips', 'pipe_edits', 'pipe_early', 'pipe_nocontact', 'closed_rep', 'cr_owner_m', 'pipe_nextstep',
   'users_all', 'mv_outcomes', 'mv_created', 'mv_close', 'age_stuck', 'cycle_team', 'coverage_base', 'bk_stale', 'bk_em_cover', 'lv_opps', 'lv_leads',
-  'ld_ready', 'ld_handoffs', 'ld_inflow', 'ld_open',
+  'ld_ready', 'ld_handoffs', 'ld_inflow', 'ld_open', 'act_mail', 'act_mail_prev', 'act_meet', 'act_meet_prev',
 ].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped); marked cut when the answer fills the query\'s LIMIT', fn: (x) => sfRows(x) }));
 // the largest deals and renewals: the LIMIT is the point of the query, not a cut
 ['top_deals', 'top_renewals'].forEach((id) => dash.loader(id, { description: 'Salesforce records as rows (the attributes key dropped); the 300 largest by design', fn: (x) => sfRows(x, false) }));
@@ -375,7 +375,7 @@ window.OS = (() => {
   };
 
   // ----- tables: the tbody holds only data rows; messages go in the table's tfoot drawing -----
-  // cols: [{f, fmt?, num?, bar?: (list)=>max, chip?: (v,row)=>cls, cls?, wrap?, person?: (row)=>name (none: plain text), tip?: (row)=>title, after?: (row)=>node}]
+  // cols: [{f, fmt?, num?, bar?: (list)=>max, chip?: (v,row)=>cls (no chip when fmt gives ''), cls?, wrap?, person?: (row)=>name (none: plain text), tip?: (row)=>title, after?: (row)=>node}]
   const tableRows = (name) => {
     const t = tables[name];
     const s = state(...t.ids());
@@ -418,7 +418,7 @@ window.OS = (() => {
             String(v || '').split(', ').filter(Boolean).forEach((x, i) => { if (i) td.appendChild(el('span', 'chip-sep', ', ')); td.appendChild(el('span', 'chip ' + c.chips(x), x)); });
             if (!v) td.textContent = '—';
           } else if (c.chip) {
-            td.appendChild(el('span', 'chip ' + c.chip(v, r), txt));
+            if (txt !== '') td.appendChild(el('span', 'chip ' + c.chip(v, r), txt)); // a blank status (fmt gives '') shows no chip
           } else if (c.bar) {
             const wrap = el('div', 'os-bar-cell');
             const bar = el('i');
@@ -646,7 +646,7 @@ window.OS = (() => {
 // click; the platform asks them to confirm). The page itself never writes to Salesforce, LeanData, mail or calendars.
 OS.ask = (() => {
   let room = null, mode = 'off';
-  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table'];
+  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table', 'act-table', 'act-monday', 'act-trust-list', 'act-bdr-table', 'act-bdr-plan'];
   const refresh = async () => {
     if (!room || typeof room.canSendToClaudeSession !== 'function') return;
     let m = 'off';
@@ -734,8 +734,9 @@ OS.links = (() => {
 
 // ---------- Data checks ----------
 // Every check source that has loaded, in the scope picked: Salesforce (checks), LeanData routing (checks_rr), HiBob
-// (checks_hb), leavers' leads (checks_lv) and leads (checks_ld, checks_ld_rt, checks_ld_cap). Each is its own calc, so one failing leaves the rest.
-OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap'];
+// (checks_hb), leavers' leads (checks_lv), leads (checks_ld, checks_ld_rt, checks_ld_cap) and activity capture (checks_act).
+// Each is its own calc, so one failing leaves the rest.
+OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act'];
 OS.checkRows = () => {
   const p = dash.params();
   const rank = { high: 0, medium: 1, low: 2 };
@@ -929,9 +930,10 @@ OS.oo = (() => {
     const dayTxt = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     return dayTxt + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   };
-  // an agenda's numbers and talking points: the core ones plus routing (oo_points_rr) once LeanData has loaded
+  // an agenda's numbers and talking points: the core ones, plus routing (oo_points_rr) and selling activity
+  // (oo_points_act) once each has loaded; activity orders after the rest within a severity
   const RANK = { high: 0, medium: 1, low: 2, '': 3 };
-  const points = (email) => rowsOf('oo_points').concat(rowsOf('oo_points_rr')).filter((r) => r.email === email)
+  const points = (email) => rowsOf('oo_points').concat(rowsOf('oo_points_rr'), rowsOf('oo_points_act')).filter((r) => r.email === email)
     .sort((a, b) => (a.section === b.section ? 0 : a.section === 'numbers' ? -1 : 1) || (RANK[a.sev] ?? 3) - (RANK[b.sev] ?? 3) || a.order - b.order);
   const text = () => {
     const email = who();
@@ -1069,7 +1071,7 @@ OS.oo = (() => {
   // plain-text summaries for Slack: built from the data already loaded on screen
   const rowOf = (id, pick) => (OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
   // the sources the weekly summary reads; Home loads them while it is open, and the copy button waits for them
-  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'orphan_kpi', 'engagement_kpi', 'gr_actions'];
+  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'act_kpi', 'orphan_kpi', 'engagement_kpi', 'gr_actions'];
   const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
   const weeklySummary = () => {
     const p = dash.params();
@@ -1089,6 +1091,7 @@ OS.oo = (() => {
     const eng = rowOf('engagement_kpi', (r) => r.region === scope);
     const ld = rowOf('ld_kpi', (r) => r.region === scope);
     const ldRt = rowOf('ld_kpi_rt', (r) => r.region === scope);
+    const act = rowOf('act_kpi', (r) => r.region === scope);
     const x = (v) => (v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '×');
     const signed = (v) => (v < 0 ? '−' : '+') + OS.usd(Math.abs(v));
     const n = (v, one, many) => OS.num(v) + ' ' + (v === 1 ? one : many);
@@ -1126,6 +1129,14 @@ OS.oo = (() => {
       : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : !ld.lEligible && ld.notScored > 0 ? 'speed not timed for SMB-owned leads (automation moves them out of Ready)' : 'no timed demo requests in the last 30 days';
     if (ld) { if (ld.handoffs || ld.readyNow) add(`• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
     else add(na('Leads', 'ld_kpi'));
+    if (act) {
+      if (act.meetings || act.emails || act.sellers) {
+        const sg = (v) => (v < 0 ? '−' : '+') + Math.abs(Math.round(v * 100)) + '%';
+        add(`• Activity, last 4 weeks: ${n(act.meetings, 'external meeting', 'external meetings')} (${OS.num(act.meetCust)} with customers), ${OS.num(act.booked)} booked for the next 2 weeks${act.emails != null ? `, ${n(act.emails, 'email', 'emails')} sent` : ''}`
+          + `${act.meetChg != null ? `; meetings ${sg(act.meetChg)} like-for-like (${n(act.lflMeetReps, 'person', 'people')} compared)` : ''}`
+          + `; ${OS.num(act.quiet)} quiet, ${OS.num(act.slowing)} slowing, ${OS.num(act.nothingBooked)} with nothing booked, ${OS.num(act.noCapture)} with nothing captured`);
+      }
+    } else add(na('Activity', 'act_kpi'));
     if (orph && !p.mgr && (!p.region || p.region === 'All')) add(`• Account books: ${OS.num(orph.accounts)} orphan active accounts (${OS.usd(orph.arr)} ARR), ${OS.num(orph.splitBooks)} split books`);
     if (eng) { if (eng.untouched) add(`• Engagement: ${n(eng.untouched, 'active account', 'active accounts')} untouched in 90 days${eng.share != null ? ' (' + OS.pct(eng.share) + ' of the active book)' : ''}, ${n(eng.noEm, 'customer', 'customers')} without an Engagement Manager`); }
     else add(na('Engagement', 'engagement_kpi'));
@@ -1149,7 +1160,7 @@ OS.oo = (() => {
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.scope')) scopeOpen(false);
-    const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], [data-ld-ready], [data-ld-prob], th[data-sort]');
+    const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], [data-ld-ready], [data-ld-prob], [data-act-role], [data-act-look], [data-act-left], th[data-sort]');
     if (!t) return;
     if (t.matches('[data-ask]')) {
       let data = null;
@@ -1184,6 +1195,7 @@ OS.oo = (() => {
     if (t.matches('[data-gr-done]')) { dash.setParams({ grShowDone: !dash.params().grShowDone }); return; }
     if (t.matches('[data-nav]')) {
       if (t.dataset.grOwner) dash.setParams({ grOwner: t.dataset.grOwner });
+      if (t.dataset.navArea) dash.setParams({ checkArea: t.dataset.navArea });
       if (t.dataset.fill) {
         document.querySelectorAll('input[data-search]').forEach((inp) => {
           if (inp.dataset.search === t.dataset.fill) { inp.value = t.dataset.fillValue || ''; OS.queries[t.dataset.fill] = inp.value; }
@@ -1218,6 +1230,10 @@ OS.oo = (() => {
     if (t.matches('[data-renew-flag]')) { dash.setParams({ renewFlag: t.dataset.renewFlag }); return; }
     if (t.matches('[data-ld-ready]')) { dash.setParams({ ldReady: t.dataset.ldReady }); return; }
     if (t.matches('[data-ld-prob]')) { dash.setParams({ ldProb: t.dataset.ldProb }); return; }
+    if (t.matches('[data-act-role]')) { dash.setParams({ actRole: t.dataset.actRole }); return; }
+    // the Need a look tile turns the filter on; the chip toggles it
+    if (t.matches('[data-act-look]')) { dash.setParams({ actLook: t.dataset.actLook === 'on' ? true : !dash.params().actLook }); return; }
+    if (t.matches('[data-act-left]')) { dash.setParams({ actLeft: !dash.params().actLeft }); return; }
     if (t.matches('th[data-sort]')) {
       const tbl = t.closest('table[data-sortable]');
       if (!tbl) return;
@@ -1296,6 +1312,9 @@ OS.oo = (() => {
     pressed('[data-renew-flag]', 'renewFlag', p.renewFlag || '');
     pressed('[data-ld-ready]', 'ldReady', p.ldReady || '');
     pressed('[data-ld-prob]', 'ldProb', p.ldProb || '');
+    pressed('[data-act-role]', 'actRole', p.actRole || '');
+    document.querySelectorAll('.fchip[data-act-look]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.actLook)));
+    document.querySelectorAll('[data-act-left]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.actLeft)));
     pressed('[data-gr-group]', 'grGroup', p.grGroup || 'meeting');
     document.querySelectorAll('[data-gr-11]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.gr11)));
     document.querySelectorAll('[data-gr-due]').forEach((b) => b.setAttribute('aria-pressed', String(!!p.grDue)));
@@ -1366,6 +1385,11 @@ OS.oo = (() => {
       document.querySelectorAll('[data-pd-team]').forEach((n) => { n.hidden = !hasTeam; });
       const ldRep = OS.state('ld_reps') === 'ok' ? (dash.data('ld_reps').data || []).find((r) => r.name === p.person) : null;
       document.querySelectorAll('[data-pd-leads]').forEach((n) => { n.hidden = !(ldRep && (ldRep.handoffs || ldRep.readyNow)); });
+      // selling activity: EMEA sellers only; a note when the viewer's access shows none of theirs
+      const actRep = OS.state('act_reps') === 'ok' ? (dash.data('act_reps').data || []).find((r) => r.name === p.person) || null : null;
+      document.querySelectorAll('[data-pd-act]').forEach((n) => { n.hidden = !actRep; });
+      document.querySelectorAll('[data-pd-act-note]').forEach((n) => { n.hidden = !(actRep && actRep.status === 'Not visible'); });
+      document.querySelectorAll('[data-pd-act-em]').forEach((n) => { n.hidden = !(actRep && actRep.kind === 'EM'); });
       // open deals: point the deals query at this person, and show the section once it has
       if (row && row.userId && p.dealOwnerId !== row.userId) dash.setParams({ dealOwnerId: row.userId });
       document.querySelectorAll('[data-pd-deals]').forEach((n) => { n.hidden = !(row && row.userId && p.dealOwnerId === row.userId); });

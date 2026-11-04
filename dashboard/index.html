@@ -101,6 +101,7 @@
           <li><button class="pal-item pal-go" type="button" data-nav="actions" data-nav-view="checks"><span class="pal-kind">Go to</span><span class="pal-label">Action items › Data checks</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="oneonone" data-nav-view="upcoming"><span class="pal-kind">Go to</span><span class="pal-label">1:1s › Agendas</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="oneonone" data-nav-view="team"><span class="pal-kind">Go to</span><span class="pal-label">1:1s › Team scorecard</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="oneonone" data-nav-view="activity"><span class="pal-kind">Go to</span><span class="pal-label">1:1s › Activity</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="pipeline" data-nav-view="teams"><span class="pal-kind">Go to</span><span class="pal-label">Pipeline › By team</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="pipeline" data-nav-view="forecast"><span class="pal-kind">Go to</span><span class="pal-label">Pipeline › Forecast</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="pipeline" data-nav-view="bookings"><span class="pal-kind">Go to</span><span class="pal-label">Pipeline › Bookings and win rate</span><span class="pal-sub"></span></button></li>
@@ -370,6 +371,7 @@
               <button class="fchip" type="button" data-check-area="Books" aria-pressed="false">Books</button>
               <button class="fchip" type="button" data-check-area="Leavers" aria-pressed="false">Leavers</button>
               <button class="fchip" type="button" data-check-area="Leads" aria-pressed="false">Leads</button>
+              <button class="fchip" type="button" data-check-area="Activity" aria-pressed="false">Activity</button>
             </div>
             <div class="tools">
               <p class="pane-note">Click a name to open the person, or the arrow to go to the screen.</p>
@@ -400,6 +402,7 @@
       <div class="vtabs" role="tablist" aria-label="1:1 views">
         <button class="vtab" role="tab" type="button" data-view-tab="oneonone:upcoming" aria-selected="true">Agendas</button>
         <button class="vtab" role="tab" type="button" data-view-tab="oneonone:team" aria-selected="false">Team scorecard</button>
+        <button class="vtab" role="tab" type="button" data-view-tab="oneonone:activity" aria-selected="false">Activity</button>
       </div>
 
       <div class="view" id="oneonone-upcoming" data-view-panel="oneonone:upcoming">
@@ -422,7 +425,7 @@
           <div class="pane" id="oo-agenda">
             <div class="pane-head">
               <div><h2 class="pane-title" data-draw="oo-who" data-source="team_tree oo_upcoming">—</h2><p class="pane-note"><span data-draw="oo-when" data-source="oo_upcoming">—</span><span data-oo-note="nobooking" hidden>No 1:1 with them in the next 14 days.</span></p></div>
-              <div class="tools"><button class="btn btn-primary" type="button" data-ask-agenda hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>Send to Claude</button><span data-draw="oo-mail" data-source="oo_points oo_followups"></span>
+              <div class="tools"><button class="btn btn-primary" type="button" data-ask-agenda hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>Send to Claude</button><span data-draw="oo-mail" data-source="oo_points oo_points_rr oo_points_act oo_followups"></span>
               <button class="ibtn" type="button" data-copy-agenda aria-label="Copy agenda" title="Copy the agenda for the invite, your notes or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
             </div>
             <div class="pane-body ag">
@@ -439,7 +442,7 @@
               </section>
               <section class="ag-sec">
                 <h3>Numbers</h3>
-                <ul class="ag-bullets" data-draw="oo-numbers" data-source="oo_points"></ul>
+                <ul class="ag-bullets" data-draw="oo-numbers" data-source="oo_points oo_points_act"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-numbers"></span>
                   <p class="os-empty" data-msg-for="oo-numbers" data-msg="empty" hidden>They aren't in EMEA sales in Salesforce, and nobody in EMEA sales reports to them, so there are no numbers.</p>
                   <p class="os-empty" data-msg-for="oo-numbers" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see their numbers.</p>
@@ -447,9 +450,9 @@
               </section>
               <section class="ag-sec">
                 <h3>Talking points</h3>
-                <ul class="ag-bullets ag-talk" data-draw="oo-talk" data-source="oo_points oo_points_rr"></ul>
+                <ul class="ag-bullets ag-talk" data-draw="oo-talk" data-source="oo_points oo_points_rr oo_points_act"></ul>
                 <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="oo-talk"></span>
-                  <p class="os-empty" data-msg-for="oo-talk" data-msg="empty" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance or data checks.</p>
+                  <p class="os-empty" data-msg-for="oo-talk" data-msg="empty" hidden>Nothing flagged: no past-due or slipping deals, routing gaps, book imbalance, data checks or activity to talk about.</p>
                 </div>
               </section>
             </div>
@@ -475,9 +478,10 @@
             <div class="stat"><span class="stat-label">Won this quarter</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="wonThisArr" data-fmt="usd">—</b></span><span class="stat-sub">win rate <b data-draw="kpi-team" data-source="team_tree" data-field="winRate" data-fmt="pct">—</b></span></div>
             <div class="stat"><span class="stat-label">Past due</span><span class="stat-value"><b data-draw="kpi-team" data-source="team_tree" data-field="pastDue">—</b></span><span class="stat-sub">opps past their close date</span></div>
             <div class="stat"><span class="stat-label">Routing gaps</span><span class="stat-value"><b data-draw="kpi-team-rr" data-source="team_rr" data-field="routingGaps">—</b></span><span class="stat-sub"><b data-draw="kpi-team" data-source="team_tree" data-field="checks">—</b> data checks</span></div>
+            <div class="stat"><span class="stat-label">Meetings, last 4 weeks</span><span class="stat-value"><b data-draw="kpi-team-act" data-source="team_act" data-field="actMeetings">—</b></span><span class="stat-sub"><b data-draw="kpi-team-act" data-source="team_act" data-field="actBooked">—</b> booked for the next 2 weeks · <b data-draw="kpi-team-act" data-source="team_act" data-field="actQuiet">—</b> quiet</span></div>
           </div>
           <div class="pane-scroll">
-            <table class="tbl" data-source="team_tree team_rr" data-row-key="name">
+            <table class="tbl" data-source="team_tree team_rr team_act" data-row-key="name">
               <thead><tr>
                 <th data-field="name">Name</th>
                 <th data-field="region">Team</th>
@@ -489,6 +493,11 @@
                 <th class="num" data-field="winRate">Win rate</th>
                 <th class="num" data-field="pastDue">Past due</th>
                 <th class="num" data-field="riskReps">Reps at risk</th>
+                <th class="num" data-field="actMeetings">Meetings 4w</th>
+                <th class="num" data-field="actMeetPerSellerWk">Per seller/wk</th>
+                <th class="num" data-field="actMeetChg">Meetings vs before</th>
+                <th class="num" data-field="actBooked">Booked 2w</th>
+                <th class="num" data-field="actFlags">Activity flags</th>
                 <th class="num" data-field="routingGaps">Routing gaps</th>
                 <th class="num" data-field="checks">Data checks</th>
               </tr></thead>
@@ -500,6 +509,119 @@
               <p class="os-empty" data-msg-for="oo-team-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
               <p class="os-empty" data-msg-for="oo-team-table" data-msg="limit" hidden>Showing the first 400.</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="view" id="oneonone-activity" data-view-panel="oneonone:activity" hidden>
+        <div class="statbar">
+          <div class="stat" id="stat-act-meet"><span class="stat-label">External meetings, last 4 weeks</span><span class="stat-value"><b data-draw="kpi-act" data-source="act_kpi" data-field="meetings" data-where="region=All" data-fetchpriority="high">—</b></span><span class="stat-sub"><b data-draw="kpi-act" data-source="act_kpi" data-field="meetCust" data-where="region=All">—</b> with customers · <b data-draw="kpi-act" data-source="act_kpi" data-field="meetPros" data-where="region=All">—</b> with prospects · <b data-draw="kpi-act-lfl" data-source="act_kpi" data-field="meetChg" data-where="region=All">—</b></span></div>
+          <div class="stat" id="stat-act-booked"><span class="stat-label">Booked, next 2 weeks</span><span class="stat-value"><b data-draw="kpi-act" data-source="act_kpi" data-field="booked" data-where="region=All">—</b></span><span class="stat-sub"><b data-draw="kpi-act" data-source="act_kpi" data-field="bookedCust" data-where="region=All">—</b> with customers · <b data-draw="kpi-act" data-source="act_kpi" data-field="bookedPros" data-where="region=All">—</b> with prospects</span></div>
+          <div class="stat" id="stat-act-mail"><span class="stat-label">Emails sent, last 4 weeks</span><span class="stat-value"><b data-draw="kpi-act" data-source="act_kpi" data-field="emails" data-where="region=All">—</b></span><span class="stat-sub">to <b data-draw="kpi-act" data-source="act_kpi" data-field="people" data-where="region=All">—</b> people, counted per seller · <b data-draw="kpi-act-lfl" data-source="act_kpi" data-field="emailsChg" data-where="region=All">—</b></span></div>
+          <div class="stat" id="stat-act-rate"><span class="stat-label">Per seller a week</span><span class="stat-value"><b data-draw="kpi-act" data-source="act_kpi" data-field="meetPerSellerWk" data-fmt="wk" data-where="region=All">—</b> meetings</span><span class="stat-sub"><b data-draw="kpi-act" data-source="act_kpi" data-field="emailsPerSellerWk" data-where="region=All">—</b> emails · <b data-draw="kpi-act" data-source="act_kpi" data-field="captured" data-where="region=All">—</b> sellers with something captured</span></div>
+          <div class="stat" id="stat-act-look"><span class="stat-label">Need a look</span><span class="stat-value"><b data-draw="kpi-act" data-source="act_kpi" data-field="needLook" data-where="region=All" data-warn>—</b></span><span class="stat-sub"><b data-draw="kpi-act" data-source="act_kpi" data-field="quiet" data-where="region=All">—</b> quiet · <b data-draw="kpi-act" data-source="act_kpi" data-field="slowing" data-where="region=All">—</b> slowing · <b data-draw="kpi-act" data-source="act_kpi" data-field="nothingBooked" data-where="region=All">—</b> nothing booked · <b data-draw="kpi-act" data-source="act_kpi" data-field="belowRange" data-where="region=All">—</b> below range · <button class="lnk" type="button" data-act-look="on">Show them</button></span></div>
+          <div class="stat" id="stat-act-cap"><span class="stat-label">Check capture</span><span class="stat-value"><b data-draw="kpi-act" data-source="act_kpi" data-field="checkCapture" data-where="region=All" data-warn>—</b></span><span class="stat-sub">nothing captured or a capture gap · <button class="lnk" type="button" data-nav="actions" data-nav-view="checks" data-nav-area="Activity">See Data checks</button></span></div>
+        </div>
+        <div class="pane" id="act-people">
+          <div class="pane-head">
+            <div><h2 class="pane-title">People</h2><p class="pane-note">Sent emails captured from each seller's mailbox (Outreach sends included) and external meetings on their Salesforce calendar: the last 4 weeks (28 days to yesterday) against the 4 weeks before, and meetings booked for the next 2 weeks. Changes compare only people whose capture covered both windows. Calls and LinkedIn aren't counted: see How far to trust these numbers. Follows the scope pill.</p></div>
+            <div class="tools"><span data-draw="act-monday" data-source="act_kpi act_reps"></span><button class="ibtn" type="button" data-copy-table="act-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          </div>
+          <div class="pane-head">
+            <div class="tools" role="group" aria-label="Role">
+              <button class="fchip" type="button" data-act-role="" aria-pressed="true">All</button>
+              <button class="fchip" type="button" data-act-role="AE" aria-pressed="false">AE</button>
+              <button class="fchip" type="button" data-act-role="SMB" aria-pressed="false">SMB</button>
+              <button class="fchip" type="button" data-act-role="BDR" aria-pressed="false">BDR</button>
+              <button class="fchip" type="button" data-act-role="EM" aria-pressed="false">Engagement</button>
+              <button class="fchip" type="button" data-act-role="Leader" aria-pressed="false">Leaders</button>
+            </div>
+            <div class="tools" role="group" aria-label="Show">
+              <button class="fchip" type="button" data-act-look aria-pressed="false">Needs a look</button>
+              <button class="fchip" type="button" data-act-left aria-pressed="false">Show people who left</button>
+            </div>
+            <label class="search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input type="search" id="act-table-search" data-search="act-table" placeholder="Search people, teams or managers" aria-label="Search people"></label>
+          </div>
+          <p class="pd-note act-access" data-draw="act-access" data-source="act_reps" hidden></p>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="act_reps" data-row-key="name" data-sortable="act-table">
+              <thead><tr>
+                <th data-field="name" data-sort="name"><button type="button" class="th-sort">Name</button></th>
+                <th data-field="region" data-sort="region"><button type="button" class="th-sort">Team</button></th>
+                <th data-field="kind" data-sort="kind"><button type="button" class="th-sort">Role</button></th>
+                <th class="num" data-field="meetings" data-sort="meetings"><button type="button" class="th-sort">Meetings, 4 wks</button></th>
+                <th class="num" data-field="meetCust" data-sort="meetCust"><button type="button" class="th-sort">With customers</button></th>
+                <th class="num" data-field="meetPros" data-sort="meetPros"><button type="button" class="th-sort">With prospects</button></th>
+                <th class="num" data-field="coreChg" data-sort="coreChg"><button type="button" class="th-sort">Role's meetings vs before</button></th>
+                <th class="num" data-field="booked" data-sort="booked"><button type="button" class="th-sort">Booked, 2 wks</button></th>
+                <th class="num" data-field="emails" data-sort="emails"><button type="button" class="th-sort">Emails, 4 wks</button></th>
+                <th class="num" data-field="people" data-sort="people"><button type="button" class="th-sort">People emailed</button></th>
+                <th class="num" data-field="emailsChg" data-sort="emailsChg"><button type="button" class="th-sort">Emails vs before</button></th>
+                <th class="num" data-field="coreWk" data-sort="coreWk"><button type="button" class="th-sort">Role's meetings a week</button></th>
+                <th data-field="lastTouch" data-sort="lastTouch"><button type="button" class="th-sort">Last activity</button></th>
+                <th data-field="statusTxt" data-sort="rank"><button type="button" class="th-sort">Status</button></th>
+              </tr></thead>
+              <tbody data-draw="act-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="act-table"></span>
+              <p class="os-empty" data-msg-for="act-table" data-msg="empty" hidden>No EMEA sellers in this scope and filter.</p>
+              <p class="os-empty" data-msg-for="act-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="act-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include email messages, events or the Activity in Past field. Ask RevOps.</p>
+              <p class="os-empty" data-msg-for="act-table" data-msg="nomatch" hidden>Nothing matches your search.</p>
+              <p class="os-empty" data-msg-for="act-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
+          </div>
+          <div class="pane-foot"><p class="pane-note">Quiet: no sent email or external meeting captured for 5+ business days (Mon–Fri, Paris, no holidays); red from 10. Time off can't be seen, so ask first. Slowing: the role's meetings down 30% or more on the 4 weeks before, from at least 8 (a BDR's emails from at least 40) and by more than the normal swing. Nothing booked: no prospect meetings booked for the next 2 weeks after 4 or more in the last 4 (customer meetings for Engagement Managers). Below range: under the usual range for the role in both 4-week windows. New joiners (first 28 days) and leaders are shown, never flagged. Check capture means mailbox or calendar capture looks off: fix it before reading the numbers. The sparkle by a name preps a 1:1 on their activity; the one by a status drafts a check-in, a plan or a note to RevOps, and waits for your OK.</p></div>
+        </div>
+        <div class="pane" id="act-ranges">
+          <div class="pane-head"><div><h2 class="pane-title">Usual range by role <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">All EMEA, last 4 weeks: the middle half (25th to 75th percentile, median in brackets) of sellers in the same role who are past their first 28 days and have something captured. The role's meetings are customer meetings for Engagement Managers, prospect meetings for BDRs and all external meetings for AEs and SMB. It describes what peers do, not a target. Emails aren't flagged against it, because Outreach sequence volume and capture differences move them.</p></div><button class="ibtn" type="button" data-copy-table="act-range-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="act_ranges" data-row-key="kind">
+              <thead><tr>
+                <th data-field="label">Role</th>
+                <th class="num" data-field="n">Sellers compared</th>
+                <th class="num" data-field="coreRange">Role's meetings a week</th>
+                <th class="num" data-field="meetRange">Meetings a week</th>
+                <th class="num" data-field="custRange">With customers</th>
+                <th class="num" data-field="prosRange">With prospects</th>
+                <th class="num" data-field="emailsRange">Emails a week</th>
+                <th class="num" data-field="peopleRange">People emailed, 4 weeks</th>
+              </tr></thead>
+              <tbody data-draw="act-range-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="act-range-table"></span>
+              <p class="os-empty" data-msg-for="act-range-table" data-msg="empty" hidden>No activity captured yet.</p>
+              <p class="os-empty" data-msg-for="act-range-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+            </div>
+          </div>
+        </div>
+        <div class="pane" id="act-trust">
+          <div class="pane-head"><div><h2 class="pane-title">How far to trust these numbers <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">All EMEA. Checks on the data behind activity, run on every load. Amber means a number above may be off.</p></div></div>
+          <div class="pane-scroll"><ul class="ilist" data-draw="act-trust-list" data-source="act_trust"></ul>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="act-trust-list"></span>
+              <p class="os-empty" data-msg-for="act-trust-list" data-msg="empty" hidden>No activity data to check.</p>
+              <p class="os-empty" data-msg-for="act-trust-list" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+            </div></div>
+          <div class="pane-foot act-notes">
+            <h3>What isn't counted</h3>
+            <ul>
+              <li>Calls: about 175 logged in 4 weeks by 15 people, nearly all dialled through Outreach and mostly unanswered. Call result, type and duration are hidden from EMEA profiles.</li>
+              <li>LinkedIn: only Outreach LinkedIn steps are logged (about 700 in 4 weeks, by 4 BDRs, since September 2026).</li>
+              <li>Emails sent only through Outreach that mailbox capture didn't copy: about 1 in 8 of the people Outreach emailed in 4 weeks had no mailbox copy, more for SMB and Engagement Managers, so emails read somewhat low.</li>
+              <li>Replies and email quality: received mail is left out.</li>
+              <li>Meetings that aren't on the Salesforce calendar (in person, phone) or are with people who aren't a contact or lead in Salesforce; no-shows and declined invites; what happened in a meeting.</li>
+              <li>Who booked a meeting for whom, such as a BDR booking for an AE.</li>
+              <li>Time off: Quiet may be a holiday.</li>
+            </ul>
+            <h3>How it's counted</h3>
+            <ul>
+              <li>Last 4 weeks: the 28 days to yesterday. The 4 weeks before: days 29–56 ago. Next 2 weeks: the 14 days from tomorrow. All in your Salesforce time zone, so today's activity shows tomorrow.</li>
+              <li>Emails sent: email tasks with a sent Email Message, which is Einstein Activity Capture's copy of the seller's mailbox, dated by the email's date. Outreach sends count because they go out from the mailbox. Received mail, Outreach's own email log, automation emails with no captured message and RevOps admin tasks are left out. People and accounts emailed are distinct per seller; team figures add them up per seller.</li>
+              <li>External meetings: calendar records with a contact, lead or account (not Legora's own), not all-day, owned by the seller, whoever created them. One meeting per start time per person; LeanData BookIt meetings marked Canceled or Rescheduled are left out. A meeting with two of our people counts for each of them, and a meeting on the calendar counts as held.</li>
+              <li>Customers and prospects: by the account's status today. Customer counts as a customer; everything else, contacts with no account and leads included, counts as a prospect.</li>
+              <li>Changes are like-for-like: only people who joined 8+ weeks ago and whose capture was on in the first week of the earlier window. Mailbox and calendar capture were switched on for most sellers between May and October 2026, so longer comparisons would measure the rollout, not selling.</li>
+              <li>Activity follows Salesforce sharing. If your access shows activity for fewer than half the sellers, empty rows read Not visible.</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -1031,6 +1153,45 @@
               <p class="os-empty" data-msg-for="cr-bdr-table" data-msg="empty" hidden>No BDR-sourced opportunities this quarter or last.</p>
               <p class="os-empty" data-msg-for="cr-bdr-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
               <p class="os-empty" data-msg-for="cr-bdr-table" data-msg="limit" hidden>Showing the first 400. Search to narrow it down.</p>
+            </div>
+          </div>
+        </div>
+        <div class="pane" id="act-bdrs">
+          <div class="pane-head">
+            <div><h2 class="pane-title">BDR activity, last 4 weeks <span class="scope-tag" data-scope-tag hidden>All EMEA</span></h2><p class="pane-note">Last 4 weeks = the 28 days to yesterday. Sourced = opportunities with them as Originating BDR this quarter and last, whoever owns them (as in the leaderboard above). The two windows differ, so no ratio mixes them. Emails are those captured from the BDR's mailbox, Outreach sends included. Outreach LinkedIn steps (about 700 in 4 weeks, 4 BDRs) and calls (about 145, mostly unanswered) aren't counted here: the Funnel review sparkle pulls them. Prospect meetings are on the BDR's own calendar, mostly meetings they booked for an AE. All EMEA.</p></div>
+            <div class="tools"><span data-draw="act-bdr-plan" data-source="act_bdr cr_bdrs"></span><button class="ibtn" type="button" data-copy-table="act-bdr-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
+          </div>
+          <div class="statbar statbar-in">
+            <div class="stat"><span class="stat-label">People emailed, 4 weeks</span><span class="stat-value"><b data-draw="kpi-act-bdr" data-source="act_bdr" data-k="people">—</b></span><span class="stat-sub"><b data-draw="kpi-act" data-source="act_kpi" data-field="emails" data-team="BDR" data-where="region=BDR">—</b> emails · <b data-draw="kpi-act-lfl" data-source="act_kpi" data-field="emailsChg" data-team="BDR" data-where="region=BDR">—</b></span></div>
+            <div class="stat"><span class="stat-label">Prospect meetings, 4 weeks</span><span class="stat-value"><b data-draw="kpi-act" data-source="act_kpi" data-field="meetPros" data-team="BDR" data-where="region=BDR">—</b></span><span class="stat-sub">meetings <b data-draw="kpi-act-lfl" data-source="act_kpi" data-field="meetChg" data-team="BDR" data-where="region=BDR">—</b> · <b data-draw="kpi-act" data-source="act_kpi" data-field="bookedPros" data-team="BDR" data-where="region=BDR">—</b> booked for the next 2 weeks</span></div>
+            <div class="stat"><span class="stat-label">Prospect meetings per 100 people emailed</span><span class="stat-value"><b data-draw="kpi-act-bdr" data-source="act_bdr" data-k="per100">—</b></span><span class="stat-sub">same 4 weeks, BDRs who emailed 50+ people</span></div>
+            <div class="stat"><span class="stat-label">Opps sourced this quarter</span><span class="stat-value"><b data-draw="kpi-cr-bdr" data-source="cr_bdrs" data-k="thisOpps">—</b></span><span class="stat-sub">last quarter <b data-draw="kpi-cr-bdr" data-source="cr_bdrs" data-k="lastOpps">—</b> · <b data-draw="kpi-cr-bdr" data-source="cr_bdrs" data-k="thisArr">—</b> ARR</span></div>
+          </div>
+          <div class="pane-scroll">
+            <table class="tbl" data-source="act_bdr" data-row-key="name" data-sortable="act-bdr-table">
+              <thead><tr>
+                <th data-field="name" data-sort="name"><button type="button" class="th-sort">BDR</button></th>
+                <th data-field="manager" data-sort="manager"><button type="button" class="th-sort">Manager</button></th>
+                <th class="num" data-field="people" data-sort="people"><button type="button" class="th-sort">People emailed</button></th>
+                <th class="num" data-field="emails" data-sort="emails"><button type="button" class="th-sort">Emails</button></th>
+                <th class="num" data-field="emailsChg" data-sort="emailsChg"><button type="button" class="th-sort">Emails vs before</button></th>
+                <th class="num" data-field="meetPros" data-sort="meetPros"><button type="button" class="th-sort">Prospect meetings</button></th>
+                <th class="num" data-field="prosChg" data-sort="prosChg"><button type="button" class="th-sort">Vs before</button></th>
+                <th class="num" data-field="bookedPros" data-sort="bookedPros"><button type="button" class="th-sort">Booked, 2 wks</button></th>
+                <th class="num" data-field="meetPer100" data-sort="meetPer100"><button type="button" class="th-sort">Meetings per 100 emailed</button></th>
+                <th data-field="lastTouch" data-sort="lastTouch"><button type="button" class="th-sort">Last activity</button></th>
+                <th class="num" data-field="thisOpps" data-sort="thisOpps"><button type="button" class="th-sort">Sourced this Q</button></th>
+                <th class="num" data-field="thisArr" data-sort="thisArr"><button type="button" class="th-sort">ARR this Q</button></th>
+                <th class="num" data-field="lastOpps" data-sort="lastOpps"><button type="button" class="th-sort">Sourced last Q</button></th>
+                <th data-field="statusTxt" data-sort="statusTxt"><button type="button" class="th-sort">Status</button></th>
+              </tr></thead>
+              <tbody data-draw="act-bdr-table"></tbody>
+            </table>
+            <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="act-bdr-table"></span>
+              <p class="os-empty" data-msg-for="act-bdr-table" data-msg="empty" hidden>No EMEA BDRs with activity or sourced opportunities.</p>
+              <p class="os-empty" data-msg-for="act-bdr-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see this.</p>
+              <p class="os-empty" data-msg-for="act-bdr-table" data-msg="error" hidden>If this keeps failing, your Salesforce access may not include email messages, events or the Activity in Past field. Ask RevOps.</p>
+              <p class="os-empty" data-msg-for="act-bdr-table" data-msg="limit" hidden>Showing the first 400.</p>
             </div>
           </div>
         </div>
@@ -1766,7 +1927,7 @@
     <p class="pd-note" data-pd-note="missing" hidden>This person isn't in the EMEA Salesforce roster or HiBob's EMEA departments, so there's nothing more to show.</p>
     <p class="pd-note" data-pd-note="nosf" hidden>No Salesforce user matched this HiBob person by email or name, so only their HiBob details show.</p>
     <p class="pd-note" data-pd-note="outside" hidden>Their Salesforce user is not in an EMEA sales role, so only their HiBob details show.</p>
-    <div class="pd-chips" data-draw="pd-chips" data-source="person person_hb rr_people people"></div>
+    <div class="pd-chips" data-draw="pd-chips" data-source="person person_hb rr_people people act_reps"></div>
 
     <section class="pd-sec">
       <h3>Salesforce</h3>
@@ -1848,6 +2009,24 @@
         <div><dt>Other within 5 business days</dt><dd data-draw="pd-pct" data-source="ld_reps" data-f="lRate">—</dd></div>
       </dl>
     </section>
+    <section class="pd-sec" data-pd-act hidden>
+      <h3>Activity, last 4 weeks</h3>
+      <p class="pd-note" data-pd-act-note hidden>Your Salesforce access shows none of their activity.</p>
+      <dl class="pd-dl">
+        <div><dt>External meetings</dt><dd data-draw="pd-act-meet" data-source="act_reps" data-f="meetings">—</dd></div>
+        <div><dt>Booked, next 2 weeks</dt><dd data-draw="pd-num" data-source="act_reps" data-f="booked">—</dd></div>
+        <div><dt>Next meeting</dt><dd data-draw="pd-act-ts" data-source="act_reps" data-f="nextMeet">—</dd></div>
+        <div><dt>Emails sent</dt><dd data-draw="pd-num" data-source="act_reps" data-f="emails">—</dd></div>
+        <div><dt>People emailed</dt><dd data-draw="pd-num" data-source="act_reps" data-f="people">—</dd></div>
+        <div><dt>Accounts emailed</dt><dd data-draw="pd-num" data-source="act_reps" data-f="accounts">—</dd></div>
+        <div><dt>Role's meetings vs the 4 weeks before</dt><dd data-draw="pd-act-chg" data-source="act_reps" data-f="coreChg">—</dd></div>
+        <div><dt>Emails vs the 4 weeks before</dt><dd data-draw="pd-act-chg" data-source="act_reps" data-f="emailsChg">—</dd></div>
+        <div><dt>Last email</dt><dd data-draw="pd-act-ts" data-source="act_reps" data-f="lastMail">—</dd></div>
+        <div><dt>Last meeting</dt><dd data-draw="pd-act-ts" data-source="act_reps" data-f="lastMeet">—</dd></div>
+        <div><dt>Usual for their role</dt><dd data-draw="pd-act-usual" data-source="act_reps" data-f="coreWk">—</dd></div>
+        <div data-pd-act-em hidden><dt>Customer accounts met</dt><dd data-draw="pd-act-em" data-source="act_reps person">—</dd></div>
+      </dl>
+    </section>
     <section class="pd-sec" data-pd-deals hidden>
       <h3>Open deals</h3>
       <div class="pd-deals">
@@ -1861,11 +2040,12 @@
     <section class="pd-sec" data-pd-team hidden>
       <h3>Team</h3>
       <div class="pd-team">
-        <table class="tbl" data-source="person rr_people" data-row-key="name">
+        <table class="tbl" data-source="person rr_people act_reps" data-row-key="name">
           <thead><tr>
             <th data-field="name">Name</th>
             <th class="num" data-field="thisPipe">Pipeline</th>
             <th class="num" data-field="crOpps">Created</th>
+            <th class="num" data-field="actMeetings">Meetings 4w</th>
             <th data-field="routing">Routing</th>
           </tr></thead>
           <tbody data-draw="pd-team-table"></tbody>

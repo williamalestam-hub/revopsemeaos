@@ -369,6 +369,43 @@ ds("ld_open", "Open leads per owner",
    GROUP BY OwnerId, Owner.Type, Owner.Name, Owner.UserRole.Name, Owner.IsActive, Status, Lifecycle_Stage__c,
    LeanData__Routing_Status__c, LeanData__Routing_Action__c LIMIT 2000"""))
 
+# ---------- Activity ----------
+# Counts only: no subject, description, email text, person or account name or record Id is read.
+# Emails: an email task with a sent Email Message (Einstein Activity Capture's copy of the owner's mailbox, which includes
+# emails sent through Outreach). The direction comes from EmailMessage.Incoming because Task.Inbound_Email__c is hidden
+# from 139 of 140 EMEA users. The semi-join must stay at the top level of WHERE (never inside an OR).
+SENT = "TaskSubtype = 'Email' AND Id IN (SELECT ActivityId FROM EmailMessage WHERE Incoming = false AND CreatedDate = LAST_N_DAYS:{d})"
+# Meetings: calendar records with a contact, lead or account (not Legora's own), not all-day; LeanData BookIt
+# copies marked Canceled or Rescheduled left out. Duplicates are removed in the count (one meeting per start time).
+EXT = ("IsAllDayEvent = false AND (WhoId != null OR AccountId != null) AND (NOT Account.Name LIKE 'Legora%') "
+       "AND (BookIt_Meeting_Status__c = null OR BookIt_Meeting_Status__c NOT IN ('Canceled','Rescheduled'))")
+ds("act_mail", "Emails sent, last 4 weeks",
+   "Emails EMEA sellers sent in the 28 days to yesterday (by the email's date), as Einstein Activity Capture copied them from their mailbox (Outreach sends included): email tasks with a sent, not incoming, Email Message. Per owner and the account's status today: emails, distinct people and accounts emailed, and when the last one was captured. Received mail, Outreach's own email log (it repeats the mailbox copy and logs prospect replies as outbound), automation emails with no captured message and RevOps admin tasks are left out. Counts only.",
+   SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Account.Account_Status__c acct, COUNT(Id) emails, COUNT_DISTINCT(WhoId) people,
+   COUNT_DISTINCT(AccountId) accounts, MAX(CreatedDate) lastAt FROM Task WHERE {SENT.format(d=35)}
+   AND ActivityDate = LAST_N_DAYS:28 AND ActivityDate < TODAY AND {OWNER}
+   GROUP BY Owner.Name, Owner.UserRole.Name, Account.Account_Status__c LIMIT 2000"""))
+ds("act_mail_prev", "Emails sent, the 4 weeks before",
+   "The same sent emails dated 29 to 56 days ago, per owner and account status, with the first and last capture time, so the page can tell whether capture covered the whole earlier window. Counts only.",
+   SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Account.Account_Status__c acct, COUNT(Id) emails, COUNT_DISTINCT(WhoId) people,
+   COUNT_DISTINCT(AccountId) accounts, MIN(CreatedDate) firstAt, MAX(CreatedDate) lastAt FROM Task WHERE {SENT.format(d=63)}
+   AND ActivityDate = LAST_N_DAYS:56 AND ActivityDate < LAST_N_DAYS:28 AND {OWNER}
+   GROUP BY Owner.Name, Owner.UserRole.Name, Account.Account_Status__c LIMIT 2000"""))
+ds("act_meet", "Meetings, last 4 weeks and next 2",
+   "Calendar records of EMEA sellers with a contact, lead or account (not Legora's own), not all-day, that started in the 28 days to yesterday (past = true) or start in the 14 days from tomorrow (past = false). Per owner, past or booked, and the account's status: records, meetings (distinct start times), distinct accounts and people, and the first and last start. LeanData BookIt meetings marked Canceled or Rescheduled are left out. Counts only.",
+   SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Activity_in_Past__c past, Account.Account_Status__c acct, COUNT(Id) events,
+   COUNT_DISTINCT(StartDateTime) meetings, COUNT_DISTINCT(AccountId) accounts, COUNT_DISTINCT(WhoId) people, MIN(StartDateTime) firstAt,
+   MAX(StartDateTime) lastAt FROM Event WHERE ((StartDateTime = LAST_N_DAYS:28 AND StartDateTime < TODAY) OR StartDateTime = NEXT_N_DAYS:14)
+   AND {EXT} AND {OWNER}
+   GROUP BY Owner.Name, Owner.UserRole.Name, Activity_in_Past__c, Account.Account_Status__c LIMIT 2000"""))
+ds("act_meet_prev", "Meetings, the 4 weeks before",
+   "The same meetings that started 29 to 56 days ago, per owner and account status, with the first and last start, so the page can tell whether calendar capture covered the whole earlier window. Counts only.",
+   SF(f"""SELECT Owner.Name owner, Owner.UserRole.Name role, Account.Account_Status__c acct, COUNT(Id) events,
+   COUNT_DISTINCT(StartDateTime) meetings, COUNT_DISTINCT(AccountId) accounts, COUNT_DISTINCT(WhoId) people, MIN(StartDateTime) firstAt,
+   MAX(StartDateTime) lastAt FROM Event WHERE StartDateTime = LAST_N_DAYS:56 AND StartDateTime < LAST_N_DAYS:28
+   AND {EXT} AND {OWNER}
+   GROUP BY Owner.Name, Owner.UserRole.Name, Account.Account_Status__c LIMIT 2000"""))
+
 # ---------- 1:1s ----------
 CAL_DAY = r"^\d{4}-\d{2}-\d{2}T00:00:00$"
 D["cal_events"] = {"title": "Your calendar, next 14 days",
