@@ -1074,6 +1074,51 @@ dash.calc('checks_hb_kpi', {
   },
 });
 
+// Salesforce values the pipeline logic depends on, checked against the open pipeline the app already loads (pipe_stage):
+// a stage renamed without its number, or a new forecast category or record type, would otherwise drop deals silently,
+// as the stage-3 rename did on 3 Nov 2026. Plus, per manager, deals closing this quarter that nobody has forecast.
+dash.calc('checks_cfg', {
+  title: 'Data checks, Salesforce values',
+  description: 'Open New Business and Upsell deals closing this or next quarter whose stage doesn\'t start with its number (0-6), whose rep forecast category isn\'t Commit, Best Case or Pipeline, or whose record type isn\'t New Business, Upsell or Renewal, with how many and their ARR: the dashboard would leave them out of stage bands, stuck and early-stage checks, the forecast or the pipeline. Also, per manager, New Business and Upsell deals closing this quarter with no rep forecast category, which the forecast counts as pipeline only.',
+  inputs: ['pipe_stage'],
+  fn: (pipe_stage) => {
+    const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
+    const STAGES = /^[0-6]\D/, FORECAST = ['Commit', 'Best Case', 'Pipeline'], TYPES = ['New Business', 'Upsell', 'Renewal'];
+    const now = new Date();
+    const thisQ = now.getUTCFullYear() * 10 + Math.floor(now.getUTCMonth() / 3) + 1;
+    const usd = (v) => '$' + (v >= 1e6 ? (Math.round(v / 1e5) / 10).toLocaleString('en') + 'M' : v >= 1e3 ? Math.round(v / 1e3).toLocaleString('en') + 'K' : Math.round(v).toLocaleString('en'));
+    const plural = (n, one, many) => n.toLocaleString('en') + ' ' + (n === 1 ? one : many);
+    const all = { area: 'Pipeline', person: null, region: 'All', manager: null, screen: 'pipeline', view: 'teams' };
+    const group = (test, key) => {
+      const m = new Map();
+      for (const r of pipe_stage) {
+        if (!test(r)) continue;
+        const k = key(r), o = m.get(k) || { n: 0, arr: 0 };
+        o.n += +r.opps || 0; o.arr += +r.arrUsd || 0; m.set(k, o);
+      }
+      return m;
+    };
+    const out = [];
+    for (const [v, o] of group((r) => !STAGES.test(String(r.stage || '')), (r) => String(r.stage || '(blank)'))) out.push({ ...all, id: 'cfg:stage:' + v, severity: 'high', title: 'Stage "' + v + '"',
+      what: plural(o.n, 'open deal', 'open deals') + ' (' + usd(o.arr) + ' ARR) in a stage that doesn\'t start with its number', meta: 'renamed or added in Salesforce? Stage bands, stuck and early-stage checks match stages by their number, so these deals drop out of them',
+      how: ' Tell me when the opportunity stage "' + v + '" was added or renamed, which numbered stage (0-6) it stands for, and how many open EMEA deals are in it (counts only). Change nothing.' });
+    for (const [v, o] of group((r) => r.recordType !== 'Renewal' && r.forecast && !FORECAST.includes(r.forecast), (r) => r.forecast)) out.push({ ...all, view: 'forecast', id: 'cfg:fc:' + v, severity: 'high', title: 'Forecast category "' + v + '"',
+      what: plural(o.n, 'open deal', 'open deals') + ' (' + usd(o.arr) + ' ARR) in a rep forecast category the dashboard doesn\'t know', meta: 'the forecast counts only Commit and Best Case, so these count as pipeline only',
+      how: ' Tell me when the Rep Forecast Category value "' + v + '" was added or renamed, what it replaced, and whether the forecast should count it as commit, best case or pipeline (counts only). Change nothing.' });
+    for (const [v, o] of group((r) => !TYPES.includes(r.recordType), (r) => String(r.recordType || '(blank)'))) out.push({ ...all, id: 'cfg:rt:' + v, severity: 'medium', title: 'Record type "' + v + '"',
+      what: plural(o.n, 'open deal', 'open deals') + ' (' + usd(o.arr) + ' ARR) with a record type the dashboard doesn\'t know', meta: 'pipeline and forecast count New Business and Upsell only',
+      how: ' Tell me when the opportunity record type "' + v + '" was added or renamed and what kind of deal it is (counts only). Change nothing.' });
+    // deals closing this quarter that no one has forecast: per manager (the owner's manager), so each manager can fix theirs
+    for (const o of group((r) => r.recordType !== 'Renewal' && !r.forecast && r.fy * 10 + r.fq === thisQ, (r) => (r.manager || '') + '|' + (TEAM[r.role] || 'Other')).entries()) {
+      const [k, x] = o, [manager, region] = k.split('|');
+      out.push({ id: 'cfg:nofc:' + k, area: 'Pipeline', severity: x.arr >= 250000 ? 'medium' : 'low', title: manager || '(no manager)', person: manager || null, region, manager: manager || null, screen: 'pipeline', view: 'forecast',
+        what: plural(x.n, 'deal', 'deals') + ' closing this quarter (' + usd(x.arr) + ' ARR) in their team with no rep forecast category', meta: 'the forecast counts them as pipeline only',
+        how: ' List the EMEA New Business and Upsell opportunities closing this quarter that have no Rep Forecast Category and whose owner reports to ' + (manager || 'no manager') + ', and draft a short note to each owner asking them to set it. Show me the notes and wait for my OK before sending; change no records.' });
+    }
+    return out;
+  },
+});
+
 // ===================== THIS WEEK =====================
 dash.calc('pool_adds', {
   title: 'Added to routing pools this week',

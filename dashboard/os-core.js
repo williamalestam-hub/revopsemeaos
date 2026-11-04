@@ -734,9 +734,10 @@ OS.links = (() => {
 
 // ---------- Data checks ----------
 // Every check source that has loaded, in the scope picked: Salesforce (checks), LeanData routing (checks_rr), HiBob
-// (checks_hb), leavers' leads (checks_lv), leads (checks_ld, checks_ld_rt, checks_ld_cap) and activity capture (checks_act).
+// (checks_hb), leavers' leads (checks_lv), leads (checks_ld, checks_ld_rt, checks_ld_cap), activity capture (checks_act) and
+// Salesforce values the pipeline logic depends on (checks_cfg).
 // Each is its own calc, so one failing leaves the rest.
-OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act'];
+OS.CHECKS = ['checks', 'checks_rr', 'checks_hb', 'checks_lv', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap', 'checks_act', 'checks_cfg'];
 OS.checkRows = () => {
   const p = dash.params();
   const rank = { high: 0, medium: 1, low: 2 };

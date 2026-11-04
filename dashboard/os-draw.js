@@ -326,7 +326,7 @@ const checkItem = (c) => {
 // every check source that has loaded, merged (OS.checkRows); one source failing leaves the rest
 const allChecks = () => OS.checkRows();
 // the sources that can produce each area's checks
-const AREA_SRC = { Routing: ['checks_rr'], Hiring: ['checks', 'checks_hb'], Pipeline: ['checks'], Books: ['checks'], Leavers: ['checks', 'checks_lv'], Leads: ['checks_ld', 'checks_ld_rt', 'checks_ld_cap'], Activity: ['checks_act'] };
+const AREA_SRC = { Routing: ['checks_rr'], Hiring: ['checks', 'checks_hb'], Pipeline: ['checks', 'checks_cfg'], Books: ['checks'], Leavers: ['checks', 'checks_lv'], Leads: ['checks_ld', 'checks_ld_rt', 'checks_ld_cap'], Activity: ['checks_act'] };
 const areaSrc = (area) => AREA_SRC[area] || OS.CHECKS;
 // a list waits only while none of its sources has loaded, then shows what did
 const checkIds = (srcs) => (srcs.some((id) => OS.state(id) === 'ok') ? [] : [srcs[0]]);
