@@ -974,7 +974,7 @@ dash.calc('checks_lv', {
 
 dash.calc('leavers_core', {
   title: 'People who left: deals, renewals and accounts',
-  description: 'Every Salesforce user with an EMEA role who is no longer active, with what they still hold that needs only Opportunity and Account access: open New Business and Upsell deals and their ARR, open renewals and their contract ARR, the next close date, active accounts (customer, pipeline, engaging), customers and their ARR, and customers where they are Engagement Manager. Leads and LeanData pool seats are added in leavers.',
+  description: 'Every Salesforce user with an EMEA role who is no longer active, with what they still hold that needs only Opportunity and Account access: open New Business and Upsell deals and their ARR, open renewals and their contract ARR, the next close date, active accounts (customer, pipeline, engaging), customers and their ARR, and customers where they are Engagement Manager. Leads (leavers_leads) and LeanData pool seats (leavers_pools) are their own layers, merged on screen.',
   inputs: ['roster', 'lv_opps', 'books_owner'],
   fn: (roster, lv_opps, books_owner) => {
     const TEAM = { 'AE-EMEA-FR': 'France', 'AE-EMEA-DACH': 'DACH', 'AE-EMEA-SOUTH': 'Southern Europe', 'AE-EMEA-IBERIA-LATAM': 'Iberia & LATAM', 'AE-EMEA-BENELUX': 'Benelux', 'AE-EMEA-NORDICS': 'Nordics', 'AE-EMEA-CEE': 'CEE', 'AE-EMEA-MEA': 'MEA', 'SMB-EMEA': 'SMB', 'EM-EMEA': 'Engagement', 'EM-EMEA-LATAM': 'Engagement', 'DIR-EM-EMEA': 'Engagement', 'BDR-EMEA': 'BDR', 'DIR-BDR-EMEA': 'BDR', 'DIR-SALES-EMEA': 'Leadership', 'MGR-SALES-EMEA': 'Leadership', 'VP-SALES-EMEA': 'Leadership' };
@@ -1001,13 +1001,13 @@ dash.calc('leavers_core', {
   },
 });
 
-dash.calc('leavers', {
-  title: 'People who left',
-  description: 'Salesforce users with an EMEA role who are no longer active but still hold something: open deals and renewals, active accounts, customers and Engagement Manager customers (from leavers_core), plus open leads (neither converted nor disqualified) by status and the EMEA LeanData pools they are still in, with what to do first. People who hold nothing are left out. When the leads or LeanData can\'t be read, the screen falls back to leavers_basic.',
-  inputs: ['leavers_core', 'lv_leads', 'rr_members'],
-  fn: (leavers_core, lv_leads, rr_members) => {
+dash.calc('leavers_leads', {
+  title: 'People who left, with their open leads',
+  description: 'leavers_core plus each person\'s open leads (neither converted nor disqualified), Ready and New among them. Its own calc, so the leavers list keeps its deals, renewals and accounts when leads can\'t be read.',
+  inputs: ['leavers_core', 'lv_leads'],
+  fn: (leavers_core, lv_leads) => {
     const id15 = (x) => String(x || '').slice(0, 15);
-    const m = new Map(leavers_core.map((o) => [o.key, { ...o, leads: 0, ready: 0, fresh: 0, pools: 0, poolNames: '' }]));
+    const m = new Map(leavers_core.map((o) => [o.key, { ...o, leads: 0, ready: 0, fresh: 0 }]));
     for (const r of lv_leads) {
       const o = m.get(id15(r.ownerId));
       if (!o) continue;
@@ -1016,6 +1016,16 @@ dash.calc('leavers', {
       if (r.status === 'Ready') o.ready += n;
       else if (r.status === 'New') o.fresh += n;
     }
+    return [...m.values()];
+  },
+});
+
+dash.calc('leavers_pools', {
+  title: 'People who left, still in LeanData pools',
+  description: 'Inactive users still in an EMEA LeanData round-robin pool, with how many pools and which. Its own calc, so the leavers list keeps the rest when LeanData can\'t be read.',
+  inputs: ['rr_members'],
+  fn: (rr_members) => {
+    const id15 = (x) => String(x || '').slice(0, 15);
     const pools = new Map();
     for (const r of rr_members) {
       if (r.userActive !== false) continue;
@@ -1023,55 +1033,7 @@ dash.calc('leavers', {
       if (!pools.has(k)) pools.set(k, new Set());
       pools.get(k).add(r.poolName);
     }
-    for (const [k, set] of pools) { const o = m.get(k); if (o) { o.pools = set.size; o.poolNames = [...set].sort().join(', '); } }
-    return [...m.values()]
-      .filter((o) => o.deals || o.renewals || o.leads || o.accounts || o.customers || o.emCustomers || o.pools)
-      .map((o) => ({ ...o, status: o.renewals || o.deals || o.customers || o.emCustomers ? 'Hand over revenue' : o.leads ? 'Reassign leads' : o.accounts ? 'Reassign accounts' : 'Remove from routing' }))
-      .sort((a, b) => (b.renewalArr + b.dealArr + b.customerArr) - (a.renewalArr + a.dealArr + a.customerArr) || b.leads - a.leads || String(a.name).localeCompare(String(b.name)));
-  },
-});
-
-dash.calc('leavers_basic', {
-  title: 'People who left, without leads or pools',
-  description: 'The same list as leavers from deals, renewals, accounts, customers and Engagement Manager customers only, for a viewer who can\'t read leads or LeanData. Leads and pool seats show as unknown.',
-  inputs: ['leavers_core'],
-  fn: (leavers_core) => leavers_core
-    .filter((o) => o.deals || o.renewals || o.accounts || o.customers || o.emCustomers)
-    .map((o) => ({ ...o, leads: null, ready: null, fresh: null, pools: null, poolNames: '', status: o.renewals || o.deals || o.customers || o.emCustomers ? 'Hand over revenue' : 'Reassign accounts' }))
-    .sort((a, b) => (b.renewalArr + b.dealArr + b.customerArr) - (a.renewalArr + a.dealArr + a.customerArr) || String(a.name).localeCompare(String(b.name))),
-});
-
-dash.calc('leavers_kpi', {
-  title: 'People who left, headline',
-  description: 'People who left who still hold something and what they hold (open deals and renewals with ARR, open and Ready leads, active accounts and customer ARR, Engagement Manager customers, pool seats), per team, per manager ("M|<manager>") and for all EMEA.',
-  inputs: ['leavers'],
-  fn: (leavers) => {
-    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    const managers = [...new Set(leavers.map((r) => r.manager).filter((x) => x && x !== '(no manager)'))];
-    const F = ['deals', 'dealArr', 'renewals', 'renewalArr', 'leads', 'ready', 'accounts', 'customers', 'customerArr', 'emCustomers', 'pools'];
-    return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
-      const rs = leavers.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
-      const o = { region, people: rs.length };
-      for (const f of F) o[f] = rs.reduce((s, r) => s + (+r[f] || 0), 0);
-      return o;
-    });
-  },
-});
-
-dash.calc('leavers_kpi_basic', {
-  title: 'People who left, headline without leads or pools',
-  description: 'The leavers headline from leavers_basic (deals, renewals, accounts, customers, Engagement Manager customers), per team, per manager and for all EMEA, for a viewer who can\'t read leads or LeanData.',
-  inputs: ['leavers_basic'],
-  fn: (leavers_basic) => {
-    const regions = ['All', 'France', 'DACH', 'Southern Europe', 'Iberia & LATAM', 'Benelux', 'Nordics', 'CEE', 'MEA', 'SMB', 'Engagement', 'BDR', 'Leadership'];
-    const managers = [...new Set(leavers_basic.map((r) => r.manager).filter((x) => x && x !== '(no manager)'))];
-    const F = ['deals', 'dealArr', 'renewals', 'renewalArr', 'accounts', 'customers', 'customerArr', 'emCustomers'];
-    return regions.concat(managers.map((x) => 'M|' + x)).map((region) => {
-      const rs = leavers_basic.filter((r) => (region.startsWith('M|') ? r.manager === region.slice(2) : region === 'All' || r.region === region));
-      const o = { region, people: rs.length, leads: null, ready: null, pools: null };
-      for (const f of F) o[f] = rs.reduce((s, r) => s + (+r[f] || 0), 0);
-      return o;
-    });
+    return [...pools.entries()].map(([key, set]) => ({ key, pools: set.size, poolNames: [...set].sort().join(', ') }));
   },
 });
 
@@ -1668,7 +1630,7 @@ dash.calc('oo_points_rr', {
       if (!t.email) continue;
       const lead = t.isLeader;
       const inT = lead ? subtree(t.name) : new Set([t.name]);
-      const push = (sev, text, extra) => out.push({ key: t.email + '|talk|rr|' + out.length, email: t.email, name: t.name, section: 'talk', sev, order: 1000 + out.length, text, ...(extra || {}) });
+      const push = (sev, text, extra) => out.push({ key: t.email + '|talk|rr|' + out.length, email: t.email, name: t.name, section: 'talk', sev, order: 1e6 + out.length, text, ...(extra || {}) });
       const gaps = rr_people.filter((r) => inT.has(r.name) && (r.status === 'Missing' || r.status === 'New joiner: overdue'));
       if (gaps.length) push('high', lead ? plural(gaps.length, 'person is', 'people are') + ' missing from routing: ' + gaps.slice(0, 4).map((g) => g.name).join(', ') + (gaps.length > 4 ? ' and ' + (gaps.length - 4) + ' more' : '') + '.' : 'Not in a routing pool for their role' + (gaps[0].suggested ? ': peers are in ' + gaps[0].suggested : '') + '.', { screen: 'routing', view: 'people' });
       const soon = rr_people.filter((r) => inT.has(r.name) && r.status === 'New: add next week');
@@ -2049,7 +2011,7 @@ dash.calc('ld_backlog', {
       const stale = o.b21 + o.noDate;
       return { ...o, stale, noDateAll: o.noDate + o.stampGap,
         // leads Ready since before 19 May 2026 are older than any dated one
-        oldest: o.before ? 'before 19 May 2026' : o.oldestDay, oldestDemo: o.demoBefore ? 'before 19 May 2026' : o.oldestDemoDay,
+        oldest: o.before ? 'before 19 May 2026' : o.oldestDay, oldestSort: o.before ? '0000-00-00' : o.oldestDay, oldestDemo: o.demoBefore ? 'before 19 May 2026' : o.oldestDemoDay,
         regions: Object.entries(o.regions).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(', '),
         todo: o.kind === 'Queue' ? 'Route to a person' : o.kind === 'Left (inactive)' || !o.active ? 'Reassign' : o.kind === 'Outside EMEA sales' ? (o.review ? 'Review' : 'Reassign or confirm')
           : o.demoOverdue > 0 ? 'Nudge owner' : stale >= CLEANUP_N ? 'Clean up Ready' : o.elsewhere >= CLEANUP_N ? 'Check region' : '' };

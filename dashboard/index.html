@@ -238,6 +238,7 @@
               </div>
               <button class="more" type="button" data-nav="actions" data-nav-view="checks">See all<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
+            <p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access, so this list may be incomplete.</p>
             <ul class="ilist" data-draw="home-checks" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-checks"></span>
               <p class="os-empty" data-msg-for="home-checks" data-msg="empty" hidden>No problems found.</p>
@@ -253,7 +254,7 @@
                 <p class="pane-note">Who started in the last 7 days (HiBob) and who was added to a routing pool (LeanData).</p>
               </div>
             </div>
-            <ul class="ilist" data-draw="home-started" data-source="people" data-fetchpriority="low"></ul>
+            <ul class="ilist" data-draw="home-started" data-source="people people_core" data-fetchpriority="low"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="home-started"></span>
               <p class="os-empty" data-msg-for="home-started" data-msg="empty" hidden>Nobody started in the last 7 days.</p>
               <p class="os-empty" data-msg-for="home-started" data-msg="connect" hidden>Connect HiBob in your claude.ai connectors to see who started.</p>
@@ -375,11 +376,11 @@
               <button class="btn" type="button" data-copy-checks><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy as checklist</button>
             </div>
           </div>
-          <div class="pane-scroll"><ul class="ilist" data-draw="check-list" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap"></ul>
+          <div class="pane-scroll"><p class="pd-note" data-checks-partial hidden>Some data checks couldn't load with your access (Salesforce, LeanData, HiBob or lead data), so this list may be incomplete.</p><ul class="ilist" data-draw="check-list" data-source="checks checks_rr checks_hb checks_lv checks_ld checks_ld_rt checks_ld_cap"></ul>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="check-list"></span>
               <p class="os-empty" data-msg-for="check-list" data-msg="empty" hidden>No problems found for this filter.</p>
               <p class="os-empty" data-msg-for="check-list" data-msg="connect" hidden>Connect Salesforce, and HiBob for hiring checks, in your claude.ai connectors to see this.</p>
-              <p class="os-empty" data-msg-for="check-list" data-msg="error" hidden>Couldn't load these checks. Routing checks need read access to LeanData and lead checks to the lead routing fields; ask RevOps if it keeps failing.</p>
+              <p class="os-empty" data-msg-for="check-list" data-msg="error" hidden>Couldn't load these checks with your access. Ask RevOps if it keeps failing.</p>
             </div></div>
         </div>
       </div>
@@ -1155,16 +1156,16 @@
       </div>
       <div class="view" id="hiring-leavers" data-view-panel="hiring:leavers" hidden>
         <div class="statbar">
-          <div class="stat"><span class="stat-label">People who left</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="people">—</b></span><span class="stat-sub">still holding something</span></div>
-          <div class="stat"><span class="stat-label">Renewals with no owner</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="renewalArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="renewals">—</b> open renewals, contract ARR</span></div>
-          <div class="stat"><span class="stat-label">Open deals</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="dealArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="deals">—</b> New Business and Upsell</span></div>
-          <div class="stat"><span class="stat-label">Open leads</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="leads">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="ready">—</b> Ready, nobody working them</span></div>
-          <div class="stat"><span class="stat-label">Active accounts</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="accounts">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_kpi" data-field="customerArr" data-fmt="usd">—</b> customer ARR</span></div>
+          <div class="stat"><span class="stat-label">People who left</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_core" data-field="people">—</b></span><span class="stat-sub">still holding something</span></div>
+          <div class="stat"><span class="stat-label">Renewals with no owner</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_core" data-field="renewalArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_core" data-field="renewals">—</b> open renewals, contract ARR</span></div>
+          <div class="stat"><span class="stat-label">Open deals</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_core" data-field="dealArr" data-fmt="usd">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_core" data-field="deals">—</b> New Business and Upsell</span></div>
+          <div class="stat"><span class="stat-label">Open leads</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_core" data-field="leads">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_core" data-field="ready">—</b> Ready, nobody working them</span></div>
+          <div class="stat"><span class="stat-label">Active accounts</span><span class="stat-value"><b data-draw="kpi-lv" data-source="leavers_core" data-field="accounts">—</b></span><span class="stat-sub"><b data-draw="kpi-lv" data-source="leavers_core" data-field="customerArr" data-fmt="usd">—</b> customer ARR</span></div>
         </div>
         <div class="pane" id="hire-leavers">
           <div class="pane-head"><div><h2 class="pane-title">People who left</h2><p class="pane-note">Salesforce users with an EMEA role who are no longer active but still own deals, renewals, leads or accounts, are Engagement Manager on customers, or keep a seat in a LeanData pool. Leads and pools show — when your access can't read them. The sparkle asks your Claude for a hand-over plan; it proposes new owners and waits for your OK before changing anything.</p></div><button class="ibtn" type="button" data-copy-table="lv-table" aria-label="Copy table" title="Copy table for Sheets or Slack"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div>
           <div class="pane-scroll">
-            <table class="tbl" data-source="leavers leavers_basic" data-row-key="userId">
+            <table class="tbl" data-source="leavers_core leavers_leads leavers_pools" data-row-key="userId">
               <thead><tr>
                 <th data-field="name">Name</th>
                 <th data-field="region">Team</th>
@@ -1186,6 +1187,7 @@
             </table>
             <div class="msgs"><span class="msg-slot" data-draw="msg" data-for="lv-table"></span>
               <p class="os-empty" data-msg-for="lv-table" data-msg="empty" hidden>Nobody who left still holds anything for this team.</p>
+              <p class="os-empty" data-msg-for="lv-table" data-msg="partial" hidden>Nobody who left holds deals, renewals or accounts for this team. Their leads or LeanData pool seats couldn't be read with your access.</p>
               <p class="os-empty" data-msg-for="lv-table" data-msg="connect" hidden>Connect Salesforce in your claude.ai connectors to see who left and what they still own.</p>
             </div>
           </div>
@@ -1645,7 +1647,7 @@
                 <th class="num" data-field="b21" data-sort="b21"><button type="button" class="th-sort">Over 20 business days</button></th>
                 <th class="num" data-field="noDateAll" data-sort="noDateAll"><button type="button" class="th-sort">No Ready date</button></th>
                 <th class="num" data-field="elsewhere" data-sort="elsewhere"><button type="button" class="th-sort">Other region</button></th>
-                <th data-field="oldest" data-sort="oldest"><button type="button" class="th-sort">Oldest Ready since</button></th>
+                <th data-field="oldest" data-sort="oldestSort"><button type="button" class="th-sort">Oldest Ready since</button></th>
                 <th class="num" data-field="otherOpen" data-sort="otherOpen"><button type="button" class="th-sort">Other open</button></th>
                 <th data-field="todo" data-sort="todo"><button type="button" class="th-sort">To do</button></th>
               </tr></thead>
@@ -1764,7 +1766,7 @@
     <p class="pd-note" data-pd-note="missing" hidden>This person isn't in the EMEA Salesforce roster or HiBob's EMEA departments, so there's nothing more to show.</p>
     <p class="pd-note" data-pd-note="nosf" hidden>No Salesforce user matched this HiBob person by email or name, so only their HiBob details show.</p>
     <p class="pd-note" data-pd-note="outside" hidden>Their Salesforce user is not in an EMEA sales role, so only their HiBob details show.</p>
-    <div class="pd-chips" data-draw="pd-chips" data-source="person person_hb rr_people"></div>
+    <div class="pd-chips" data-draw="pd-chips" data-source="person person_hb rr_people people"></div>
 
     <section class="pd-sec">
       <h3>Salesforce</h3>
@@ -1875,7 +1877,7 @@
       </div>
     </section>
     <div class="pd-actions">
-      <span class="pd-act" data-draw="pd-act" data-source="person users_all leavers leavers_basic"></span>
+      <span class="pd-act" data-draw="pd-act" data-source="person users_all leavers_core leavers_leads leavers_pools"></span>
       <button class="btn" type="button" data-prep-oo><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>Prep a 1:1</button>
       <button class="btn" type="button" data-copy-person-id><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copy Salesforce user ID</button>
     </div>

@@ -149,8 +149,10 @@ Each optional source is its own calculation, so a viewer whose access can't read
 without LeanData, routing pools, routing checks, routing gaps and pool seats show — or "not available", while the
 person panel, data checks, team scorecard, 1:1 agendas and Leavers (deals, renewals, accounts) keep working;
 without Lead access, the Leads screen and leavers' leads are missing; without HiBob, the Hiring screen and HiBob
-checks. A connector that isn't connected says "Connect … in your claude.ai connectors" rather than "Failed to load".
-The weekly summary waits for its sources and says "not available" for one that failed instead of leaving it out.
+checks. Data checks list whatever loaded and say when some couldn't. A connector that isn't connected says
+"Connect … in your claude.ai connectors" (naming the one that is actually missing) rather than "Failed to load", and
+one turned off for the dashboard says so. The weekly summary waits for its sources and says "not available" for one
+that failed instead of leaving it out.
 
 ## Known gaps
 

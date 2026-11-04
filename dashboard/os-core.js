@@ -300,6 +300,21 @@ window.OS = (() => {
     if (!ins) { const st = dash.data(id).status; return st === 'connect' || st === 'declined'; }
     return ins.some((x) => needsConnect(x, seen));
   };
+  // which connectors a set of sources is waiting for, traced through calcs: { names: [...], declined: bool }
+  const CONNECTOR = (id) => (id === 'cal_events' ? 'Google Calendar' : id === 'hb_people' ? 'HiBob' : /^gr_/.test(id) ? 'Granola' : 'Salesforce');
+  const connectInfo = (ids) => {
+    const names = new Set(); let declined = true;
+    const walk = (id, seen) => {
+      if (seen.has(id)) return; seen.add(id);
+      const ins = CALC_IN[id];
+      if (ins) { ins.forEach((x) => walk(x, seen)); return; }
+      const st = dash.data(id).status;
+      if (st === 'connect' || st === 'declined') { names.add(CONNECTOR(id)); if (st === 'connect') declined = false; }
+    };
+    const seen = new Set();
+    ids.forEach((id) => walk(id, seen));
+    return { names: [...names], declined: names.size > 0 && declined };
+  };
   const state = (...ids) => {
     let s = 'ok', failed = false;
     for (const id of ids) {
@@ -382,7 +397,7 @@ window.OS = (() => {
   const defTable = (name, ids, rows, cols, opts = {}) => {
     const getIds = typeof ids === 'function' ? ids : () => ids;
     tables[name] = { ids: getIds, rows, cols, opts };
-    reg[name] = { kind: 'table', ids: getIds, rows, fields: cols.map((c) => c.f).concat(opts.also || []), limit: opts.limit || 400 };
+    reg[name] = { kind: 'table', ids: getIds, rows, fields: cols.map((c) => c.f).concat(opts.also || []), limit: opts.limit || 400, msg: opts.msg || null };
     dash.draw(name, (tbody) => {
       const { s, list } = tableRows(name);
       if (s !== 'ok' || !list.length) { tbody.replaceChildren(); return; }
@@ -444,7 +459,15 @@ window.OS = (() => {
     if (reg[name] && reg[name].kind === 'chart' && (k === 'loading' || k === 'error')) k = null;
     slot.className = 'msg-slot' + (k === 'loading' ? ' dash-skeleton' : k === 'error' ? ' os-fail' : '');
     slot.textContent = k === 'error' ? 'Failed to load' : '';
-    document.querySelectorAll('[data-msg-for]').forEach((p) => { if (p.dataset.msgFor === name) p.hidden = p.dataset.msg !== k; });
+    // 'connect': the element's own sentence when it names a connector that is missing; otherwise say which one is
+    let own = true;
+    if (k === 'connect' && reg[name]) {
+      const info = connectInfo(reg[name].ids());
+      const paras = [...document.querySelectorAll('[data-msg-for]')].filter((p) => p.dataset.msgFor === name && p.dataset.msg === 'connect');
+      own = !info.declined && info.names.length > 0 && paras.some((p) => info.names.some((n) => p.textContent.includes(n)));
+      if (!own && info.names.length) slot.textContent = info.declined ? info.names.join(' and ') + (info.names.length > 1 ? ' are' : ' is') + ' turned off for this dashboard, so this can\'t load.' : 'Connect ' + info.names.join(' and ') + ' in your claude.ai connectors to see this.';
+    }
+    document.querySelectorAll('[data-msg-for]').forEach((p) => { if (p.dataset.msgFor === name) p.hidden = p.dataset.msg !== k || (k === 'connect' && !own); });
   };
   const redraw = (name) => { dash.draw(name); dash.draw('msg'); };
   const tableText = (name) => {
@@ -721,6 +744,37 @@ OS.checkRows = () => {
     .sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.area).localeCompare(String(b.area)) || String(a.title).localeCompare(String(b.title)));
 };
 
+// ---------- People who left ----------
+// Deals, renewals and accounts always (leavers_core); open leads (leavers_leads) and LeanData pool seats
+// (leavers_pools) join when they load, each on its own, and are unknown (null) when they can't be read.
+OS.leavers = () => {
+  const ok = (id) => OS.state(id) === 'ok';
+  if (!ok('leavers_core')) return null;
+  const leadsKnown = ok('leavers_leads'), poolsKnown = ok('leavers_pools');
+  const base = (leadsKnown ? dash.data('leavers_leads').data : dash.data('leavers_core').data) || [];
+  const pools = poolsKnown ? new Map((dash.data('leavers_pools').data || []).map((p) => [p.key, p])) : null;
+  const rows = base.map((o) => {
+    const p = pools ? pools.get(o.key) : null;
+    return { ...o, leads: leadsKnown ? o.leads || 0 : null, ready: leadsKnown ? o.ready || 0 : null, fresh: leadsKnown ? o.fresh || 0 : null, pools: pools ? (p ? p.pools : 0) : null, poolNames: p ? p.poolNames : '' };
+  })
+    .filter((o) => o.deals || o.renewals || o.leads || o.accounts || o.customers || o.emCustomers || o.pools)
+    .map((o) => ({ ...o, status: o.renewals || o.deals || o.customers || o.emCustomers ? 'Hand over revenue' : o.leads ? 'Reassign leads' : o.accounts ? 'Reassign accounts' : 'Remove from routing' }))
+    .sort((a, b) => (b.renewalArr + b.dealArr + b.customerArr) - (a.renewalArr + a.dealArr + a.customerArr) || (b.leads || 0) - (a.leads || 0) || String(a.name).localeCompare(String(b.name)));
+  return { rows, leadsKnown, poolsKnown, sources: ['leavers_core'].concat(leadsKnown ? ['leavers_leads'] : [], poolsKnown ? ['leavers_pools'] : []) };
+};
+// the leavers headline for a scope key ('All', a team, or 'M|manager')
+OS.leaversIn = (scope) => {
+  const lv = OS.leavers();
+  if (!lv) return null;
+  const rows = lv.rows.filter((r) => (String(scope).startsWith('M|') ? r.manager === scope.slice(2) : scope === 'All' || r.region === scope));
+  const sum = (f) => rows.reduce((s, r) => s + (+r[f] || 0), 0);
+  return { people: rows.length, deals: sum('deals'), dealArr: sum('dealArr'), renewals: sum('renewals'), renewalArr: sum('renewalArr'),
+    leads: lv.leadsKnown ? sum('leads') : null, ready: lv.leadsKnown ? sum('ready') : null, accounts: sum('accounts'), customers: sum('customers'),
+    customerArr: sum('customerArr'), emCustomers: sum('emCustomers'), pools: lv.poolsKnown ? sum('pools') : null, leadsKnown: lv.leadsKnown, poolsKnown: lv.poolsKnown, sources: lv.sources };
+};
+// what the leavers drawings wait for: the core, plus a layer only while it is still loading
+OS.leaversIds = () => ['leavers_core'].concat(['leavers_leads', 'leavers_pools'].filter((id) => OS.state(id) === 'loading'));
+
 // ---------- Completed next steps ----------
 // Each viewer's ticks live in their own private part of this dashboard's database (data/users/<their id>/os-done),
 // keyed by the meeting and the item's wording. Without a database or an id here, nothing can be ticked.
@@ -730,7 +784,7 @@ OS.done = (() => {
   // so two tabs or devices ticking at once don't overwrite each other.
   const stored = new Map();
   const pending = new Map();
-  let ref = null, can = false, ready = false, exists = false, writing = Promise.resolve(), cur = new Map();
+  let ref = null, can = false, ready = false, exists = false, docKeys = 0, writing = Promise.resolve(), cur = new Map();
   const today = () => new Date().toISOString().slice(0, 10);
   // a stable key that keeps no note text: the meeting, plus a hash of the owner and the item's wording
   const norm = (t) => String(t || '').toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -767,6 +821,7 @@ OS.done = (() => {
         stored.clear();
         const d = snap && snap.exists ? snap.data() : null;
         exists = !!(snap && snap.exists);
+        docKeys = (d && Array.isArray(d.items) ? d.items.length : 0) + (d && d.done && typeof d.done === 'object' ? Object.keys(d.done).length : 0);
         // earlier versions kept a list of { k, at }
         for (const x of (d && Array.isArray(d.items) ? d.items : [])) if (x && typeof x.k === 'string') stored.set(safe(x.k), typeof x.at === 'string' ? x.at : '');
         const map = d && d.done && typeof d.done === 'object' ? d.done : {};
@@ -778,19 +833,30 @@ OS.done = (() => {
   })();
   const FATAL = ['invalid_argument', 'not_granted', 'capability_disabled', 'capability_removed', 'transform_error', 'revoked', 'quota_exceeded'];
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  // one write at a time; each sends the keys toggled since the last one
+  // one write at a time; each sends the keys toggled since the last one. Merges only add keys (an untick is
+  // stored as null), so past 1,000 keys the document is rewritten with the last 200 days' ticks instead.
+  const MAX_KEYS = 1000;
   const write = () => {
     writing = writing.then(async () => {
       const sent = new Map(pending);
       if (!sent.size) return;
       const change = {};
       for (const [k, on] of sent) change[k] = on ? stored.get(k) || today() : null;
-      const send = () => (exists ? ref.update({ done: change }) : ref.set({ done: Object.fromEntries([...merged()].map(([k, at]) => [k, at || today()])) }));
+      const cut = new Date(Date.now() - 200 * 864e5).toISOString().slice(0, 10);
+      const compact = () => ({ done: Object.fromEntries([...merged()].filter(([, at]) => !at || at >= cut).map(([k, at]) => [k, at || today()])) });
+      const send = async () => {
+        // before this viewer's first saved tick, another tab may have created the document: merge into it, don't replace it
+        if (!exists) { const snap = await ref.get(); exists = !!(snap && snap.exists); }
+        if (exists && docKeys + sent.size <= MAX_KEYS) { await ref.update({ done: change }); docKeys += sent.size; }
+        else { const body = compact(); await ref.set(body); exists = true; docKeys = Object.keys(body.done).length; }
+      };
       let err = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         try { await send(); err = null; break; } catch (e) {
           err = e;
           const code = e && e.code;
+          // a full document is refused like a write the viewer can't make: compact once before giving up
+          if (code === 'invalid_argument' && exists && attempt === 0 && docKeys > 200) { docKeys = MAX_KEYS + 1; continue; }
           if (FATAL.includes(code)) break;
           await wait(code === 'resource_exhausted' ? 4000 + Math.random() * 2000 : 800 + Math.random() * 1200);
         }
@@ -1003,7 +1069,7 @@ OS.oo = (() => {
   // plain-text summaries for Slack: built from the data already loaded on screen
   const rowOf = (id, pick) => (OS.state(id) === 'ok' ? (dash.data(id).data || []).find(pick) || null : null);
   // the sources the weekly summary reads; Home loads them while it is open, and the copy button waits for them
-  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', 'checks', 'leavers_kpi', 'ld_kpi', 'ld_kpi_rt', 'orphan_kpi', 'engagement_kpi'];
+  const SUMMARY = ['pipe_team', 'pipe_cover', 'moves_kpi', 'cr_kpi', 'risk_kpi', 'rr_kpi', ...OS.CHECKS, 'leavers_core', 'leavers_leads', 'leavers_pools', 'ld_kpi', 'ld_kpi_rt', 'orphan_kpi', 'engagement_kpi', 'gr_actions'];
   const failedSrc = (id) => ['error', 'connect'].includes(OS.state(id));
   const weeklySummary = () => {
     const p = dash.params();
@@ -1018,9 +1084,8 @@ OS.oo = (() => {
     const cov = rowOf('pipe_cover', (r) => r.key === pipeKey);
     const mv = rowOf('moves_kpi', (r) => r.region === scope);
     const rk = rowOf('risk_kpi', (r) => r.region === scope);
-    // leavers: with leads and pool seats when those load, else deals, renewals and accounts only
-    const lvFull = !failedSrc('leavers_kpi');
-    const lv = lvFull ? rowOf('leavers_kpi', (r) => r.region === scope) : rowOf('leavers_kpi_basic', (r) => r.region === scope);
+    // leavers: deals, renewals and accounts, plus leads and pool seats when those could be read
+    const lv = OS.leaversIn(scope);
     const eng = rowOf('engagement_kpi', (r) => r.region === scope);
     const ld = rowOf('ld_kpi', (r) => r.region === scope);
     const ldRt = rowOf('ld_kpi_rt', (r) => r.region === scope);
@@ -1044,14 +1109,19 @@ OS.oo = (() => {
     else add(na('Stuck in stage', 'risk_kpi'));
     if (rr) add(`• Routing: ${n(rr.missing, 'rep', 'reps')} missing from a pool, ${n(rr.weekOne, 'joiner', 'joiners')} to add next week`);
     else add(na('Routing', 'rr_kpi'));
-    if (OS.state('checks') === 'ok') { const cs = OS.checkRows(); add(`• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent`); }
-    else add(na('Data checks', 'checks'));
+    if (OS.CHECKS.some((id) => OS.state(id) === 'ok')) {
+      const cs = OS.checkRows();
+      const partial = OS.CHECKS.some((id) => failedSrc(id));
+      add(`• Data checks: ${OS.num(cs.length)} open, ${OS.num(cs.filter((c) => c.severity === 'high').length)} urgent${partial ? ' (some checks couldn\'t load)' : ''}`);
+    } else add(na('Data checks', 'checks'));
     if (lv) {
       const held = [lv.renewals ? n(lv.renewals, 'renewal', 'renewals') + ' (' + OS.usd(lv.renewalArr) + ' contract ARR)' : '', lv.deals ? n(lv.deals, 'open deal', 'open deals') : '',
-        lvFull && lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : '',
-        lv.emCustomers ? 'Engagement Manager on ' + n(lv.emCustomers, 'customer', 'customers') : '', lvFull && lv.pools ? n(lv.pools, 'LeanData pool seat', 'LeanData pool seats') : ''].filter(Boolean);
-      if (lv.people && held.length) add(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}`);
-    } else add(na('Leavers', 'leavers_kpi_basic'));
+        lv.leads ? n(lv.leads, 'open lead', 'open leads') : '', lv.accounts ? n(lv.accounts, 'active account', 'active accounts') : '',
+        lv.emCustomers ? 'Engagement Manager on ' + n(lv.emCustomers, 'customer', 'customers') : '', lv.pools ? n(lv.pools, 'LeanData pool seat', 'LeanData pool seats') : ''].filter(Boolean);
+      const unknown = [lv.leads === null ? 'leads' : '', lv.pools === null ? 'pool seats' : ''].filter(Boolean).join(' and ');
+      if (lv.people && held.length) add(`• Leavers: ${n(lv.people, 'person who left still holds', 'people who left still hold')} ${held.join(', ')}${unknown ? ` (${unknown} not available)` : ''}`);
+      else if (unknown) add(`• Leavers: ${unknown} of people who left not available (couldn't load)`);
+    } else add(na('Leavers', 'leavers_core'));
     const ldSpeed = !ld ? '' : ld.hRate != null ? `${OS.pct(ld.hRate)} of demo requests worked within 1 business day (${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)}, last 30 days)`
       : ld.hEligible ? `${OS.num(ld.hWithin)} of ${OS.num(ld.hEligible)} demo requests worked within 1 business day (too few to rate)` : !ld.lEligible && ld.notScored > 0 ? 'speed not timed for SMB-owned leads (automation moves them out of Ready)' : 'no timed demo requests in the last 30 days';
     if (ld) { if (ld.handoffs || ld.readyNow) add(`• Leads: ${ldSpeed}; ${n(ld.demoWaiting, 'demo request', 'demo requests')} waiting 2+ business days; ${OS.num(ld.readyNow)} in Ready, ${OS.num(ld.stale)} of them over 20 business days or since before 19 May${ldRt && ldRt.routingIssues ? `; ${n(ldRt.routingIssues, 'lead', 'leads')} stuck in routing` : ''}`); }
@@ -1062,6 +1132,7 @@ OS.oo = (() => {
     const mine = OS.state('gr_actions') === 'ok' ? (dash.data('gr_actions').data || []).filter((r) => r.forYou && !r.done && !OS.done.has(r)) : null;
     if (mine) add(`• My action items: ${OS.num(mine.length)} for me from ${OS.num(new Set(mine.map((r) => r.meetingId)).size)} meetings`);
     else if (gr) add(`• My action items: ${OS.num(gr.forYou)} for me`);
+    else add(na('My action items', 'gr_actions'));
     return lines.length > 1 ? lines.join('\n') : '';
   };
   const checksChecklist = () => {
@@ -1241,7 +1312,7 @@ OS.oo = (() => {
         n.hidden = !((k === 'pick' && ready && !who) || (k === 'nobooking' && who && ready && !booked && OS.state('oo_upcoming') === 'ok') || (k === 'last' && hasLast) || (k === 'private' && hasPriv));
       });
       // the agenda is built from what has loaded, so copying and sending wait for its sources
-      const agendaLoading = OS.state('oo_points') === 'loading' || OS.state('oo_followups') === 'loading';
+      const agendaLoading = ['oo_points', 'oo_points_rr', 'oo_followups'].some((id) => OS.state(id) === 'loading');
       document.querySelectorAll('[data-copy-agenda], [data-ask-agenda]').forEach((b) => { b.disabled = !who || who.startsWith('n:') || agendaLoading; });
     }
     document.querySelectorAll('[data-scope-note]').forEach((n) => { n.hidden = !p.mgr; });
@@ -1262,6 +1333,12 @@ OS.oo = (() => {
     document.querySelectorAll('[data-hello]').forEach((h) => { h.hidden = h.dataset.hello !== part; });
     OS.ask.refresh();
     document.querySelectorAll('[data-ask-agenda]').forEach((b) => { b.hidden = !OS.ask.can(); });
+    // data checks: say so when some sources failed while others loaded (only on the screens that list them)
+    if (screen === 'home' || screen === 'actions') {
+      const st = OS.CHECKS.map((id) => OS.state(id));
+      const partial = st.includes('ok') && st.some((x) => x === 'error' || x === 'connect');
+      document.querySelectorAll('[data-checks-partial]').forEach((n) => { n.hidden = !partial; });
+    }
     // Home loads what the weekly summary reads, and the copy button waits until it has loaded
     if (screen === 'home') {
       const busy = SUMMARY.some((id) => OS.state(id) === 'loading');

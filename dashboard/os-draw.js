@@ -171,7 +171,7 @@ OS.defTable('cr-rep-table', ['cr_leader'], () => (dash.data('cr_leader').data ||
 // ===================== ACTION ITEMS =====================
 dash.draw('kpi-gr', (el) => OS.value(el, ['gr_kpi'], () => OS.num(grCount(el))));
 // counts every check source that has loaded, in the scope picked, exactly as the lists show them
-dash.draw('kpi-checks', (el) => OS.value(el, ['checks'], () => {
+dash.draw('kpi-checks', (el) => OS.value(el, checkIds(OS.CHECKS), () => {
   const f = keepField(el);
   el.dataset.source = OS.CHECKS.filter((id) => OS.state(id) === 'ok').join(' ') || 'checks';
   delete el.dataset.field; delete el.dataset.where;
@@ -280,7 +280,7 @@ OS.defList('home-actions', ['gr_actions'], () => (dash.data('gr_actions').data |
 // the definition behind a Books check, so Claude can rebuild exactly the accounts the dashboard counted
 const booksHow = (c) => {
   const geo = "Sales_Region__c IN ('Northern Europe','FME','DACH','Iberia','Southern Europe','MEA','LATAM') AND (Account_Status__c IN ('Customer','Pipeline','Engaging') OR ARR_USD__c > 0)";
-  const owner = { 'Inactive owner': 'Owner.IsActive = false', 'Unassigned': 'the owner has no role', 'RevOps holding': "Owner.UserRole.Name = 'REVOPS'", 'Owner outside EMEA': "the owner is active and their role name doesn't contain EMEA and isn't REVOPS or a strategic or partnerships role" }[c.reason];
+  const owner = { 'Inactive owner': 'Owner.IsActive = false', 'Unassigned': 'the owner is active and has no role', 'RevOps holding': "the owner is active and Owner.UserRole.Name = 'REVOPS'", 'Owner outside EMEA': "the owner is active and their role name doesn't contain EMEA and isn't REVOPS or a strategic or partnerships role" }[c.reason];
   if (owner) return 'These are accounts with ' + geo + ', where ' + owner + '.';
   if (c.id === 'books:split') return 'A book is the accounts sharing a Territory ID; it is split when its main owner holds under 80% of them.';
   return '';
@@ -306,7 +306,7 @@ const checkItem = (c) => {
   if (c.view) go.dataset.navView = c.view;
   go.appendChild(OS.icon(OS.ICON.go));
   }
-  const how = c.how ? c.how : c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
+  const how = c.how ? c.how + (c.area === 'Leads' ? LD_GUARD : '') : c.area === 'Routing' ? ' Work out which LeanData round-robin pools they belong in (their role, their peers\' pools), or what to change in the pool, and propose the exact change.'
     : c.area === 'Pipeline' ? ' Pull their past-due opportunities and propose a new close date, stage or closing each one.'
     : c.area === 'Books' ? ' ' + booksHow(c) + ' List the accounts behind it and propose who should own them; if your count differs from the check\'s, stop and tell me.'
     : c.area === 'Hiring' ? ' Compare their HiBob record with their Salesforce user (role, manager, active) and propose the fix.'
@@ -319,21 +319,26 @@ const checkItem = (c) => {
   li.append(OS.el('span', 'itm-dot ' + c.severity), main, meta);
   return li;
 };
-// Salesforce checks always; routing, HiBob, leaver and lead checks join them once they have loaded (OS.checkRows)
+// every check source that has loaded, merged (OS.checkRows); one source failing leaves the rest
 const allChecks = () => OS.checkRows();
-// an area whose checks come from one optional source says why it is empty when that source hasn't loaded
-const CHECK_SRC = { Routing: 'checks_rr', Hiring: 'checks_hb', Leads: 'checks_ld' };
-OS.defList('check-list', ['checks'], () => {
-  const area = dash.params().checkArea || 'All';
+// the sources that can produce each area's checks
+const AREA_SRC = { Routing: ['checks_rr'], Hiring: ['checks', 'checks_hb'], Pipeline: ['checks'], Books: ['checks'], Leavers: ['checks', 'checks_lv'], Leads: ['checks_ld', 'checks_ld_rt', 'checks_ld_cap'] };
+const areaSrc = (area) => AREA_SRC[area] || OS.CHECKS;
+// a list waits only while none of its sources has loaded, then shows what did
+const checkIds = (srcs) => (srcs.some((id) => OS.state(id) === 'ok') ? [] : [srcs[0]]);
+// nothing to show: still loading, couldn't load (or needs connecting), or no problems
+const checkMsg = (area) => () => {
+  if (allChecks().some((c) => area() === 'All' || c.area === area())) return null;
+  const st = areaSrc(area()).map((id) => OS.state(id));
+  return st.includes('loading') ? 'loading' : st.includes('connect') ? 'connect' : st.includes('error') ? 'error' : 'empty';
+};
+const checkArea = () => dash.params().checkArea || 'All';
+OS.defList('check-list', () => checkIds(areaSrc(checkArea())), () => {
+  const area = checkArea();
   return allChecks().filter((c) => area === 'All' || c.area === area);
-}, (rows) => rows.map(checkItem), { msg: () => {
-  const area = dash.params().checkArea || 'All';
-  if (allChecks().some((c) => area === 'All' || c.area === area)) return null;
-  const st = CHECK_SRC[area] ? OS.state(CHECK_SRC[area]) : 'ok';
-  return st === 'ok' ? 'empty' : st;
-} });
+}, (rows) => rows.map(checkItem), { msg: checkMsg(checkArea) });
 // Home's top 7: at most 2 lead checks, so they don't crowd out the rest
-OS.defList('home-checks', ['checks'], () => { let n = 0; return allChecks().filter((c) => c.area !== 'Leads' || n++ < 2).slice(0, 7); }, (rows) => rows.map(checkItem));
+OS.defList('home-checks', () => checkIds(OS.CHECKS), () => { let n = 0; return allChecks().filter((c) => c.area !== 'Leads' || n++ < 2).slice(0, 7); }, (rows) => rows.map(checkItem), { msg: checkMsg(() => 'All') });
 
 // ===================== HIRING =====================
 // with LeanData the hiring numbers include pool status; without it they fall back to people_core (pools show —)
@@ -369,12 +374,15 @@ OS.defTable('hire-team-table', ['hire_teams'], () => dash.data('hire_teams').dat
 
 // people who left: what they still hold, and a hand-over request for your Claude. With leads and pool seats when the
 // leads and LeanData load; otherwise from deals, renewals and accounts alone (leads and pools then show —).
-const lvSrc = () => (['error', 'connect'].includes(OS.state('leavers')) ? 'leavers_basic' : 'leavers');
-dash.draw('kpi-lv', (el) => {
-  const id = lvSrc() === 'leavers' ? 'leavers_kpi' : 'leavers_kpi_basic';
-  el.dataset.source = id;
-  OS.value(el, [id], () => { const v = scopeRowOf(el, id)[keepField(el)]; return v === null ? '—' : fmtBy(el, v || 0); });
-});
+dash.draw('kpi-lv', (el) => OS.value(el, OS.leaversIds(), () => {
+  const f = keepField(el);
+  const k = OS.leaversIn(scopeKey()) || {};
+  // the number is built from whichever leaver layers loaded; leads and pool seats are — when they couldn't be read
+  el.dataset.source = (k.sources || ['leavers_core']).join(' ');
+  delete el.dataset.field; delete el.dataset.where;
+  const v = k[f];
+  return v === null ? '—' : fmtBy(el, v || 0);
+}));
 const lvHeld = (r) => [
   r.deals ? OS.num(r.deals) + ' open deal' + (r.deals === 1 ? '' : 's') + ' (' + OS.usd(r.dealArr) + ' ARR)' : '',
   r.renewals ? OS.num(r.renewals) + ' open renewal' + (r.renewals === 1 ? '' : 's') + ' (' + OS.usd(r.renewalArr) + ' contract ARR)' : '',
@@ -384,7 +392,7 @@ const lvHeld = (r) => [
   r.emCustomers ? 'Engagement Manager on ' + OS.num(r.emCustomers) + ' customer' + (r.emCustomers === 1 ? '' : 's') : '',
   r.pools ? 'a seat in ' + OS.num(r.pools) + ' LeanData pool' + (r.pools === 1 ? '' : 's') + ' (' + r.poolNames + ')' : '',
 ].filter(Boolean).join('; ');
-const lvAsk = (r) => OS.links.ask(OS.ask.data('Hand-over: ' + r.name, 'Plan the hand-over for ' + r.name + ', who has left (their Salesforce user is inactive' + (r.role ? '; role ' + r.role : '') + (r.manager && r.manager !== '(no manager)' ? '; manager ' + r.manager : '') + '). They still own: ' + lvHeld(r) + '.' + (r.leads === null ? ' The dashboard couldn\'t read their leads or LeanData pool seats, so check those too.' : '') + ' Propose who should take each item (people in their team first, keeping books balanced), list the Salesforce and LeanData changes, and wait for my OK before changing anything.' + (r.leads ? ' For their leads, report counts and groups only: no lead names, emails or companies in chat.' : ''), { kind: 'leaver', userId: r.userId, name: r.name }));
+const lvAsk = (r) => OS.links.ask(OS.ask.data('Hand-over: ' + r.name, 'Plan the hand-over for ' + r.name + ', who has left (their Salesforce user is inactive' + (r.role ? '; role ' + r.role : '') + (r.manager && r.manager !== '(no manager)' ? '; manager ' + r.manager : '') + '). They still own: ' + lvHeld(r) + '.' + (r.leads === null || r.pools === null ? ' The dashboard couldn\'t read their ' + [r.leads === null ? 'leads' : '', r.pools === null ? 'LeanData pool seats' : ''].filter(Boolean).join(' or ') + ', so check those too.' : '') + ' Propose who should take each item (people in their team first, keeping books balanced), list the Salesforce and LeanData changes, and wait for my OK before changing anything.' + (r.leads ? ' For their leads, report counts and groups only: no lead names, emails or companies in chat.' : ''), { kind: 'leaver', userId: r.userId, name: r.name }));
 const lvActs = (r) => {
   const box = OS.el('span', 'row-acts');
   const sf = OS.links.sf('User', r.userId);
@@ -393,7 +401,7 @@ const lvActs = (r) => {
   if (ask) box.append(ask);
   return box.children.length ? box : null;
 };
-OS.defTable('lv-table', () => [lvSrc()], () => (dash.data(lvSrc()).data || []).filter(inTeam), [
+OS.defTable('lv-table', () => OS.leaversIds(), () => ((OS.leavers() || {}).rows || []).filter(inTeam), [
   { f: 'name', person: (r) => r.name, after: (r) => lvActs(r) }, { f: 'region' }, { f: 'manager' },
   { f: 'deals', fmt: OS.num, num: true }, { f: 'dealArr', fmt: OS.usd, num: true },
   { f: 'renewals', fmt: OS.num, num: true }, { f: 'renewalArr', fmt: OS.usd, num: true, cls: (v) => (v > 0 ? 'os-bad' : '') },
@@ -403,7 +411,11 @@ OS.defTable('lv-table', () => [lvSrc()], () => (dash.data(lvSrc()).data || []).f
   { f: 'emCustomers', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'pools', fmt: OS.num, num: true, cls: (v) => (v > 0 ? 'os-warn' : '') },
   { f: 'status', chip: (v) => (v === 'Hand over revenue' ? 'bad' : 'warn') },
-], { key: 'userId', also: ['poolNames'] });
+], { key: 'userId', also: ['poolNames'], msg: () => {
+  const lv = OS.leavers();
+  if (lv && lv.rows.some(inTeam)) return null;
+  return lv && (!lv.leadsKnown || !lv.poolsKnown) ? 'partial' : 'empty';
+} });
 
 // ===================== ROUTING =====================
 dash.draw('kpi-rr', (el) => OS.value(el, ['rr_kpi'], () => OS.num(regionRow(el, 'rr_kpi')[keepField(el)] || 0)));
@@ -512,10 +524,14 @@ dash.draw('pd-chips', (el) => {
   const h = rowFor('person_hb');
   const rr = rowFor('rr_people');
   const routing = rr ? rr.status : null;
+  // HiBob's view of the joiner, with their pool status when LeanData has loaded (people), else without (person_hb)
+  const p = dash.params().person;
+  const hp = p && OS.state('people') === 'ok' ? (dash.data('people').data || []).find((x) => (x.sfName || x.name) === p) || null : null;
+  const hiring = hp && hp.status !== 'In a routed role' ? hp.status : h ? h.hiring : null;
   const chips = [];
   if (r && r.isActive === false) chips.push(['Inactive in Salesforce', 'bad']);
   if (routing) chips.push([routing, statusCls(routing)]);
-  if (h && h.hiring && h.hiring !== routing && h.hiring !== 'In routing') chips.push([h.hiring, statusCls(h.hiring)]);
+  if (hiring && hiring !== routing && hiring !== 'In routing') chips.push([hiring, statusCls(hiring)]);
   if (h && h.mgrDiffers) chips.push([h.sfManager ? 'Manager differs from HiBob' : 'No manager in Salesforce', 'warn']);
   if (r && r.pastDue > 0) chips.push([OS.num(r.pastDue) + ' past due', 'bad']);
   el.replaceChildren(...chips.map(([t, c]) => OS.el('span', 'chip ' + c, t)));
@@ -608,7 +624,7 @@ OS.defList('palette-list', ['roster'], paletteRows, (rows) => rows.map((r) => {
 } });
 
 // ===================== THIS WEEK (HOME) =====================
-OS.defList('home-started', ['people'], () => (dash.data('people').data || []).filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 6)
+OS.defList('home-started', () => [peopleSrc()], () => (dash.data(peopleSrc()).data || []).filter((p) => p.daysIn != null && p.daysIn >= 0 && p.daysIn <= 6)
   .sort((a, b) => a.daysIn - b.daysIn), (rows) => rows.map((p) => {
   const li = OS.el('li', 'itm');
   li.dataset.key = p.id;
@@ -1003,8 +1019,8 @@ dash.draw('pd-act', (box) => {
   if (mail) out.push(mail);
   const sf = p && p.userId ? OS.links.sf('User', p.userId) : null;
   if (sf) out.push(sf);
-  const lvId = n ? lvSrc() : null;
-  const left = n && OS.state(lvId) === 'ok' ? (dash.data(lvId).data || []).find((r) => r.name === n) : null;
+  const lvAll = n ? OS.leavers() : null;
+  const left = lvAll ? lvAll.rows.find((r) => r.name === n) || null : null;
   const ask = left ? lvAsk(left) : n ? OS.links.ask(OS.ask.data('About ' + n, 'Give me a quick read on ' + n + (p ? ' (' + (p.role || 'no role') + ', ' + (p.region || '') + ', manager ' + (p.manager || 'none') + ')' : '') + ' from the EMEA RevOps OS: their pipeline and deals at risk, created opps, routing, book and open follow-ups with me, and what I should do about any of it.', { kind: 'person', person: n, userId: p ? p.userId : null })) : null;
   if (ask) out.push(ask);
   box.replaceChildren(...out);
@@ -1012,7 +1028,7 @@ dash.draw('pd-act', (box) => {
 dash.draw('oo-mail', (box) => {
   const w = OS.oo.who();
   // no email link until the agenda's sources have loaded: a half-built agenda would go out as if complete
-  const loading = OS.state('oo_points') === 'loading' || OS.state('oo_followups') === 'loading';
+  const loading = ['oo_points', 'oo_points_rr', 'oo_followups'].some((id) => OS.state(id) === 'loading');
   const text = w && !w.startsWith('n:') && !loading ? OS.oo.text() : '';
   const name = w ? OS.oo.nameOf(w) : '';
   const a = text ? OS.links.mail(w, '1:1 agenda', text) : null;
@@ -1163,8 +1179,8 @@ const ldRepAsk = (r) => (!r.scored
     + ldPlural(r.readyNow, 'Ready lead', 'Ready leads') + ' now, ' + ldPlural(r.demoOverdue, 'demo request', 'demo requests') + ' waiting 2+ business days. With my Salesforce access, list their Ready leads (OwnerId = ' + r.ownerId
     + ", Status = 'Ready', IsConverted = false) grouped by source and age, demo requests first, and say which need a person now." + LD_GUARD + ' Read only: change nothing and send nothing.', { person: r.owner, userId: r.ownerId })
   : ldAsk('Speed review: ' + r.owner, 'Review lead speed for ' + r.owner + ' (' + (r.role || 'no role') + ', ' + r.region + ldMgr(r) + ') from the EMEA RevOps OS. In the last 30 days they were handed '
-    + ldPlural(r.handoffs, 'lead', 'leads') + ': ' + (r.hEligible ? OS.num(r.hWithin) + ' of ' + OS.num(r.hEligible) : 'none of their') + ' demo requests were worked within 1 business day' + (r.hMedianHours != null ? ' (median ' + ldHours(r.hMedianHours, r.hMedianAtLeast) + ' business hours)' : '')
-    + ', and ' + (r.lEligible ? OS.num(r.lWithin) + ' of ' + OS.num(r.lEligible) : 'none of their') + ' other hand-offs within 5 business days. ' + ldPlural(r.demoOverdue, 'demo request is', 'demo requests are') + ' in Ready for 2+ business days now. With my Salesforce access, list their leads (OwnerId = '
+    + ldPlural(r.handoffs, 'lead', 'leads') + ': ' + (r.hEligible ? OS.num(r.hWithin) + ' of ' + OS.num(r.hEligible) + ' demo requests were worked within 1 business day' + (r.hMedianHours != null ? ' (median ' + ldHours(r.hMedianHours, r.hMedianAtLeast) + ' business hours)' : '') : 'no demo requests came due, so none were timed')
+    + '; ' + (r.lEligible ? OS.num(r.lWithin) + ' of ' + OS.num(r.lEligible) + ' other hand-offs were worked within 5 business days' : 'no other hand-offs came due') + '. ' + ldPlural(r.demoOverdue, 'demo request is', 'demo requests are') + ' in Ready for 2+ business days now. With my Salesforce access, list their leads (OwnerId = '
     + r.ownerId + ') with Ready Since in the last 30 days that left Ready late or are still Ready past due. Group them by source and weekday, oldest first, and show source and age only. Say what is slowing them down and suggest one or two fixes (routing, capacity, a reminder).' + LD_GUARD + ' Read only: change nothing and send nothing.', { person: r.owner, userId: r.ownerId }));
 const ldStatusCls = (v) => (v === 'Left' || v === 'Demo waiting' ? 'bad' : v === 'Slow' || v === 'Demo past due' ? 'warn' : v === 'On time' ? 'ok' : '');
 OS.defTable('ld-rep-table', ['ld_reps'], () => (dash.data('ld_reps').data || []).filter((r) => inTeam(r) && (r.handoffs > 0 || r.readyNow > 0))
