@@ -25,7 +25,8 @@ the prompt ends with an explicit never-call list).
   Granola, Gmail, Slack or Calendar tools and ended `partial` with every source
   failed. A session created with `create_session` from the same place does hold
   them (checked with a probe session the same minute), so the task is bound to
-  one. The fresh-session task is kept, disabled, as *RevOps Hub intake (fresh
+  one. Verified the same night: a one-off scheduled fire (`run_once_at`) bound to
+  the worker session started a turn there within a minute, with the connectors. The fresh-session task is kept, disabled, as *RevOps Hub intake (fresh
   session; attach connectors in the UI before enabling)*
   (`trig_013FH87zjevHwac4QetLRaun`, push notifications on). If its connectors can
   be attached in the claude.ai scheduled-tasks UI, enable it, disable the bound
