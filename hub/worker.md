@@ -150,6 +150,28 @@ document is still the worker's (an open status, no page log entry), otherwise
 dropped and counted as skipped; a failed connector is recorded in `sources` and
 the run ends `partial`, never silently.
 
+## First real run (5 Nov 2026, dry run)
+
+Started by the one-off scheduled fire into the worker session at 01:28 UTC and
+closed at 01:37 UTC (10 minutes, 48 model turns, 45.6k output tokens, USD 6.85 at
+list price on `claude-fable-5-1`). Run `20261105T012800Z`: status `ok`, all four
+sources `ok`, counts scanned 46, created 30, updated 0, stale 0, skipped 16. It
+wrote 18 meeting preps (briefs for today and tomorrow, external meetings titled
+by time and attendee count only), 10 Granola next steps (5 with drafts: three
+Slack messages with resolved recipients, one document outline, one page plan;
+5 with an unclear owner as low/new), 2 calendar insights, the morning brief
+(`briefs/2026-11-05`) and `hub/today` in the OS (waiting 10, prepared 23,
+critical 0, last run ok). The final message was counts only. Slack held no new
+mentions and Gmail's two internal threads were RSVP notifications, so no `sl-`
+or `gm-` item was written on this run; those paths are exercised by the prompt
+but not yet by data.
+
+Two things to watch: the worker session's context stood at 255k tokens after
+one run and grows until auto-compaction (784k), so cost per run rises for a few
+runs and then drops; and the model is the session's (`claude-fable-5-1`). Both
+are changed the same way, by recreating the worker session (optionally with a
+cheaper `model`) and rebinding the task, which the morning check reports on.
+
 ## Known limits (v1)
 
 - One long-lived worker session: if it is archived or deleted the task fires
