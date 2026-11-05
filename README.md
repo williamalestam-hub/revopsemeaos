@@ -8,7 +8,7 @@ Data comes from **Salesforce** (including LeanData's round-robin objects, which 
 **HiBob** and **Granola**. Nothing is copied into the page.
 
 The app has a header (Ctrl K search and one scope pill that opens team chips and a manager search), a
-glass tab strip across the top with live count badges, a Home hero (greeting, your next 1:1, what needs you), screens with view tabs, and a person panel: click any name to see that person's
+glass tab strip across the top with live count badges, a Today tab (the RevOps Hub's summary, then the greeting hero: your next 1:1, what needs you), screens with view tabs, and a person panel: click any name to see that person's
 pipeline, open deals with risk flags, created opps, book, routing pools, HiBob details and, for a
 manager, their team (with a "Prep a 1:1" button).
 
@@ -22,7 +22,7 @@ manager, their team (with a "Prep a 1:1" button).
   drafts the message, proposes the Salesforce or LeanData fix and waits for your OK before writing anything.
   Deals and people also open straight in Salesforce, and next steps owned by someone else get an email nudge.
   The dashboard itself never writes to Salesforce, LeanData, mail or calendars.
-- **Search (Ctrl K or /)**: jump to any person, routing pool, account book or view. Keys 1–9 switch screens,
+- **Search (Ctrl K or /)**: jump to any person, routing pool, account book or view. Keys 1–9 and 0 switch screens,
   and the link follows you (`#pipeline-deals` opens that view).
 - **Tick off next steps**: the circle in front of an action item marks it done; it leaves your lists and
   counts, and "Show ticked off" brings it back to undo. Ticks are yours alone: they are kept in your own
@@ -32,6 +32,19 @@ manager, their team (with a "Prep a 1:1" button).
   Private note, for you only; they are left out of the agenda you copy, email or send to Claude.
 - **Copy**: every table has a copy button (paste into Sheets or Slack, as shown, sorted and searched);
   Home has *Copy weekly summary*; action items and data checks copy as checklists.
+
+## Today tab and the RevOps Hub
+
+The first tab, **Today**, is the front door the OS shares with the **RevOps Hub**, the operating surface that lives in its
+own artifact at https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU (the contract is `docs/hub-spec.md`, the page is `hub/`). The Hub's intake worker writes one small document, `hub/today`, into
+this dashboard's database on each run (weekdays 07:13 and 13:13 Stockholm): four counts (Needs you, Critical, Prepared,
+Done today), up to 8 top items (severity dot, kind, title, due date), the day's brief headline, its last run (time and
+status, red when it failed or is older than 8 hours) and the Hub's URL behind **Open the Hub**. The tab subscribes to that
+document once (`claude.use('db')`, like the ticks) and redraws when it changes; it makes no connector call, never asks
+Claude and writes nothing. Before the worker's first run it says "The Hub has not run yet", with the Open button as soon as
+the document carries the URL. Below the Hub block sits the greeting hero that used to open Home (what needs you, your next
+1:1, Copy weekly summary), so Today = the Hub's summary + the OS's own severity lines; Home keeps the numbers.
+`tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering and that the hero still draws.
 
 ## Screens
 

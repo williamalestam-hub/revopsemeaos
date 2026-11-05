@@ -1062,6 +1062,84 @@ OS.defTable('bk-plan-table', ['book_moves'], () => (dash.data('book_moves').data
   { f: 'note', cls: (v) => (v ? 'os-warn' : '') },
 ], { key: 'key' });
 
+// ===================== TODAY: THE HUB'S SUMMARY =====================
+// Drawn from hub/today (OS.hub, written by the Hub's worker). Nothing here calls a connector or Claude; Open the Hub is a
+// plain link. Items are the worker's words, shown as text only.
+const HUB_KIND = { task: 'Task', ask: 'Ask', meeting: 'Meeting', insight: 'Insight', decision: 'Decision', escalation: 'Escalation', build: 'Build' };
+const HUB_STATUS = { new: 'New', prepared: 'Prepared, waiting for you', waiting: 'Waiting for you', approved: 'In flight', done: 'Done', dismissed: 'Dismissed', snoozed: 'Snoozed', stale: 'Stale' };
+const HUB_SEV = ['critical', 'high', 'normal', 'low'];
+// a due date against the viewer's calendar day: overdue, today, tomorrow, or the day
+const hubDue = (iso) => {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return null;
+  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((start(new Date(t)) - start(new Date())) / 864e5);
+  const day = new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  return days < 0 ? { text: 'overdue, ' + day, late: true } : { text: days === 0 ? 'due today' : days === 1 ? 'due tomorrow' : 'due ' + day, late: false };
+};
+dash.draw('hub-count', (el) => {
+  const c = OS.hub.counts();
+  const v = c ? c[el.dataset.field] : null;
+  el.textContent = typeof v === 'number' && Number.isFinite(v) ? OS.num(v) : '—';
+  el.classList.toggle('os-bad', el.dataset.field === 'critical' && typeof v === 'number' && v > 0);
+});
+// the Today tab's badge: how many items wait for you
+dash.draw('hub-badge', (el) => {
+  const c = OS.hub.counts();
+  const n = c && typeof c.waiting === 'number' && c.waiting > 0 ? c.waiting : 0;
+  el.textContent = n ? OS.num(n) : '';
+  el.hidden = !n;
+});
+dash.draw('hub-top', (ul) => {
+  ul.replaceChildren(...OS.hub.top().map((it) => {
+    const li = OS.el('li', 'itm');
+    const sev = HUB_SEV.includes(it.severity) ? it.severity : 'normal';
+    const dot = OS.el('span', 'itm-dot sev-' + sev);
+    dot.title = sev;
+    const main = OS.el('div', 'itm-main');
+    main.append(OS.el('span', 'itm-title', String(it.title || '').slice(0, 90) || 'Untitled'));
+    if (Object.hasOwn(HUB_STATUS, it.status)) main.append(OS.el('span', 'itm-detail', HUB_STATUS[it.status])); // own keys only: 'constructor' is not a status
+    const meta = OS.el('div', 'itm-meta');
+    meta.append(OS.el('span', 'chip', Object.hasOwn(HUB_KIND, it.kind) ? HUB_KIND[it.kind] : 'Item'));
+    const due = hubDue(it.dueAt);
+    if (due) meta.append(OS.el('span', due.late ? 'os-bad' : '', due.text));
+    li.append(dot, main, meta);
+    return li;
+  }));
+});
+dash.draw('hub-brief', (el) => {
+  const d = OS.hub.doc();
+  const h = d && d.brief && typeof d.brief.headline === 'string' ? d.brief.headline.trim() : '';
+  el.textContent = h;
+  el.hidden = !h;
+});
+// the worker's last run: red when it failed or is older than 8 hours; amber for anything else that is not ok (partial, a run
+// still marked running, an unknown word), so a stuck run never looks healthy
+dash.draw('hub-run', (el) => {
+  const d = OS.hub.doc();
+  const run = d && d.lastRun && typeof d.lastRun === 'object' ? d.lastRun : null;
+  const status = run && typeof run.status === 'string' ? run.status : '';
+  const at = run ? OS.hub.when(run.at) : '';
+  const old = !!run && OS.hub.stale(run.at);
+  const bad = !!run && (status === 'failed' || old);
+  el.textContent = OS.hub.state() === 'loading' ? '' : !run ? 'Worker: has not run yet'
+    : 'Worker: last run ' + (at || 'at an unknown time') + ' · ' + (status || 'unknown') + (old && at ? ' · over 8 hours ago' : '');
+  el.classList.toggle('os-bad', bad);
+  el.classList.toggle('os-warn', !bad && !!run && status !== 'ok');
+});
+// Open the Hub: the URL comes from the document, so only a claude.ai link is followed
+dash.draw('hub-open', (el) => {
+  const d = OS.hub.doc();
+  const url = d && typeof d.hubUrl === 'string' && /^https:\/\/claude\.ai\/[^\s"'<>]+$/.test(d.hubUrl) ? d.hubUrl : '';
+  if (url) el.setAttribute('href', url); else el.removeAttribute('href');
+  el.hidden = !url;
+});
+// the fixed sentences: the Hub has not run yet, no database here, or the document couldn't be read
+dash.draw('hub-note', (el) => {
+  const s = OS.hub.state();
+  el.hidden = !((el.dataset.note === 'empty' && s === 'missing') || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
+});
+
 // ===================== HOME HERO =====================
 dash.draw('hero-date', (el) => { el.textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); });
 dash.draw('hero-name', (el) => {

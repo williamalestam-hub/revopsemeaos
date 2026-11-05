@@ -1,6 +1,7 @@
 """Writes store/ — one JSON file per dashboard document (dash/meta, dash/params, datasets/*, files/*)
 ready to be written to the Dashboard artifact's store."""
 import json, os, datetime, shutil
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # paths below are relative to dashboard/, whatever the cwd
 AT = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 EDIT = {"via": "claude", "at": AT}
 shutil.rmtree('store', ignore_errors=True)

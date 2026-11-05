@@ -1,0 +1,118 @@
+<title>RevOps Hub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one calm console column (max 1080px), sticky top bar, sections stacked in the order of the day:
+   Needs you → Today's brief → Insights → Automations → Done today. Tokens here so the first paint is right;
+   hub.css builds everything from them. One accent (teal) = "needs you"; severity and run state are small dots. */
+:root {
+  --bg: #f5f7f7; --surface: #ffffff; --surface-2: #eef2f2; --line: #e1e6e6; --line-strong: #c9d2d2;
+  --fg: #17201f; --fg-2: #56635f; --fg-3: #8a9693;
+  --accent: #0e7c74; --accent-strong: #0b655f; --accent-ink: #ffffff; --accent-soft: #e1f1ef; --accent-text: #0a5f59;
+  --sev-critical: #c43d3d; --sev-high: #d9821b; --sev-normal: #5f7390; --sev-low: #a4adb8;
+  --ok: #2e8b5b; --warn: #c7811a; --bad: #c43d3d; --focus: #0e7c74;
+  --scrim: rgba(23, 32, 31, 0.45); --shadow: 0 12px 32px rgba(23, 32, 31, 0.18);
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --r: 10px; --r-sm: 7px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121716; --surface: #1a201f; --surface-2: #222a29; --line: #2b3433; --line-strong: #3a4645;
+    --fg: #e7ecea; --fg-2: #a6b2ae; --fg-3: #74817d;
+    --accent: #2fb3a6; --accent-strong: #44c4b7; --accent-ink: #0d1514; --accent-soft: #163331; --accent-text: #7fdcd1;
+    --sev-critical: #e5605d; --sev-high: #e59a3c; --sev-normal: #8ea0bd; --sev-low: #6c7682;
+    --ok: #4fb57f; --warn: #e0a042; --bad: #e5605d; --focus: #44c4b7;
+    --scrim: rgba(0, 0, 0, 0.55); --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121716; --surface: #1a201f; --surface-2: #222a29; --line: #2b3433; --line-strong: #3a4645;
+  --fg: #e7ecea; --fg-2: #a6b2ae; --fg-3: #74817d;
+  --accent: #2fb3a6; --accent-strong: #44c4b7; --accent-ink: #0d1514; --accent-soft: #163331; --accent-text: #7fdcd1;
+  --sev-critical: #e5605d; --sev-high: #e59a3c; --sev-normal: #8ea0bd; --sev-low: #6c7682;
+  --ok: #4fb57f; --warn: #e0a042; --bad: #e5605d; --focus: #44c4b7;
+  --scrim: rgba(0, 0, 0, 0.55); --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); }
+</style>
+<link rel="stylesheet" href="hub.css">
+
+<div class="hub" id="hub">
+  <header class="top">
+    <div class="top-in">
+      <div class="top-left">
+        <h1>RevOps Hub</h1>
+        <span class="date" id="top-date">—</span>
+        <span class="prepared-at" id="prepared-at">Not prepared yet</span>
+        <span class="health" id="health" data-state="never"><span class="dot" aria-hidden="true"></span><span id="health-label">Never ran</span></span>
+      </div>
+      <div class="top-right">
+        <button class="btn" type="button" id="btn-run" disabled title="Connectors are not available in this view">Run now</button>
+        <a class="btn" id="link-os" href="https://claude.ai/artifact/TEF8CuQXmPS6rEY3yLVN92" target="_blank" rel="noopener noreferrer">EMEA RevOps OS</a>
+        <button class="btn" type="button" id="btn-new">New item</button>
+        <button class="btn quiet" type="button" id="btn-settings">Settings</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="sec needs" id="sec-needs" aria-labelledby="h-needs">
+    <div class="sec-h"><h2 id="h-needs">Needs you</h2><span class="count" id="needs-count"></span><span class="spacer"></span><span class="hint" id="needs-hint"></span></div>
+    <div id="needs-list"></div>
+    <p class="empty" id="needs-empty">Nothing needs you right now. The worker adds asks, tasks and decisions here twice a day; New item adds your own.</p>
+  </section>
+
+  <section class="sec" id="sec-brief" aria-labelledby="h-brief">
+    <div class="sec-h"><h2 id="h-brief">Today's brief</h2></div>
+    <div class="brief" id="brief" hidden>
+      <span class="slot" id="brief-slot"></span>
+      <h3 id="brief-headline"></h3>
+      <div class="md" id="brief-md"></div>
+      <ol class="moves" id="brief-moves" hidden></ol>
+      <div class="meetings" id="brief-meetings" hidden></div>
+    </div>
+    <p class="empty" id="brief-empty">No brief for today yet. The morning run writes one at 07:13 and the midday run at 13:13, Stockholm time.</p>
+  </section>
+
+  <section class="sec" id="sec-insights" aria-labelledby="h-insights">
+    <div class="sec-h"><h2 id="h-insights">Insights</h2><span class="count" id="insights-count"></span></div>
+    <div class="list" id="insights-list"></div>
+    <p class="empty" id="insights-empty">The worker has not found anything worth your time yet.</p>
+  </section>
+
+  <section class="sec" id="sec-auto" aria-labelledby="h-auto">
+    <div class="sec-h"><h2 id="h-auto">Automations</h2><span class="spacer"></span><button class="btn sm quiet" type="button" id="btn-refresh-triggers" hidden>Refresh</button></div>
+    <div class="auto-grid">
+      <div class="panel-box">
+        <h3>Worker runs <span class="spacer"></span><span class="count" id="runs-count"></span></h3>
+        <div class="runs" id="runs-list"></div>
+        <p class="note" id="runs-empty">No runs yet. The intake worker writes one here each time it runs.</p>
+      </div>
+      <div class="panel-box">
+        <h3>Scheduled tasks</h3>
+        <div id="triggers-list"></div>
+        <p class="note" id="triggers-note">Connect Claude Code Remote to see your scheduled tasks here.</p>
+      </div>
+    </div>
+    <div class="panel-box conn-box">
+      <h3>Connections</h3>
+      <div class="conns" id="conns"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="sec-done" aria-labelledby="btn-done-toggle">
+    <div class="sec-h"><button class="toggle-sec" type="button" id="btn-done-toggle" aria-expanded="false" aria-controls="done-body">Done today</button><span class="count" id="done-count"></span></div>
+    <div id="done-body" hidden>
+      <div class="done-list" id="done-list"></div>
+      <p class="empty" id="done-empty">Nothing ticked off yet today.</p>
+    </div>
+  </section>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div id="overlay" hidden></div>
+
+<script src="hub-core.js"></script>
+<script src="hub-ui.js"></script>

@@ -1081,13 +1081,57 @@ OS.oo = (() => {
   return { rowsOf, who, nextFor, nameOf, when, text, points, kind, ops, lastOf, loading, userOf };
 })();
 
+// ---------- The Hub's summary (Today tab) ----------
+// The RevOps Hub's worker writes one small document, hub/today, into this dashboard's database: counts, the top items,
+// the brief's headline, its last run and the Hub's URL (docs/hub-spec.md §3). Read here only, with one subscription for
+// the page's life: no connector call, nothing written, nothing asked of Claude. Without a database the tab says so.
+OS.hub = (() => {
+  let doc = null, state = 'loading'; // loading | nodb | missing | ok | error
+  const DRAWS = ['hub-count', 'hub-badge', 'hub-top', 'hub-brief', 'hub-run', 'hub-open', 'hub-note'];
+  // the drawings read the state when they draw; a redraw before they are registered is skipped, not an error
+  const redraw = () => DRAWS.forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } });
+  // a document holding only the Hub's URL (seeded before the first run) still reads as "has not run yet"
+  const summarised = (d) => !!d && typeof d === 'object' && (!!d.counts || !!d.lastRun || Array.isArray(d.top) || !!d.brief);
+  const set = (s, d) => { state = s; doc = d && typeof d === 'object' ? d : null; redraw(); };
+  (async () => {
+    try {
+      const c = window.claude;
+      if (!c || typeof c.use !== 'function') { state = 'nodb'; return; }
+      const db = await c.use('db');
+      if (!db) { set('nodb', null); return; }
+      db.doc('hub/today').onSnapshot((snap) => {
+        const d = snap && snap.exists ? snap.data() : null;
+        set(summarised(d) ? 'ok' : 'missing', d);
+      }, () => set('error', null));
+    } catch (e) { set('nodb', null); }
+  })();
+  // a time as the viewer reads it: "07:13" today, "yesterday 07:13", else "Tue 4 Nov, 07:13"
+  const when = (iso) => {
+    const t = Date.parse(iso || '');
+    if (!Number.isFinite(t)) return '';
+    const d = new Date(t), now = new Date();
+    const key = (x) => x.getFullYear() + '-' + x.getMonth() + '-' + x.getDate();
+    const hm = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (key(d) === key(now)) return hm;
+    if (key(d) === key(new Date(now.getTime() - 864e5))) return 'yesterday ' + hm;
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + hm;
+  };
+  // the worker runs twice a day, so a last run older than 8 hours (or with no readable time) means it has missed one
+  const STALE_MS = 8 * 36e5;
+  const stale = (iso) => { const t = Date.parse(iso || ''); return !Number.isFinite(t) || Date.now() - t > STALE_MS; };
+  const counts = () => (doc && doc.counts && typeof doc.counts === 'object' ? doc.counts : null);
+  const top = () => (doc && Array.isArray(doc.top) ? doc.top.filter((x) => x && typeof x === 'object').slice(0, 8) : []);
+  return { state: () => state, doc: () => doc, counts, top, when, stale, DRAWS };
+})();
+
 // ---------- App shell ----------
 (() => {
-  const SCREENS = ['home', 'actions', 'oneonone', 'pipeline', 'created', 'hiring', 'routing', 'books', 'leads'];
+  // Today first: the Hub's summary and the greeting hero; a link with no screen opens it
+  const SCREENS = ['today', 'home', 'actions', 'oneonone', 'pipeline', 'created', 'hiring', 'routing', 'books', 'leads'];
   const view = { actions: 'meetings', oneonone: 'upcoming', pipeline: 'teams', created: 'trend', hiring: 'joiners', routing: 'people', books: 'reps', leads: 'speed' };
   // a link ends in #screen or #screen-view
   const [hashScreen, hashView] = location.hash.slice(1).split('-');
-  let screen = SCREENS.includes(hashScreen) ? hashScreen : 'home';
+  let screen = SCREENS.includes(hashScreen) ? hashScreen : 'today';
   if (hashView && view[screen] && document.querySelector('[data-view-panel="' + screen + ':' + hashView + '"]')) view[screen] = hashView;
   const link = () => dash.setLink(view[screen] ? screen + '-' + view[screen] : screen);
   let lastPerson = null;
@@ -1502,7 +1546,8 @@ OS.oo = (() => {
         return;
       }
     }
-    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-9]$/.test(e.key)) { go(SCREENS[+e.key - 1]); return; }
+    // 1–9 are the first nine screens in tab order, 0 the tenth
+    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[0-9]$/.test(e.key)) { go(SCREENS[e.key === '0' ? 9 : +e.key - 1]); return; }
     if (e.key === 'Escape' && [...document.querySelectorAll('[data-scope-pop]')].some((p) => !p.hidden)) { scopeOpen(false); document.querySelectorAll('[data-scope-toggle]').forEach((b) => b.focus()); return; }
     if (e.key === 'Escape' && dash.params().person) closePanel();
   });
@@ -1578,8 +1623,8 @@ OS.oo = (() => {
       const partial = st.includes('ok') && st.some((x) => x === 'error' || x === 'connect');
       document.querySelectorAll('[data-checks-partial]').forEach((n) => { n.hidden = !partial; });
     }
-    // Home loads what the weekly summary reads, and the copy button waits until it has loaded
-    if (screen === 'home') {
+    // Today holds Copy weekly summary: reading the summary's sources there loads them, and the button waits for them
+    if (screen === 'today') {
       const busy = SUMMARY.some((id) => OS.state(id) === 'loading');
       document.querySelectorAll('[data-copy-summary]').forEach((b) => { b.disabled = busy; });
     }

@@ -451,6 +451,21 @@
   .nx-who span { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nx-more { display: flex; gap: 10px; align-items: center; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--cds-radius); background: transparent; cursor: pointer; text-align: left; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .nx-more:hover { background: var(--soft); color: var(--color-fg); }
+
+  /* Today: the Hub's summary (hub/today), a pane above the hero. Tokens only, so light and dark both work. */
+  .hub .pane-head { align-items: center; }
+  .hub a.btn { text-decoration: none; }
+  .hub-tiles { display: flex; flex-wrap: wrap; overflow: hidden; border-bottom: 1px solid var(--color-border-line); }
+  .hub-tiles .stat { box-shadow: -1px 0 0 var(--color-border-line); }
+  .hub-tiles b.os-bad { color: var(--color-bad); }
+  .hub-brief { margin: 0; padding: var(--cds-pad-md) var(--cds-pad-lg); font-family: var(--font-anthropic-serif); font-size: 1.15em; line-height: 1.35; border-bottom: 1px solid var(--color-border-line); text-wrap: balance; }
+  .hub .ilist:empty { display: none; }
+  .hub-run { margin: 0; }
+  .hub-run.os-warn { color: var(--color-warn); }
+  .hub-run.os-bad { color: var(--color-bad); }
+  .itm-dot.sev-critical { color: var(--color-bad); }
+  .itm-dot.sev-high { color: var(--color-warn); }
+  .itm-dot.sev-low { color: var(--cds-chart-muted); }
   .home-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--color-panel); box-shadow: var(--lift); padding: var(--cds-pad-lg); gap: 6px; }
   .home-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--acc), transparent 80%); }
   .home-card::after { content: ""; position: absolute; right: -3rem; top: -3rem; width: 9rem; height: 9rem; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--acc) 16%, transparent), transparent); pointer-events: none; }
