@@ -44,7 +44,11 @@ document once (`claude.use('db')`, like the ticks) and redraws when it changes; 
 Claude and writes nothing. Before the worker's first run it says "The Hub has not run yet", with the Open button as soon as
 the document carries the URL. Below the Hub block sits the greeting hero that used to open Home (what needs you, your next
 1:1, Copy weekly summary), so Today = the Hub's summary + the OS's own severity lines; Home keeps the numbers.
-`tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering and that the hero still draws.
+**Chat** (in the header and on the Today pane) opens the Hub's chat panel, where Claude answers in that page and reads
+Salesforce, Calendar, Granola, Slack and Gmail as you; anything it writes for others becomes a draft in the Hub's Needs you.
+The OS's own page can't run Claude (its dashboard type has no in-page model access), so the button is a link to the Hub with
+`#chat`, shown only once `hub/today` carries a claude.ai Hub URL.
+`tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering that the hero still draws and the Chat links.
 
 ## Screens
 

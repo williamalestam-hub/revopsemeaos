@@ -103,6 +103,7 @@ const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'missing: tiles show —', counts());
   ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 0, 'missing: no items');
   ok(draw('hub-open', 'a').hidden === true && draw('hub-open', 'a').getAttribute('href') === null, 'missing: Open the Hub hidden (no URL known)');
+  ok(draw('hub-chat', 'a').hidden === true, 'missing: Chat hidden (no URL known)');
   const run = draw('hub-run', 'p');
   ok(run.textContent === 'Worker: has not run yet' && !run.classList.contains('os-bad'), 'missing: the run line says the worker has not run yet', run.textContent);
   ok(draw('hub-brief', 'p').hidden === true && draw('hub-badge', 'span').hidden === true, 'missing: no headline, no badge');
@@ -111,6 +112,8 @@ const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
   ok(OS.hub.state() === 'missing' && notes().empty === true, 'a document with only hubUrl: still "The Hub has not run yet."', [OS.hub.state(), notes()]);
   const a = draw('hub-open', 'a');
   ok(a.hidden === false && a.getAttribute('href') === HUB_URL, 'a document with only hubUrl: Open the Hub shows with that href', [a.hidden, a.getAttribute('href')]);
+  const ch = draw('hub-chat', 'a');
+  ok(ch.hidden === false && ch.getAttribute('href') === HUB_URL + '#chat', 'a document with only hubUrl: Chat links to the Hub with #chat', [ch.hidden, ch.getAttribute('href')]);
 }
 
 // ---- 5. a full document: counts, items, headline, Open button, failed run in red ----
@@ -195,6 +198,7 @@ const DOC = {
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'counts that are not numbers show —', counts());
   ok(draw('hub-brief', 'p').hidden === true, 'a blank headline hides the line');
   ok(draw('hub-open', 'a').hidden === true && draw('hub-open', 'a').getAttribute('href') === null, 'a hubUrl that is not a claude.ai https link is not followed');
+  ok(draw('hub-chat', 'a').hidden === true && draw('hub-chat', 'a').getAttribute('href') === null, 'Chat follows no hubUrl that is not a claude.ai https link');
   push({ ...DOC, hubUrl: 'https://example.com/claude.ai/' });
   ok(draw('hub-open', 'a').hidden === true, 'a non-claude.ai host is not followed either');
   push({ ...DOC, top: [{ id: 'y', title: 'x'.repeat(200), kind: 'mystery', severity: 'urgent', status: 'odd' }, null, 'junk'] });
@@ -242,6 +246,14 @@ const DOC = {
   ok(typeof OS.done.has === 'function' && typeof OS.ask.can === 'function', 'the tick-off and ask features are still there');
 }
 
+
+// Chat: the header and the Today pane open the Hub's chat (#chat), only for a claude.ai Hub URL
+{
+  const html = fs.readFileSync(D + 'index.html', 'utf8');
+  ok((html.match(/data-draw="hub-chat"/g) || []).length === 2, 'Chat: one link in the header and one on the Today pane');
+  ok(/<a class="app-chat" data-draw="hub-chat" target="_blank" rel="noopener"[^>]*hidden>/.test(html), 'Chat: the header link opens a new tab and is hidden until the Hub URL is known');
+  ok(/'hub-chat'/.test(fs.readFileSync(D + 'os-core.js', 'utf8')), 'Chat: redrawn when hub/today changes');
+}
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error('TEST CRASHED', e && e.stack); process.exit(1); });

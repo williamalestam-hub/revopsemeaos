@@ -52,6 +52,7 @@ body { background: var(--bg); color: var(--fg); }
       <div class="top-right">
         <button class="btn" type="button" id="btn-run" disabled title="Connectors are not available in this view">Run now</button>
         <a class="btn" id="link-os" href="https://claude.ai/artifact/TEF8CuQXmPS6rEY3yLVN92" target="_blank" rel="noopener noreferrer">EMEA RevOps OS</a>
+        <button class="btn primary" type="button" id="btn-chat" aria-controls="chat" aria-expanded="false">Chat</button>
         <button class="btn" type="button" id="btn-new">New item</button>
         <button class="btn quiet" type="button" id="btn-settings">Settings</button>
       </div>
@@ -111,8 +112,26 @@ body { background: var(--bg); color: var(--fg); }
   </section>
 </div>
 
+<aside class="chat" id="chat" aria-label="Chat" hidden>
+  <div class="chat-h">
+    <h2>Chat</h2>
+    <span class="spacer"></span>
+    <button class="btn sm quiet" type="button" id="chat-new">New chat</button>
+    <button class="btn sm quiet" type="button" id="chat-close" aria-label="Close chat">Close</button>
+  </div>
+  <div class="chat-log" id="chat-log" aria-live="polite"></div>
+  <p class="chat-status" id="chat-status" hidden></p>
+  <form class="chat-f" id="chat-form">
+    <textarea id="chat-input" rows="2" placeholder="Ask about your day, pipeline, meetings or inbox" aria-label="Message"></textarea>
+    <button class="btn primary" type="submit" id="chat-send">Send</button>
+    <button class="btn" type="button" id="chat-stop" hidden>Stop</button>
+  </form>
+  <p class="chat-note">Uses your Claude usage. Reads your connectors as you; nothing is sent from here.</p>
+</aside>
+
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <div id="overlay" hidden></div>
 
 <script src="hub-core.js"></script>
 <script src="hub-ui.js"></script>
+<script src="hub-chat.js"></script>

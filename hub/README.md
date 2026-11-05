@@ -14,6 +14,7 @@ Published artifact URL: https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU (title
 | `hub.css` | Layout and components, built only from the tokens in `index.html`. 16 px safe-area gutters, works at 400 px, no horizontal scroll. |
 | `hub-core.js` | Pure logic. No DOM, no network, no clock unless a time is passed in. UMD: `window.HubCore` in the page, `require('./hub-core.js')` in node. |
 | `hub-ui.js` | Everything that touches the browser: capabilities, subscriptions, rendering, the confirm sheet, Generate, Settings, New item, the people picker, toasts. Uses only what `hub-core.js` exports (the tests check this). |
+| `hub-chat.js` | The Chat panel (top-bar **Chat**, or `#chat` in the link): Claude in this page with the Hub and connector reads as tools. Uses only `HubCore` exports and the read-only `window.HubBridge` that `hub-ui.js` sets at boot. |
 | `test/core.test.js` | The node suite for the core plus static checks on the page files. |
 | `worker-prompt.md`, `test/worker-prompt.test.js` | The intake worker and its lint: another builder's part of the same spec (§5). |
 
@@ -45,6 +46,28 @@ Hub artifact db ──onSnapshot──▶ state (S) ──render──▶ DOM (c
 - **Markdown**: `escapeHtml`, `renderMarkdown` (escapes first; only http(s) links become anchors, and emphasis never rewrites the inside of one; both flavours are standard markdown, `**bold**` and `_italic_`, which is what the Slack tools accept; `{slack: true}` only adds `~strike~`).
 - **Worker**: `workerHealth` (ok / partial / failed / never / stale > 8 h, plus running), `runCounts`, `triggerRows`, `buildToday` (the `hub/today` summary the OS reads).
 
+## Chat
+
+**Chat** in the top bar (and the OS's Chat button, which links here with `#chat`) opens a panel where William talks to Claude
+inside this page: `sample` with page functions as tools, streamed, with Stop and New chat. What it can use:
+
+| Tool | What it does | Call |
+|---|---|---|
+| `hub_items`, `hub_item`, `todays_brief` | The Hub's own items, drafts and today's brief | none (page state) |
+| `salesforce_query` | One read-only SOQL `SELECT` (`HubCore.guardSoql`: SELECT only, one statement, never `Opportunity_Snapshot__c`; `LIMIT 200` on row queries, none on aggregates, and a LIMIT on `COUNT()` is removed because it caps the count) | Salesforce `soqlQuery` |
+| `calendar_events` | Events between two Stockholm times | Google Calendar `list_events` |
+| `meeting_notes` | A question over Granola notes | Granola `query_granola_meetings` |
+| `slack_search`, `find_slack_user` | Slack messages; a colleague's user id | Slack `slack_search_public_and_private`, `slack_search_users` |
+| `gmail_search` | Subjects and snippets of up to 10 threads | Gmail `search_threads` |
+| `draft_for_review` | A complete Slack message, email, doc, Notion page, plan or note as a `man-` item in Needs you | db write (`HubCore.chatDraftItem`) |
+
+Reads run without a confirm step, as the viewer. Nothing is sent from the chat: a draft lands in Needs you with a **Review**
+chip in the conversation, and the usual confirm sheet sends it. The leading instructions turn (`HubCore.chatInstructions`)
+carries the voice, the ARR field rules, the Subscriber Content rule, the Needs-you count and which connectors are missing in
+this view. Tool results are clipped to 12,000 characters. History (last 30 turns) is kept per viewer at
+`data/users/<id>/chat`, private to them; each question sends the last 16. `sample` is called once per Send and never on a
+timer; it spends the viewer's own Claude usage.
+
 ## Rules the page enforces
 
 - Nothing is sent, created or posted without the confirm sheet, and the sheet shows the tool, the destination in words with ids, and the full text. Reads (`listTools`, `list_triggers`, `slack_search_users` for Find person, `slack_search_channels` for Find channel in Settings) run on load or on a click without it. The manifest lists exactly these calls and nothing else (the core test checks both directions).
@@ -74,7 +97,7 @@ a timer, no Gmail `send_message`, each file under 60 KB).
 Publish `hub/index.html` with the three other files alongside it and the manifest below. Title "RevOps Hub".
 
 ```
-files: { "hub.css": "hub/hub.css", "hub-core.js": "hub/hub-core.js", "hub-ui.js": "hub/hub-ui.js" }
+files: { "hub.css": "hub/hub.css", "hub-core.js": "hub/hub-core.js", "hub-ui.js": "hub/hub-ui.js", "hub-chat.js": "hub/hub-chat.js" }
 ```
 
 Capabilities manifest (also `HubCore.CAPABILITIES`; every tool the page calls is listed, nothing else):
@@ -87,11 +110,14 @@ Capabilities manifest (also `HubCore.CAPABILITIES`; every tool the page calls is
   "downloads": true,
   "mcp": {
     "servers": [
-      { "server": "Slack", "tools": ["slack_send_message", "slack_send_message_draft", "slack_search_users", "slack_search_channels"] },
-      { "server": "Gmail", "tools": ["create_draft"] },
+      { "server": "Slack", "tools": ["slack_send_message", "slack_send_message_draft", "slack_search_users", "slack_search_channels", "slack_search_public_and_private"] },
+      { "server": "Gmail", "tools": ["create_draft", "search_threads"] },
       { "server": "Google Drive", "tools": ["create_file"] },
       { "server": "Notion", "tools": ["notion-create-pages"] },
-      { "server": "Claude Code Remote", "tools": ["list_triggers", "fire_trigger"] }
+      { "server": "Claude Code Remote", "tools": ["list_triggers", "fire_trigger"] },
+      { "server": "Salesforce", "tools": ["soqlQuery"] },
+      { "server": "Google Calendar", "tools": ["list_events"] },
+      { "server": "Granola", "tools": ["query_granola_meetings"] }
     ]
   }
 }
@@ -110,6 +136,7 @@ exists put its id in `settings/prefs.triggerId` so Run now lights up.
 | `settings/prefs` | `onSnapshot` | `set` from Settings (one save at a time; `osUrl` and `hubUrl` are accepted only as `https://claude.ai/` links, because both become hrefs) |
 | `briefs/{YYYY-MM-DD}` | `onSnapshot` on today's key (re-subscribed when the day changes) | never |
 | `data/users/{id}/ui` | `get` once | `set` (collapsed Done today) |
+| `data/users/{id}/chat` | `get` when Chat first opens | `set` after each answer (last 30 turns) |
 
 ## Decisions worth knowing
 

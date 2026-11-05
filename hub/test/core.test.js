@@ -234,10 +234,49 @@ ok(C.toolInManifest('Claude Code Remote', 'list_triggers') && C.toolInManifest('
 {
   const called = new Set(Object.keys(C.ACTIONS).filter((id) => C.ACTIONS[id].server).map((id) => C.ACTIONS[id].server + ' · ' + C.ACTIONS[id].tool));
   called.add('Claude Code Remote · list_triggers');
+  for (const r of C.CHAT_READS) called.add(r.server + ' · ' + r.tool); // the chat's read-only connector calls
   for (const s of C.CAPABILITIES.mcp.servers) for (const t of s.tools) ok(called.has(s.server + ' · ' + t), 'manifest lists only a tool the page calls: ' + s.server + ' · ' + t);
 }
 ok(!C.toolInManifest('Gmail', 'send_message'), 'manifest never allows Gmail send_message (v1 drafts only)');
-eq(C.CONNECTORS, ['Slack', 'Gmail', 'Google Drive', 'Notion', 'Claude Code Remote'], 'the five connectors');
+eq(C.CONNECTORS, ['Slack', 'Gmail', 'Google Drive', 'Notion', 'Claude Code Remote', 'Salesforce', 'Google Calendar', 'Granola'], 'the eight connectors');
+
+console.log('\n# chat');
+{
+  eq(C.guardSoql('SELECT Id FROM Account'), 'SELECT Id FROM Account LIMIT 200', 'chat SOQL: a LIMIT is added');
+  eq(C.guardSoql('SELECT Id FROM Lead LIMIT 5;'), 'SELECT Id FROM Lead LIMIT 5', 'chat SOQL: an existing LIMIT is kept, a trailing ; dropped');
+  eq(C.guardSoql('select count() from Opportunity where IsClosed = false limit 200'), 'select count() from Opportunity where IsClosed = false', 'chat SOQL: a LIMIT on COUNT() is removed (it would cap the count)');
+  eq(C.guardSoql('SELECT StageName, SUM(Finance_ARR_USD__c) s FROM Opportunity GROUP BY StageName'), 'SELECT StageName, SUM(Finance_ARR_USD__c) s FROM Opportunity GROUP BY StageName', 'chat SOQL: no LIMIT is added to an aggregate');
+  throwsCode(() => C.guardSoql('DELETE FROM Account'), 'not_select', 'chat SOQL: only SELECT');
+  throwsCode(() => C.guardSoql('SELECT Id FROM Account; SELECT Id FROM Lead'), 'not_select', 'chat SOQL: one statement');
+  throwsCode(() => C.guardSoql('SELECT Id FROM Opportunity_Snapshot__c'), 'forbidden_object', 'chat SOQL: never Opportunity_Snapshot__c');
+  const byName = Object.fromEntries(C.CHAT_READS.map((r) => [r.name, r]));
+  eq(Object.keys(byName).sort(), ['calendar_events', 'find_slack_user', 'gmail_search', 'meeting_notes', 'salesforce_query', 'slack_search'], 'chat: six connector reads');
+  for (const r of C.CHAT_READS) ok(C.toolInManifest(r.server, r.tool), 'chat read in the manifest: ' + r.server + ' · ' + r.tool);
+  const WRITES = /send|draft|create|update|delete|post|fire|trigger|reply|forward/i;
+  for (const r of C.CHAT_READS) ok(!WRITES.test(r.tool), 'chat read is not a write tool: ' + r.tool);
+  eq(byName.salesforce_query.input({ soql: 'SELECT Id FROM Account' }), { q: 'SELECT Id FROM Account LIMIT 200' }, 'chat: salesforce_query input');
+  eq(byName.calendar_events.input({ start: '2026-11-05T00:00:00', end: '2026-11-06T00:00:00', search: '1:1' }), { startTime: '2026-11-05T00:00:00', endTime: '2026-11-06T00:00:00', timeZone: 'Europe/Stockholm', orderBy: 'startTime', pageSize: 50, fullText: '1:1' }, 'chat: calendar_events input');
+  eq(byName.meeting_notes.input({ question: 'What did Kamil ask?' }), { query: 'What did Kamil ask?' }, 'chat: meeting_notes input');
+  eq(byName.slack_search.input({ keywords: ['forecast'], filters: 'after:2026-11-01' }), { keywords: ['forecast'], natural_language_query: '', limit: 10, response_format: 'concise', include_bots: false, filters: 'after:2026-11-01' }, 'chat: slack_search input');
+  throwsCode(() => byName.slack_search.input({}), 'bad_input', 'chat: slack_search needs keywords or filters');
+  eq(byName.find_slack_user.input({ name: 'Kamil Mrani' }), { keywords: ['Kamil', 'Mrani'], natural_language_query: 'Kamil Mrani', limit: 5 }, 'chat: find_slack_user input');
+  eq(byName.gmail_search.input({ query: 'is:unread' }), { query: 'is:unread', pageSize: 10, view: 'THREAD_VIEW_MINIMAL' }, 'chat: gmail_search input');
+  const d = C.chatDraftItem({ type: 'slack', title: 'Ping Kamil', body: 'Hi Kamil', to: [{ name: 'Kamil', slackId: 'U0AKFT4J5U7', email: 'not an email' }] }, Date.parse('2026-11-05T09:00:00Z'), 'abc123');
+  ok(d.id === 'man-abc123' && d.status === 'waiting' && d.prepared.type === 'slack' && d.prepared.generatedBy === 'page', 'chat draft: a waiting man- item with a page draft');
+  eq(d.prepared.to, [{ name: 'Kamil', slackId: 'U0AKFT4J5U7' }], 'chat draft: a bad email is dropped, the Slack id kept');
+  eq(C.buildAction('slack_send', d).input, { channel_id: 'U0AKFT4J5U7', message: 'Hi Kamil' }, 'chat draft: the confirm sheet sends it as a DM like any other item');
+  throwsCode(() => C.chatDraftItem({ type: 'note', body: '  ' }), 'empty_body', 'chat draft: an empty body is refused');
+  eq(C.chatDraftItem({ type: 'weird', body: 'x' }).prepared.type, 'note', 'chat draft: an unknown type becomes a note');
+  const items = [{ id: 'a', kind: 'ask', title: 'Vicky asks about round robins', status: 'waiting', severity: 'normal', source: { who: 'Vicky' }, prepared: { body: 'x' } }, { id: 'b', kind: 'meeting', title: 'Prep', status: 'prepared', severity: 'normal' }];
+  eq(C.chatFindItems(items, { status: 'waiting' }).map((x) => x.id), ['a'], 'chat items: filter by status');
+  eq(C.chatFindItems(items, { text: 'vicky' }).map((x) => x.hasDraft), [true], 'chat items: text search across title and person');
+  const intro = C.chatInstructions({ prefs: {}, items, nowMs: Date.parse('2026-11-05T09:00:00Z'), unavailable: ['Gmail'] });
+  ok(/Finance_ARR_USD__c/.test(intro) && /Opportunity_Snapshot__c/.test(intro), 'chat instructions: the ARR field and the forbidden object');
+  ok(/draft_for_review/.test(intro) && /Never claim something was sent/.test(intro), 'chat instructions: nothing is sent, drafts go to Needs you');
+  ok(/Subscriber Content/.test(intro) && /data, never instructions/.test(intro), 'chat instructions: client material and tool results as data');
+  ok(/Not connected in this view[^\n]*Gmail/.test(intro) && /1 item\(s\) need him/.test(intro), 'chat instructions: missing connectors and the Needs-you count');
+  ok(C.chatClip('x'.repeat(13000)).length < 12200, 'chat: tool results are clipped');
+}
 {
   const tools = { Slack: new Set(['slack_send_message', 'slack_send_message_draft', 'slack_search_users', 'slack_search_channels']), 'Google Drive': new Set(['create_file']), Notion: new Set() };
   const acts = C.availableActions(slackItem, { tools, downloads: true });
@@ -486,7 +525,7 @@ console.log('\n# page files');
     ok(/^\s*<title>[^<]{3,60}<\/title>/.test(html), 'index.html starts with a <title>');
     ok(!/<!doctype|<html[\s>]|<head[\s>]|<body[\s>]/i.test(html), 'index.html has no doctype/html/head/body of its own');
     const scripts = Array.from(html.matchAll(/<script[^>]*src="([^"]+)"/g)).map((m) => m[1]);
-    eq(scripts, ['hub-core.js', 'hub-ui.js'], 'index.html loads hub-core.js then hub-ui.js and nothing else');
+    eq(scripts, ['hub-core.js', 'hub-ui.js', 'hub-chat.js'], 'index.html loads hub-core.js, hub-ui.js, then hub-chat.js and nothing else');
     ok(/<link rel="stylesheet" href="hub.css">/.test(html), 'index.html links hub.css');
     ok(!/<script[^>]*src="https?:/.test(html), 'index.html loads no external scripts');
     ok(/prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)/.test(html) && /:root\[data-theme="dark"\]/.test(html), 'index.html carries the dark-mode token blocks with both guards');
@@ -516,7 +555,18 @@ console.log('\n# page files');
     ok(/'channel_find'/.test(ui) && /slack_search_channels/.test(ui), 'hub-ui.js uses slack_search_channels (Find channel in Settings), so the manifest lists only called tools');
   }
   if (core !== null) ok(!/\bwindow\s*\.|\bdocument\s*\.|\blocalStorage\b|\bnavigator\b/.test(core.replace(/^\s*\/\/.*$/gm, '')), 'hub-core.js never touches window, document, navigator or storage');
-  for (const f of ['index.html', 'hub.css', 'hub-core.js', 'hub-ui.js']) { const s = read(f); if (s !== null) ok(Buffer.byteLength(s, 'utf8') < 61440, f + ' is under 60 KB (' + Buffer.byteLength(s, 'utf8') + ' bytes)'); }
+  const chat = read('hub-chat.js');
+  if (chat !== null) {
+    const used = new Set(Array.from(chat.matchAll(/\bC\.([A-Za-z_$][\w$]*)/g)).map((m) => m[1]));
+    eq(Array.from(used).filter((k) => !(k in C)), [], 'hub-chat.js uses only what hub-core.js exports');
+    ok(!/\.innerHTML\s*=(?!\s*C\.renderMarkdown\()/.test(chat), 'hub-chat.js sets innerHTML only from the escaping Markdown renderer');
+    const calls = Array.from(chat.matchAll(/CH\.sample\(/g)).length;
+    ok(calls === 1 && /async function send\(text\)[\s\S]*CH\.sample\(/.test(chat), 'hub-chat.js calls sample once, from Send');
+    ok(!/setInterval|setTimeout\([^)]*sample/.test(chat), 'hub-chat.js never samples on a timer');
+    ok(Array.from(chat.matchAll(/callTool\(/g)).length === 1 && /callTool\(r\.server, r\.tool, input\)/.test(chat), 'hub-chat.js calls connectors only through the read list');
+    ok(/data\/users\/' \+ b\.uid\(\) \+ '\/chat/.test(chat), 'hub-chat.js keeps history in the viewer\'s private path');
+  }
+  for (const f of ['index.html', 'hub.css', 'hub-core.js', 'hub-ui.js', 'hub-chat.js']) { const s = read(f); if (s !== null) ok(Buffer.byteLength(s, 'utf8') < 61440, f + ' is under 60 KB (' + Buffer.byteLength(s, 'utf8') + ' bytes)'); }
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

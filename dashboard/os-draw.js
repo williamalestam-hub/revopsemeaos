@@ -1134,6 +1134,14 @@ dash.draw('hub-open', (el) => {
   if (url) el.setAttribute('href', url); else el.removeAttribute('href');
   el.hidden = !url;
 });
+// Chat: the OS's page can't run Claude itself (its type has no in-page model access), so Chat opens the Hub's chat panel,
+// which answers in its own page. Same claude.ai-only rule as Open the Hub; #chat opens the panel on arrival.
+dash.draw('hub-chat', (el) => {
+  const d = OS.hub.doc();
+  const url = d && typeof d.hubUrl === 'string' && /^https:\/\/claude\.ai\/[^\s"'<>#]+$/.test(d.hubUrl) ? d.hubUrl + '#chat' : '';
+  if (url) el.setAttribute('href', url); else el.removeAttribute('href');
+  el.hidden = !url;
+});
 // the fixed sentences: the Hub has not run yet, no database here, or the document couldn't be read
 dash.draw('hub-note', (el) => {
   const s = OS.hub.state();

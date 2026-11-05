@@ -58,6 +58,9 @@
 
   // ---------- boot and capabilities ----------
   function boot() {
+    // a read-only view for hub-chat.js; addItem goes through the same one-write-at-a-time path as every other item write
+    window.HubBridge = Object.freeze({ items: () => allItems(), brief: () => S.brief, prefs: () => S.prefs, runs: () => S.runs,
+      db: () => S.db, uid: () => S.uid, mcp: () => S.mcp, tools: () => S.tools, addItem: (item) => commit(item), focus: (id) => { S.open[id] = true; renderAll(); focusCard(id); }, toast: (t, bad) => toast(t, bad) });
     renderAll();
     wireTop();
     setInterval(() => { S.now = Date.now(); renderAll(true); }, 60000); // the clock moves: snoozes expire, due flags turn; never a write, never Claude

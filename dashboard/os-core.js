@@ -1087,7 +1087,7 @@ OS.oo = (() => {
 // the page's life: no connector call, nothing written, nothing asked of Claude. Without a database the tab says so.
 OS.hub = (() => {
   let doc = null, state = 'loading'; // loading | nodb | missing | ok | error
-  const DRAWS = ['hub-count', 'hub-badge', 'hub-top', 'hub-brief', 'hub-run', 'hub-open', 'hub-note'];
+  const DRAWS = ['hub-count', 'hub-badge', 'hub-top', 'hub-brief', 'hub-run', 'hub-open', 'hub-chat', 'hub-note'];
   // the drawings read the state when they draw; a redraw before they are registered is skipped, not an error
   const redraw = () => DRAWS.forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } });
   // a document holding only the Hub's URL (seeded before the first run) still reads as "has not run yet"
