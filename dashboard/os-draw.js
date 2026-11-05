@@ -1079,31 +1079,118 @@ const hubDue = (iso) => {
 };
 dash.draw('hub-count', (el) => {
   const c = OS.hub.counts();
-  const v = c ? c[el.dataset.field] : null;
+  let v = c ? c[el.dataset.field] : null;
+  // Done / Dismiss / Snooze from this tab count at once, before the Hub's next run takes them in
+  if (typeof v === 'number') {
+    const acted = OS.hub.top().filter((it) => OS.hub.acted(it.id) && (it.status === 'new' || it.status === 'waiting'));
+    if (el.dataset.field === 'waiting') v = Math.max(0, v - acted.length);
+    if (el.dataset.field === 'critical') v = Math.max(0, v - acted.filter((it) => it.severity === 'critical').length);
+    if (el.dataset.field === 'doneToday') v += acted.filter((it) => OS.hub.acted(it.id).action !== 'snoozed').length;
+  }
   el.textContent = typeof v === 'number' && Number.isFinite(v) ? OS.num(v) : '—';
   el.classList.toggle('os-bad', el.dataset.field === 'critical' && typeof v === 'number' && v > 0);
 });
 // the Today tab's badge: how many items wait for you
 dash.draw('hub-badge', (el) => {
   const c = OS.hub.counts();
-  const n = c && typeof c.waiting === 'number' && c.waiting > 0 ? c.waiting : 0;
+  const acted = OS.hub.top().filter((it) => OS.hub.acted(it.id) && (it.status === 'new' || it.status === 'waiting')).length;
+  const n = c && typeof c.waiting === 'number' && c.waiting - acted > 0 ? c.waiting - acted : 0;
   el.textContent = n ? OS.num(n) : '';
   el.hidden = !n;
 });
+// Each item opens in place: why it matters, the prepared draft (editable here), and what can be done from this tab.
+// Sending goes through Claude beside the page with the exact text and recipient, and Claude waits for William's OK
+// (this dashboard never sends or writes anywhere itself). Done / Snooze / Dismiss are kept in his private store and
+// reach the Hub at the worker's next run. Open in Hub opens the item in the Hub, which can send from its own page.
+const hubOpenIds = new Set(), hubEdits = {};
+const HUB_SEND = { slack: 'Send on Slack', email: 'Create Gmail draft', doc: 'Create Google Doc', plan: 'Create Google Doc', brief: 'Create Google Doc', note: 'Create Google Doc', sheet: 'Create Google Sheet', notion: 'Create Notion page' };
+const HUB_TYPE = { slack: 'Slack message', email: 'Email', doc: 'Document', plan: 'Plan', brief: 'Meeting brief', note: 'Note', sheet: 'Sheet', notion: 'Notion page' };
+const HUB_DONE = { done: 'Done here', dismissed: 'Dismissed here', snoozed: 'Snoozed to tomorrow' };
+const hubTo = (d) => (Array.isArray(d && d.to) ? d.to.filter((t) => t && typeof t.name === 'string') : []);
+const hubDest = (d) => {
+  const to = hubTo(d);
+  if (d.type === 'slack') {
+    if (typeof d.channelId === 'string' && d.channelId) return (d.channelName ? '#' + d.channelName + ' ' : 'channel ') + '(' + d.channelId + ')' + (d.threadTs ? ', in the thread ' + d.threadTs : '') + (to.length ? ', for ' + to.map((t) => t.name).join(', ') : '');
+    const ids = to.filter((t) => /^[UW][A-Z0-9]{6,}$/.test(t.slackId || ''));
+    return ids.length ? 'a direct message to ' + ids.map((t) => t.name + ' (' + t.slackId + ')').join(', ') : '';
+  }
+  if (d.type === 'email') { const em = to.filter((t) => /^[^\s@]+@[^\s@]+$/.test(t.email || '')); return em.map((t) => t.name + ' <' + t.email + '>').join(', '); }
+  return '';
+};
+const hubAsk = (it, d, body) => {
+  const dest = hubDest(d), ref = ' This is RevOps Hub item ' + it.id + ' ("' + String(it.title || '').slice(0, 90) + '"). When it is done, say so and I will mark it Done.';
+  const who = hubTo(d).map((t) => t.name).join(', ');
+  if (d.type === 'slack') return dest
+    ? 'Send this Slack message as me, exactly as written, to ' + dest + '. Show me the message and the recipient first and send only after my OK.' + ref + '\n\n' + body
+    : 'Find the right Slack recipient for this message' + (who ? ' (' + who + ')' : '') + ', show me who it is and the exact message, and send only after my OK.' + ref + '\n\n' + body;
+  if (d.type === 'email') return 'Create a Gmail draft (do not send) to ' + (dest || who || 'the right recipient') + (d.subject ? ', subject "' + d.subject + '"' : '') + (d.replyToMessageId ? ', as a reply to message ' + d.replyToMessageId : '') + '. Show me the draft first.' + ref + '\n\n' + body;
+  if (d.type === 'notion') return 'Create a private Notion page titled "' + (d.title || it.title) + '" with this Markdown content. Show me what you will create and wait for my OK.' + ref + '\n\n' + body;
+  if (d.type === 'sheet') return 'Create a Google Sheet titled "' + (d.title || it.title) + '" from this CSV. Show me what you will create and wait for my OK.' + ref + '\n\n' + body;
+  return 'Create a Google Doc titled "' + (d.title || it.title) + '" in my Drive with this Markdown content. Show me what you will create and wait for my OK.' + ref + '\n\n' + body;
+};
+const hubBtn = (label, cls, fn) => { const b = OS.el('button', 'btn' + (cls ? ' ' + cls : ''), label); b.type = 'button'; b.addEventListener('click', (e) => { e.stopPropagation(); fn(b); }); return b; };
 dash.draw('hub-top', (ul) => {
+  const doc = OS.hub.doc();
+  const hubUrl = doc && typeof doc.hubUrl === 'string' && /^https:\/\/claude\.ai\/[^\s"'<>#]+$/.test(doc.hubUrl) ? doc.hubUrl : '';
   ul.replaceChildren(...OS.hub.top().map((it) => {
-    const li = OS.el('li', 'itm');
+    const done = OS.hub.acted(it.id);
+    const li = OS.el('li', 'itm hub-itm' + (done ? ' hub-acted' : '') + (hubOpenIds.has(it.id) ? ' open' : ''));
     const sev = HUB_SEV.includes(it.severity) ? it.severity : 'normal';
     const dot = OS.el('span', 'itm-dot sev-' + sev);
     dot.title = sev;
     const main = OS.el('div', 'itm-main');
-    main.append(OS.el('span', 'itm-title', String(it.title || '').slice(0, 90) || 'Untitled'));
-    if (Object.hasOwn(HUB_STATUS, it.status)) main.append(OS.el('span', 'itm-detail', HUB_STATUS[it.status])); // own keys only: 'constructor' is not a status
+    const head = OS.el('button', 'hub-head');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', hubOpenIds.has(it.id) ? 'true' : 'false');
+    head.append(OS.el('span', 'itm-title', String(it.title || '').slice(0, 90) || 'Untitled'));
+    head.addEventListener('click', () => { if (hubOpenIds.has(it.id)) hubOpenIds.delete(it.id); else hubOpenIds.add(it.id); dash.draw('hub-top'); });
+    main.append(head);
+    if (done) main.append(OS.el('span', 'itm-detail', HUB_DONE[done.action] + ' · reaches the Hub at its next run'));
+    else if (Object.hasOwn(HUB_STATUS, it.status)) main.append(OS.el('span', 'itm-detail', HUB_STATUS[it.status])); // own keys only: 'constructor' is not a status
     const meta = OS.el('div', 'itm-meta');
     meta.append(OS.el('span', 'chip', Object.hasOwn(HUB_KIND, it.kind) ? HUB_KIND[it.kind] : 'Item'));
     const due = hubDue(it.dueAt);
     if (due) meta.append(OS.el('span', due.late ? 'os-bad' : '', due.text));
     li.append(dot, main, meta);
+    if (hubOpenIds.has(it.id)) {
+      const x = OS.el('div', 'hub-x');
+      if (typeof it.why === 'string' && it.why) x.append(OS.el('p', 'hub-why', it.why));
+      if (typeof it.summary === 'string' && it.summary) x.append(OS.el('p', 'hub-sum', it.summary));
+      const d = it.draft && typeof it.draft === 'object' && typeof it.draft.body === 'string' ? it.draft : null;
+      let ta = null;
+      if (d) {
+        const to = hubTo(d).map((t) => t.name).join(', ');
+        x.append(OS.el('p', 'hub-to', (HUB_TYPE[d.type] || 'Draft') + (to ? ' to ' + to : '') + (d.subject ? ' · ' + d.subject : '')));
+        ta = OS.el('textarea', 'hub-body');
+        ta.value = hubEdits[it.id] != null ? hubEdits[it.id] : d.body;
+        ta.rows = Math.min(14, Math.max(4, ta.value.split('\n').length + 1));
+        ta.setAttribute('aria-label', 'Draft text');
+        ta.addEventListener('input', () => { hubEdits[it.id] = ta.value; });
+        x.append(ta);
+      }
+      const row = OS.el('div', 'hub-acts');
+      if (!done && d && Object.hasOwn(HUB_SEND, d.type)) {
+        if (OS.ask.can()) {
+          row.append(hubBtn(HUB_SEND[d.type] + ' via Claude', 'btn-primary', (b) => {
+            const body = (ta ? ta.value : d.body).trim();
+            if (!body) return;
+            const data = OS.ask.data(HUB_SEND[d.type] + ': ' + it.title, hubAsk(it, d, body), { kind: 'hub_item', itemId: it.id }, 'cut to fit; the full text is in the RevOps Hub item ' + it.id);
+            OS.ask.send(data).then(() => { b.textContent = 'Sent to Claude: confirm there'; b.disabled = true; }, () => { b.textContent = 'Claude is not available here'; });
+          }));
+        } else row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send from here, or send from the Hub.'));
+      }
+      if (hubUrl) { const a = OS.el('a', 'btn', 'Open in Hub'); a.href = hubUrl + '#item=' + encodeURIComponent(it.id); a.target = '_blank'; a.rel = 'noopener'; row.append(a); }
+      if (OS.hub.canAct()) {
+        if (done) row.append(hubBtn('Undo', '', () => OS.hub.act(it.id, null)));
+        else {
+          row.append(hubBtn('Done', '', () => OS.hub.act(it.id, 'done', it.title)));
+          row.append(hubBtn('Snooze 1 day', '', () => OS.hub.act(it.id, 'snoozed', it.title)));
+          row.append(hubBtn('Dismiss', '', () => OS.hub.act(it.id, 'dismissed', it.title)));
+        }
+      }
+      x.append(row);
+      li.append(x);
+    }
     return li;
   }));
 });

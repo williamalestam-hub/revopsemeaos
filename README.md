@@ -44,6 +44,14 @@ document once (`claude.use('db')`, like the ticks) and redraws when it changes; 
 Claude and writes nothing. Before the worker's first run it says "The Hub has not run yet", with the Open button as soon as
 the document carries the URL. Below the Hub block sits the greeting hero that used to open Home (what needs you, your next
 1:1, Copy weekly summary), so Today = the Hub's summary + the OS's own severity lines; Home keeps the numbers.
+**Acting from Today**: click an item to open it in place: why it matters, the summary, and the prepared draft in an
+editable box. From there, **Send on Slack / Create Gmail draft / Create Google Doc / Create Notion page via Claude** hands
+the Claude chat beside the page the exact (edited) text and the recipient with ids, and Claude shows it and waits for your
+OK before anything goes out (this dashboard never sends anything itself). **Open in Hub** opens the item in the Hub, which
+can send from its own page. **Done**, **Snooze 1 day** and **Dismiss** take effect here at once (counts included), are kept in
+your private `data/users/<you>/hub-actions` document, and reach the Hub at the worker's next run, which applies and clears
+them; **Undo** puts an item back until then. `tools/harness/test36.js` covers these.
+
 **Chat** (in the header and on the Today pane) opens the Hub's chat panel, where Claude answers in that page and reads
 Salesforce, Calendar, Granola, Slack and Gmail as you; anything it writes for others becomes a draft in the Hub's Needs you.
 The OS's own page can't run Claude (its dashboard type has no in-page model access), so the button is a link to the Hub with

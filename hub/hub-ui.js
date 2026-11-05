@@ -82,6 +82,7 @@
       db.collection('items').orderBy('updatedAt', 'desc').limit(500).onSnapshot((snap) => {
         S.items = snap.docs.filter((d) => d.exists).map((d) => Object.assign({}, d.data(), { id: d.id }));
         renderAll(true);
+        openFromLink();
       }, onErr('Items'));
       db.collection('runs').orderBy('startedAt', 'desc').limit(10).onSnapshot((snap) => {
         S.runs = snap.docs.filter((d) => d.exists).map((d) => Object.assign({}, d.data(), { id: d.id }));
@@ -282,6 +283,15 @@
     return row;
   }
   function toggleOpen(id) { S.open[id] = !S.open[id]; renderAll(); }
+  // the OS's Open in Hub links here with #item=<id>: open that card once, when the items first include it
+  let linkDone = false;
+  function openFromLink() {
+    if (linkDone) return;
+    const m = /(?:^#|&)item=([^&]+)/.exec(location.hash || ''); if (!m) { linkDone = true; return; }
+    let id = ''; try { id = decodeURIComponent(m[1]); } catch (e) { linkDone = true; return; }
+    if (!itemById(id)) return;
+    linkDone = true; S.open[id] = true; renderAll(); setTimeout(() => focusCard(id), 50);
+  }
   function focusCard(id) {
     const el = document.querySelector('[data-id="' + String(id).replace(/["\\]/g, '\\$&') + '"]');
     if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });

@@ -172,6 +172,14 @@ runs and then drops; and the model is the session's (`claude-fable-5-1`). Both
 are changed the same way, by recreating the worker session (optionally with a
 cheaper `model`) and rebinding the task, which the morning check reports on.
 
+## Changing the live task's instructions
+
+The bound task's prompt can only be changed from the session it posts into (the worker session); an `update_trigger`
+with a `prompt` from any other session is refused. So: run the lint, write the new text to the Hub db at
+`settings/worker-prompt` (`{text, length, sha256}`), and `send_message` the worker session to `get` that document and call
+`update_trigger` on `trig_01WtUWRbwYp4NmcKpi188YuN` with exactly that text, then report the stored length. Pausing or
+renaming the task works from anywhere.
+
 ## Known limits (v1)
 
 - One long-lived worker session: if it is archived or deleted the task fires

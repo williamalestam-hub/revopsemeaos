@@ -1103,8 +1103,33 @@ OS.hub = (() => {
         const d = snap && snap.exists ? snap.data() : null;
         set(summarised(d) ? 'ok' : 'missing', d);
       }, () => set('error', null));
-    } catch (e) { set('nodb', null); }
+      // William's own Done / Snooze / Dismiss from this tab live in his private part of this database until the Hub's
+      // worker applies them to the Hub at its next run and clears them (hub/worker-prompt.md, step 0)
+      const user = await c.use('user');
+      const uid = user ? await user.id() : null;
+      if (uid) {
+        actRef = db.doc('data/users/' + uid + '/hub-actions');
+        actRef.onSnapshot((snap) => {
+          const d = snap && snap.exists ? snap.data() : null;
+          acts = d && d.actions && typeof d.actions === 'object' ? { ...d.actions } : {};
+          canAct = true; redraw();
+        }, () => { canAct = false; redraw(); });
+      }
+    } catch (e) { if (state === 'loading') set('nodb', null); }
   })();
+  let actRef = null, acts = {}, canAct = false, actWriting = Promise.resolve();
+  // one write at a time; the whole small document each time (only William writes it, the worker clears applied entries)
+  const act = (id, action, title) => {
+    if (!actRef || !canAct || !id) return;
+    const next = { ...acts };
+    if (action) {
+      const e = { action, at: new Date().toISOString(), title: String(title || '').slice(0, 90) };
+      if (action === 'snoozed') e.until = new Date(Date.now() + 864e5).toISOString();
+      next[id] = e;
+    } else delete next[id];
+    acts = next; redraw();
+    actWriting = actWriting.then(() => actRef.set({ actions: next, updatedAt: new Date().toISOString() })).catch(() => { canAct = false; redraw(); });
+  };
   // a time as the viewer reads it: "07:13" today, "yesterday 07:13", else "Tue 4 Nov, 07:13"
   const when = (iso) => {
     const t = Date.parse(iso || '');
@@ -1120,8 +1145,8 @@ OS.hub = (() => {
   const STALE_MS = 8 * 36e5;
   const stale = (iso) => { const t = Date.parse(iso || ''); return !Number.isFinite(t) || Date.now() - t > STALE_MS; };
   const counts = () => (doc && doc.counts && typeof doc.counts === 'object' ? doc.counts : null);
-  const top = () => (doc && Array.isArray(doc.top) ? doc.top.filter((x) => x && typeof x === 'object').slice(0, 8) : []);
-  return { state: () => state, doc: () => doc, counts, top, when, stale, DRAWS };
+  const top12 = () => (doc && Array.isArray(doc.top) ? doc.top.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 12) : []);
+  return { state: () => state, doc: () => doc, counts, top: top12, when, stale, DRAWS, act, acted: (id) => acts[id] || null, acts: () => acts, canAct: () => canAct };
 })();
 
 // ---------- App shell ----------

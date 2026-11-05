@@ -13,9 +13,9 @@ const fail = (msg) => failures.push(msg);
 
 const warnings = [];
 
-// 1. Size: the task carries the prompt verbatim, so keep it readable: under 15,000 characters (the platform's own
+// 1. Size: the task carries the prompt verbatim, so keep it readable: under 17,000 characters (the platform's own
 // bound on a message is far higher; this cap only stops the prompt from growing without anyone noticing).
-if (prompt.length >= 15000) fail('prompt is ' + prompt.length + ' characters; must be under 15,000');
+if (prompt.length >= 17000) fail('prompt is ' + prompt.length + ' characters; must be under 17,000');
 if (!prompt.trim().startsWith('# RevOps Hub intake')) fail('prompt must start with the "# RevOps Hub intake" heading');
 
 // 1b. The Hub db line: HUB_URL is the placeholder of the repo copy (a warning, so nobody creates the task with it by
@@ -71,7 +71,8 @@ const required = [
   // step 7 brief
   ['step 7 brief doc and shape', ['briefs/<YYYY-MM-DD>', 'slot: morning|midday', 'headline', '≤ 350 words', 'moves: [{title, why, itemId?}]', '≤ 3', 'meetings: [{eventId, title, at, internal: bool, itemId}]', 'createdAt']],
   // step 8 OS summary
-  ['step 8 hub/today shape', ['hub/today', 'hubUrl', 'counts: { waiting, critical, prepared, doneToday }', 'top: [{ id, title, kind, severity, status, dueAt }]', '≤ 8', 'lastRun: { at, status }', 'brief: { headline }']],
+  ['step 0 OS actions', ['hub-actions', "by: 'os'", 'only the entries whose id was not found']],
+  ['step 8 hub/today shape', ['hub/today', 'hubUrl', 'counts: { waiting, critical, prepared, doneToday }', 'top: [{ id, title, kind, severity, status, dueAt, why, summary (≤ 240 chars), draft }]', '≤ 12', 'lastRun: { at, status }', 'brief: { headline }']],
   ['step 8 counts leave insights out (same as the page)', ['waiting = items not of kind insight with status new or waiting', 'top lists the same items']],
   ['step 8 lastRun is defined and never running', ['lastRun.at = now', 'lastRun.status = what this run ends with', '(never running)']],
   // step 9 finish
@@ -154,7 +155,7 @@ const allow = new Set([
   // enum values, field names and grammar words written mid-sentence
   'Stale', 'Rules', 'Also', 'Never', 'Internal', 'Keep', 'Skip', 'External', 'Unclear', 'Prepare', 'Every', 'Only', 'Any',
   'Status', 'Both', 'Tools', 'Trigger', 'Real', 'Load', 'Read', 'Write', 'Then', 'Severity', 'Recipients', 'Finish', 'Brief', 'Insights',
-  'Documents', 'Ids', 'Writing', 'Drafting', 'Steps', 'Id',
+  'Documents', 'Ids', 'Writing', 'Drafting', 'Steps', 'Id', 'Today',
 ]);
 const properNoun = /\b([A-Z][a-z]+(?:[A-Z][a-z]+)*)\b/g;
 const unknown = new Set();

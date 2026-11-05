@@ -191,8 +191,8 @@ const DOC = {
 
 // ---- 7. defensive: odd documents never crash and never follow an odd link ----
 {
-  push({ ...DOC, top: Array.from({ length: 12 }, (_, i) => ({ id: 'x' + i, title: 'Item ' + i, kind: 'task', severity: 'normal', status: 'new', dueAt: null })) });
-  ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 8, '12 top items: the list stops at 8');
+  push({ ...DOC, top: Array.from({ length: 14 }, (_, i) => ({ id: 'x' + i, title: 'Item ' + i, kind: 'task', severity: 'normal', status: 'new', dueAt: null })) });
+  ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 12, '14 top items: the list stops at 12');
   push({ ...DOC, top: 'nope', counts: { waiting: 'many', critical: null }, brief: { headline: '   ' }, hubUrl: 'javascript:alert(1)' });
   ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 0, 'top not a list: no rows, no crash');
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'counts that are not numbers show —', counts());
