@@ -52,6 +52,19 @@ can send from its own page. **Done**, **Snooze 1 day** and **Dismiss** take effe
 your private `data/users/<you>/hub-actions` document, and reach the Hub at the worker's next run, which applies and clears
 them; **Undo** puts an item back until then. `tools/harness/test36.js` covers these.
 
+**Decide** and **For Leo** (the two tabs after Today) are prepared every weekday at 07:43 Stockholm by the scheduled task
+*RevOps Decide and For Leo* (`trig_01XieAbbEYfUvfDhX7pGKebU`, bound to its own session; instructions in
+`hub/decisions-worker.md`) into `hub/decisions` and `hub/leo` in this dashboard's database.
+- *Decide*: yes/no questions only, each with a recommendation, the evidence and what each answer does. If an answer sends
+  a message, the message is written and addressed already: clicking Yes or No hands Claude beside the page the exact text
+  and recipients, and Claude sends on your OK. Answers are kept in your private `data/users/<you>/decisions`; the task
+  closes the matching Hub item, logs the decision in `hub/decision-log` and drops it from the list.
+- *For Leo*: recommendations to take to Leonard (pipegen, Q4 conversion, street capacity, ramp, SMB load, sourcing mix),
+  each with its numbers, the ask and a ready DM. Send one through Claude, or tick several and send them as one pack;
+  Done and Not now are kept in `data/users/<you>/leo-acts`. `tools/harness/test37.js` covers both tabs.
+- The OS page is within about 250 bytes of the store's 256 KB limit per file (`files/index.html`): new copy goes in a
+  drawing or another file.
+
 **Chat** (in the header and on the Today pane) opens the Hub's chat panel, where Claude answers in that page and reads
 Salesforce, Calendar, Granola, Slack and Gmail as you; anything it writes for others becomes a draft in the Hub's Needs you.
 The OS's own page can't run Claude (its dashboard type has no in-page model access), so the button is a link to the Hub with

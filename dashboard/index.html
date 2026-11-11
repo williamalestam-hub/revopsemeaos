@@ -48,6 +48,16 @@
         <span>Today</span>
         <span class="app-badge info" data-draw="hub-badge" hidden></span>
       </button>
+      <button class="app-tab" type="button" data-nav="decide" data-nav-item id="nav-decide">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5"/></svg>
+        <span>Decide</span>
+        <span class="app-badge info" data-draw="dec-badge" hidden></span>
+      </button>
+      <button class="app-tab" type="button" data-nav="leo" data-nav-item id="nav-leo">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M6 18V11M10 18V7M14 18v-5M18 18V9"/></svg>
+        <span>For Leo</span>
+        <span class="app-badge info" data-draw="leo-badge" hidden></span>
+      </button>
       <button class="app-tab" type="button" data-nav="home" data-nav-item id="nav-home">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg>
         <span>Home</span>
@@ -103,6 +113,8 @@
         <ul class="pal-list" data-draw="palette-list" data-source="roster rr_pools books"></ul>
         <ul class="pal-list pal-gos">
           <li><button class="pal-item pal-go" type="button" data-nav="today"><span class="pal-kind">Go to</span><span class="pal-label">Today</span><span class="pal-sub">the Hub's summary and what needs you</span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="decide"><span class="pal-kind">Go to</span><span class="pal-label">Decide</span><span class="pal-sub"></span></button></li>
+          <li><button class="pal-item pal-go" type="button" data-nav="leo"><span class="pal-kind">Go to</span><span class="pal-label">For Leo</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="home"><span class="pal-kind">Go to</span><span class="pal-label">Home</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="actions" data-nav-view="meetings"><span class="pal-kind">Go to</span><span class="pal-label">Action items › From meetings</span><span class="pal-sub"></span></button></li>
           <li><button class="pal-item pal-go" type="button" data-nav="actions" data-nav-view="checks"><span class="pal-kind">Go to</span><span class="pal-label">Action items › Data checks</span><span class="pal-sub"></span></button></li>
@@ -203,6 +215,47 @@
             <p class="os-empty" data-msg-for="home-next" data-msg="connect" hidden>Connect Google Calendar in your claude.ai connectors to see your next 1:1s here.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== DECIDE ===== -->
+    <section class="scr" id="decide" data-page="decide" hidden>
+      <header class="scr-head">
+        <div>
+          <h1>Decide</h1>
+          <p>Yes or no, each one prepared: the recommendation, the evidence and what each answer does. An answer's message is already written; Claude beside this page sends it on your OK.</p>
+        </div>
+      </header>
+      <div class="pane lanes">
+        <ul class="lane-list" data-draw="dec-list"></ul>
+        <div class="msgs">
+          <p class="os-empty" data-draw="dec-note" data-note="empty" hidden>Nothing to decide right now.</p>
+          <p class="os-empty" data-draw="dec-note" data-note="nodb" hidden>No database access in this view.</p>
+          <p class="os-empty" data-draw="dec-note" data-note="error" hidden>Couldn't be read. Reload to try again.</p>
+        </div>
+        <h2 class="lane-sub">Decided</h2>
+        <ul class="lane-list" data-draw="dec-done"></ul>
+        <div class="pane-foot"><p class="pane-note" data-draw="dec-at"></p></div>
+      </div>
+    </section>
+
+    <!-- ===== FOR LEO ===== -->
+    <section class="scr" id="leo" data-page="leo" hidden>
+      <header class="scr-head">
+        <div>
+          <h1>For Leo</h1>
+          <p>What to bring to Leo, with the numbers. Send one, or tick several and send one pack; Claude beside this page sends on your OK.</p>
+        </div>
+        <button class="btn btn-primary" type="button" data-leo-pack disabled>Send the pack to Leo (<b data-draw="leo-pack-n">0</b>)</button>
+      </header>
+      <div class="pane lanes">
+        <ul class="lane-list" data-draw="leo-list"></ul>
+        <div class="msgs">
+          <p class="os-empty" data-draw="leo-note" data-note="empty" hidden>Nothing for Leo right now.</p>
+          <p class="os-empty" data-draw="leo-note" data-note="nodb" hidden>No database access in this view.</p>
+          <p class="os-empty" data-draw="leo-note" data-note="error" hidden>Couldn't be read. Reload to try again.</p>
+        </div>
+        <div class="pane-foot"><p class="pane-note" data-draw="leo-at"></p></div>
       </div>
     </section>
 

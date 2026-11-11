@@ -1235,6 +1235,142 @@ dash.draw('hub-note', (el) => {
   el.hidden = !((el.dataset.note === 'empty' && s === 'missing') || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
 });
 
+
+// ===================== DECIDE AND FOR LEO =====================
+// Prepared by the Hub's decisions task into hub/decisions and hub/leo (OS.lanes). Every value here is the task's words,
+// shown as text. A Yes, a No or a send that carries a message hands Claude beside the page the exact text and the
+// recipients with their ids; Claude shows it and waits for William's OK. This dashboard itself sends nothing.
+const LANE_SEV = ['critical', 'high', 'normal', 'low'];
+const laneWhen = (iso) => OS.hub.when(iso);
+const laneSends = (b) => (b && Array.isArray(b.sends) ? b.sends.filter((m) => m && typeof m === 'object' && typeof m.body === 'string' && m.body.trim()) : []);
+const laneEvidence = (ev) => {
+  const ul = OS.el('ul', 'lane-ev');
+  for (const e of (Array.isArray(ev) ? ev : []).slice(0, 8)) {
+    if (!e || typeof e !== 'object') continue;
+    const li = OS.el('li');
+    li.append(OS.el('span', 'lane-ev-l', String(e.label || '')), OS.el('b', 'lane-ev-v', String(e.value == null ? '' : e.value)));
+    if (e.source) li.append(OS.el('span', 'lane-ev-s', String(e.source)));
+    ul.append(li);
+  }
+  return ul.children.length ? ul : null;
+};
+const laneMsgs = (sends) => {
+  const box = OS.el('div', 'lane-msgs');
+  for (const m of sends) {
+    const to = hubTo(m).map((t) => t.name).join(', ');
+    box.append(OS.el('p', 'hub-to', (HUB_TYPE[m.type] || 'Message') + (to ? ' to ' + to : '') + (m.channelName ? ' in #' + m.channelName : '') + (m.subject ? ' · ' + m.subject : '')));
+    box.append(OS.el('pre', 'lane-body', m.body));
+  }
+  return box;
+};
+// one request to Claude beside the page for every message of the answer, each with its destination
+const decAsk = (d, ans, sends) => 'I decided ' + ans.toUpperCase() + ' on: "' + String(d.question || '').slice(0, 200) + '". Send the message' + (sends.length > 1 ? 's' : '') + ' below as me, exactly as written. Show me each message and its recipient first and send only after my OK.'
+  + sends.map((m, i) => '\n\n--- Message ' + (i + 1) + ': ' + (HUB_TYPE[m.type] || 'Message') + ' to ' + (hubDest(m) || 'the right recipient (find them and show me who first)' + (hubTo(m).length ? ': ' + hubTo(m).map((t) => t.name).join(', ') : '')) + (m.subject ? ', subject "' + m.subject + '"' : '') + '\n' + m.body).join('')
+  + '\n\nThis is decision ' + d.id + ' in the EMEA RevOps OS.';
+const decCard = (d, done) => {
+  const li = OS.el('li', 'lane-card dec-card' + (done ? ' lane-done' : ''));
+  const sev = LANE_SEV.includes(d.severity) ? d.severity : 'normal';
+  const head = OS.el('div', 'lane-head');
+  head.append(OS.el('span', 'itm-dot sev-' + sev));
+  head.append(OS.el('h3', 'lane-q', String(d.question || 'Untitled decision').slice(0, 200)));
+  if (d.recommend === 'yes' || d.recommend === 'no') head.append(OS.el('span', 'chip lane-rec', 'Recommended: ' + (d.recommend === 'yes' ? 'Yes' : 'No')));
+  li.append(head);
+  if (done) {
+    li.append(OS.el('p', 'lane-meta', 'You said ' + (done.answer === 'yes' ? 'Yes' : 'No') + (done.at ? ' · ' + laneWhen(done.at) : '') + ' · reaches the Hub at the next run'));
+    const row = OS.el('div', 'hub-acts');
+    if (OS.lanes.canWrite()) row.append(hubBtn('Undo', '', () => OS.lanes.answer(d.id, null)));
+    li.append(row);
+    return li;
+  }
+  if (d.why) li.append(OS.el('p', 'hub-why', String(d.why)));
+  const ev = laneEvidence(d.evidence); if (ev) li.append(ev);
+  const opts = OS.el('div', 'dec-opts');
+  for (const k of ['yes', 'no']) {
+    const b = d[k] && typeof d[k] === 'object' ? d[k] : {};
+    const col = OS.el('div', 'dec-opt' + (d.recommend === k ? ' rec' : ''));
+    col.append(OS.el('b', 'dec-opt-h', k === 'yes' ? 'If yes' : 'If no'));
+    col.append(OS.el('p', 'dec-opt-e', String(b.effect || (k === 'yes' ? 'Nothing is sent.' : 'Nothing is sent; it leaves this list.'))));
+    const sends = laneSends(b);
+    if (sends.length) {
+      const det = OS.el('details', 'dec-det');
+      det.append(OS.el('summary', '', 'Show the message' + (sends.length > 1 ? 's (' + sends.length + ')' : '')), laneMsgs(sends));
+      col.append(det);
+    }
+    opts.append(col);
+  }
+  li.append(opts);
+  const row = OS.el('div', 'hub-acts dec-btns');
+  const can = OS.lanes.canWrite();
+  for (const k of ['yes', 'no']) {
+    const b = d[k] && typeof d[k] === 'object' ? d[k] : {};
+    const sends = laneSends(b);
+    const btn = hubBtn(k === 'yes' ? 'Yes' : 'No', d.recommend === k ? 'btn-primary' : '', () => {
+      if (sends.length && OS.ask.can()) OS.ask.send(OS.ask.data('Decision: ' + String(d.question || '').slice(0, 100), decAsk(d, k, sends), { kind: 'decision', decisionId: d.id, answer: k }, 'cut to fit; the full text is in the Decide tab')).catch(() => {});
+      OS.lanes.answer(d.id, k);
+    });
+    btn.disabled = !can;
+    row.append(btn);
+  }
+  if (!can) row.append(OS.el('span', 'hub-note', 'Answers are saved in your own part of this dashboard: open it signed in to answer.'));
+  else if (!OS.ask.can() && ['yes', 'no'].some((k) => laneSends(d[k]).length)) row.append(OS.el('span', 'hub-note', 'Your answer is saved; to send its message from here, open the Claude chat beside this page.'));
+  li.append(row);
+  if (d.source) li.append(OS.el('p', 'lane-meta', 'From ' + String(d.source)));
+  return li;
+};
+dash.draw('dec-list', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).map((d) => decCard(d, null))); });
+dash.draw('dec-done', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => OS.lanes.answered(d.id)).map((d) => decCard(d, OS.lanes.answered(d.id)))); });
+dash.draw('dec-badge', (el) => { const n = OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length; el.textContent = n ? OS.num(n) : ''; el.hidden = !n; });
+dash.draw('dec-note', (el) => {
+  const s = OS.lanes.state('decisions'); const open = OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length;
+  el.hidden = !((el.dataset.note === 'empty' && (s === 'missing' || (s === 'ok' && !open))) || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
+});
+dash.draw('dec-at', (el) => { const d = OS.lanes.doc('decisions'); el.textContent = d && d.at ? 'Prepared ' + laneWhen(d.at) + (d.by ? ' by ' + String(d.by) : '') : ''; });
+
+const leoAsk = (x, to) => 'Send this Slack message as me, exactly as written, as a direct message to ' + (to.name || 'Leo') + ' (' + to.slackId + '). Show me the message and the recipient first and send only after my OK.\n\n' + String(x.message || x.pack || x.headline || '') + '\n\n(For Leo item ' + x.id + ' in the EMEA RevOps OS.)';
+dash.draw('leo-list', (ul) => {
+  const to = OS.lanes.leoTo();
+  ul.replaceChildren(...OS.lanes.items('leo').map((x) => {
+    const acted = OS.lanes.leoActed(x.id);
+    const li = OS.el('li', 'lane-card leo-card' + (acted ? ' lane-done' : ''));
+    const head = OS.el('div', 'lane-head');
+    head.append(OS.el('span', 'itm-dot sev-' + (LANE_SEV.includes(x.severity) ? x.severity : 'normal')));
+    if (x.topic) head.append(OS.el('span', 'chip lane-topic', String(x.topic)));
+    head.append(OS.el('h3', 'lane-q', String(x.headline || 'Untitled').slice(0, 200)));
+    li.append(head);
+    if (acted) {
+      li.append(OS.el('p', 'lane-meta', ({ sent: 'Sent to Leo through Claude', done: 'Done', later: 'Not now' }[acted.action] || 'Done') + (acted.at ? ' · ' + laneWhen(acted.at) : '')));
+      const row = OS.el('div', 'hub-acts');
+      if (OS.lanes.canWrite()) row.append(hubBtn('Undo', '', () => OS.lanes.leoAct(x.id, null)));
+      li.append(row);
+      return li;
+    }
+    if (x.recommendation) { const p = OS.el('p', 'leo-rec'); p.append(OS.el('b', '', 'Recommend: '), String(x.recommendation)); li.append(p); }
+    const ev = laneEvidence(x.evidence); if (ev) li.append(ev);
+    if (x.ask) { const p = OS.el('p', 'leo-ask'); p.append(OS.el('b', '', 'Ask Leo: '), String(x.ask)); li.append(p); }
+    if (x.message) { const det = OS.el('details', 'dec-det'); det.append(OS.el('summary', '', 'Show the message to Leo'), OS.el('pre', 'lane-body', String(x.message))); li.append(det); }
+    const row = OS.el('div', 'hub-acts');
+    if (to && OS.ask.can() && x.message) {
+      row.append(hubBtn('Send to Leo via Claude', 'btn-primary', (b) => {
+        OS.ask.send(OS.ask.data('For Leo: ' + String(x.headline || '').slice(0, 100), leoAsk(x, to), { kind: 'leo', leoId: x.id }, 'cut to fit; the full text is in the For Leo tab'))
+          .then(() => OS.lanes.leoAct(x.id, 'sent'), () => { b.textContent = 'Claude is not available here'; });
+      }));
+    }
+    if (x.pack) row.append(hubBtn(OS.lanes.inPack(x.id) ? 'In the pack ✓' : 'Add to pack', OS.lanes.inPack(x.id) ? 'on' : '', () => OS.lanes.togglePack(x.id)));
+    if (OS.lanes.canWrite()) { row.append(hubBtn('Done', '', () => OS.lanes.leoAct(x.id, 'done'))); row.append(hubBtn('Not now', '', () => OS.lanes.leoAct(x.id, 'later'))); }
+    if (!OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send to Leo from here.'));
+    li.append(row);
+    if (x.source) li.append(OS.el('p', 'lane-meta', 'From ' + String(x.source)));
+    return li;
+  }));
+});
+dash.draw('leo-badge', (el) => { const n = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length; el.textContent = n ? OS.num(n) : ''; el.hidden = !n; });
+dash.draw('leo-pack-n', (el) => { el.textContent = OS.num(OS.lanes.packSize()); });
+dash.draw('leo-note', (el) => {
+  const s = OS.lanes.state('leo'); const open = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length;
+  el.hidden = !((el.dataset.note === 'empty' && (s === 'missing' || (s === 'ok' && !open))) || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
+});
+dash.draw('leo-at', (el) => { const d = OS.lanes.doc('leo'); el.textContent = d && d.at ? 'Prepared ' + laneWhen(d.at) + (d.to && d.to.name ? ' · for ' + String(d.to.name) : '') : ''; });
+
 // ===================== HOME HERO =====================
 dash.draw('hero-date', (el) => { el.textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); });
 dash.draw('hero-name', (el) => {

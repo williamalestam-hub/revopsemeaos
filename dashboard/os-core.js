@@ -651,7 +651,7 @@ window.OS = (() => {
 // click; the platform asks them to confirm). The page itself never writes to Salesforce, LeanData, mail or calendars.
 OS.ask = (() => {
   let room = null, mode = 'off';
-  const DRAWS = ['act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table', 'act-table', 'act-monday', 'act-trust-list', 'act-bdr-table', 'act-bdr-plan', 'conv-step-table', 'conv-monday', 'conv-cohort-table', 'conv-smb', 'conv-reason-table', 'conv-src-ask', 'conv-trust-list'];
+  const DRAWS = ['hub-top', 'dec-list', 'leo-list', 'act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table', 'act-table', 'act-monday', 'act-trust-list', 'act-bdr-table', 'act-bdr-plan', 'conv-step-table', 'conv-monday', 'conv-cohort-table', 'conv-smb', 'conv-reason-table', 'conv-src-ask', 'conv-trust-list'];
   const refresh = async () => {
     if (!room || typeof room.canSendToClaudeSession !== 'function') return;
     let m = 'off';
@@ -659,6 +659,7 @@ OS.ask = (() => {
     if (m !== mode) {
       mode = m;
       DRAWS.forEach((n) => dash.draw(n));
+      if (OS.lanes) OS.lanes.redraw(); // the For Leo pack button follows whether Claude is beside the page
       document.querySelectorAll('[data-ask-agenda]').forEach((b) => { b.hidden = !(mode === 'available' || mode === 'available_if_summoned'); });
     }
   };
@@ -1149,10 +1150,90 @@ OS.hub = (() => {
   return { state: () => state, doc: () => doc, counts, top: top12, when, stale, DRAWS, act, acted: (id) => acts[id] || null, acts: () => acts, canAct: () => canAct };
 })();
 
+// ---------- Decide and For Leo ----------
+// Both lists are prepared by the Hub's decisions task (hub/decisions-worker.md) into two documents of this dashboard's
+// database: hub/decisions (yes/no decisions, each with a recommendation, the evidence and what each answer does) and
+// hub/leo (recommendations for Leonard, with their numbers). William's answers and Leo actions are kept in his private
+// part of the database (data/users/<id>/decisions, data/users/<id>/leo-acts) until the task applies them. Nothing here
+// sends anything: a message goes through Claude beside the page, which shows it and waits for his OK.
+OS.lanes = (() => {
+  const docs = { decisions: null, leo: null }, state = { decisions: 'loading', leo: 'loading' };
+  let answers = {}, leoActs = {}, canWrite = false, writing = Promise.resolve();
+  const refs = {}, pack = new Set();
+  const DRAWS = ['dec-list', 'dec-done', 'dec-badge', 'dec-note', 'dec-at', 'leo-list', 'leo-badge', 'leo-note', 'leo-at', 'leo-pack-n'];
+  const redraw = () => {
+    DRAWS.forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } });
+    document.querySelectorAll('[data-leo-pack]').forEach((b) => { b.disabled = !pack.size || !OS.ask.can(); });
+  };
+  (async () => {
+    try {
+      const c = window.claude;
+      if (!c || typeof c.use !== 'function') { state.decisions = state.leo = 'nodb'; return; }
+      const db = await c.use('db');
+      if (!db) { state.decisions = state.leo = 'nodb'; redraw(); return; }
+      for (const k of ['decisions', 'leo']) {
+        db.doc('hub/' + k).onSnapshot((snap) => {
+          const d = snap && snap.exists ? snap.data() : null;
+          docs[k] = d && typeof d === 'object' && Array.isArray(d.items) ? d : null;
+          state[k] = docs[k] ? 'ok' : 'missing'; redraw();
+        }, () => { state[k] = 'error'; redraw(); });
+      }
+      const user = await c.use('user');
+      const uid = user ? await user.id() : null;
+      if (!uid) return;
+      refs.answers = db.doc('data/users/' + uid + '/decisions');
+      refs.leo = db.doc('data/users/' + uid + '/leo-acts');
+      refs.answers.onSnapshot((snap) => {
+        const d = snap && snap.exists ? snap.data() : null;
+        answers = d && d.answers && typeof d.answers === 'object' ? { ...d.answers } : {};
+        canWrite = true; redraw();
+      }, () => { canWrite = false; redraw(); });
+      refs.leo.onSnapshot((snap) => {
+        const d = snap && snap.exists ? snap.data() : null;
+        leoActs = d && d.acts && typeof d.acts === 'object' ? { ...d.acts } : {};
+        redraw();
+      }, () => {});
+    } catch (e) { state.decisions = state.leo = 'nodb'; redraw(); }
+  })();
+  // one write at a time; the whole small document each time (only William writes it; the task clears what it applied)
+  const save = (ref, key, map) => { writing = writing.then(() => ref.set({ [key]: map, updatedAt: new Date().toISOString() })).catch(() => { canWrite = false; redraw(); }); };
+  const answer = (id, a) => {
+    if (!refs.answers || !canWrite || !id) return;
+    const next = { ...answers };
+    if (a === 'yes' || a === 'no') next[id] = { answer: a, at: new Date().toISOString() }; else delete next[id];
+    answers = next; redraw(); save(refs.answers, 'answers', next);
+  };
+  const leoAct = (id, a) => {
+    if (!refs.leo || !canWrite || !id) return;
+    const next = { ...leoActs };
+    if (a) next[id] = { action: a, at: new Date().toISOString() }; else delete next[id];
+    leoActs = next; pack.delete(id); redraw(); save(refs.leo, 'acts', next);
+  };
+  const items = (k) => (docs[k] ? docs[k].items.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 40) : []);
+  // the For Leo pack: the ticked recommendations as one direct message to Leo, through Claude beside the page
+  const leoTo = () => { const t = docs.leo && docs.leo.to; return t && typeof t.slackId === 'string' && /^[UW][A-Z0-9]{6,}$/.test(t.slackId) ? t : null; };
+  const packText = () => {
+    const list = items('leo').filter((x) => pack.has(x.id));
+    const intro = docs.leo && typeof docs.leo.packIntro === 'string' ? docs.leo.packIntro : 'Hi Leo, a few things from RevOps:';
+    return intro + '\n\n' + list.map((x, i) => (i + 1) + '. ' + String(x.pack || x.headline || '')).join('\n');
+  };
+  const sendPack = () => {
+    const to = leoTo(); const ids = [...pack];
+    if (!to || !ids.length || !OS.ask.can()) return;
+    const data = OS.ask.data('For Leo: ' + ids.length + ' recommendation' + (ids.length === 1 ? '' : 's'),
+      'Send this Slack message as me, exactly as written, as a direct message to ' + (to.name || 'Leo') + ' (' + to.slackId + '). Show me the message and the recipient first and send only after my OK. When it has gone, tell me so I can mark these sent.\n\n' + packText(),
+      { kind: 'leo_pack', items: ids.join(',') }, 'cut to fit; the full pack is in the For Leo tab');
+    OS.ask.send(data).then(() => { ids.forEach((id) => leoAct(id, 'sent')); }, () => {});
+  };
+  document.addEventListener('click', (e) => { const b = e.target && e.target.closest ? e.target.closest('[data-leo-pack]') : null; if (b && !b.disabled) sendPack(); });
+  return { state: (k) => state[k], doc: (k) => docs[k], items, answer, answered: (id) => answers[id] || null, leoAct, leoActed: (id) => leoActs[id] || null,
+    canWrite: () => canWrite, inPack: (id) => pack.has(id), togglePack: (id) => { if (pack.has(id)) pack.delete(id); else pack.add(id); redraw(); }, packSize: () => pack.size, packText, sendPack, leoTo, redraw };
+})();
+
 // ---------- App shell ----------
 (() => {
   // Today first: the Hub's summary and the greeting hero; a link with no screen opens it
-  const SCREENS = ['today', 'home', 'actions', 'oneonone', 'pipeline', 'created', 'hiring', 'routing', 'books', 'leads'];
+  const SCREENS = ['today', 'decide', 'leo', 'home', 'actions', 'oneonone', 'pipeline', 'created', 'hiring', 'routing', 'books', 'leads'];
   const view = { actions: 'meetings', oneonone: 'upcoming', pipeline: 'teams', created: 'trend', hiring: 'joiners', routing: 'people', books: 'reps', leads: 'speed' };
   // a link ends in #screen or #screen-view
   const [hashScreen, hashView] = location.hash.slice(1).split('-');

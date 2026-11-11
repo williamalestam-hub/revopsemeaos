@@ -53,18 +53,18 @@ if (NODB) { console.log('NODB ' + OS.hub.state() + ' ' + JSON.stringify(notes())
 // ---- 1. the tab order: Today first, before Home, in the strip, the sections, the palette and the shell ----
 {
   const navs = [...html.matchAll(/data-nav="([^"]+)" data-nav-item/g)].map((m) => m[1]);
-  ok(navs.length === 10 && navs[0] === 'today' && navs[1] === 'home', 'tab strip: 10 tabs, Today first, then Home', navs);
+  ok(navs.length === 12 && navs[0] === 'today' && navs[1] === 'decide' && navs[2] === 'leo' && navs[3] === 'home', 'tab strip: 12 tabs, Today first, then Decide, For Leo, Home', navs);
   const cur = [...html.matchAll(/data-nav="([^"]+)" data-nav-item[^>]*aria-current="page"/g)].map((m) => m[1]);
   ok(cur.length === 1 && cur[0] === 'today', 'tab strip: Today is the current tab in the markup', cur);
   const pages = [...html.matchAll(/<section class="scr" id="([^"]+)" data-page="\1"( hidden)?>/g)].map((m) => [m[1], !!m[2]]);
-  ok(pages.length === 10 && pages[0][0] === 'today' && !pages[0][1] && pages[1][0] === 'home' && pages[1][1] && pages.slice(1).every((p) => p[1]), 'sections: Today first and shown, every other section hidden', pages);
+  ok(pages.length === 12 && pages[0][0] === 'today' && !pages[0][1] && pages[3][0] === 'home' && pages.slice(1).every((p) => p[1]), 'sections: Today first and shown, every other section hidden', pages);
   const screens = ((core.match(/const SCREENS = \[([^\]]+)\]/) || [])[1] || '').split(',').map((x) => x.trim().replace(/'/g, ''));
-  ok(screens.length === 10 && screens.join() === navs.join(), 'SCREENS in os-core.js lists the ten screens in tab order', screens);
+  ok(screens.length === 12 && screens.join() === navs.join(), 'SCREENS in os-core.js lists the twelve screens in tab order', screens);
   ok(/let screen = SCREENS\.includes\(hashScreen\) \? hashScreen : 'today';/.test(core), 'a link with no screen opens Today');
   ok(/\/\^\[0-9\]\$\/\.test\(e\.key\)\) \{ go\(SCREENS\[e\.key === '0' \? 9 : \+e\.key - 1\]\)/.test(core), 'keys 1–9 open the first nine screens and 0 the tenth');
   ok(/1–9 and 0 jump to screens/.test(html), 'the palette hint says 1–9 and 0');
   const gos = [...html.matchAll(/class="pal-item pal-go" type="button" data-nav="([^"]+)"/g)].map((m) => m[1]);
-  ok(gos[0] === 'today' && gos[1] === 'home', 'palette: Go to Today is the first entry', gos.slice(0, 3));
+  ok(gos[0] === 'today' && gos[1] === 'decide' && gos[2] === 'leo' && gos[3] === 'home', 'palette: Go to Today first, then Decide and For Leo', gos.slice(0, 4));
   ok(/if \(screen === 'today'\) \{\n\s+const busy = SUMMARY\.some/.test(core), 'Copy weekly summary waits for its sources on Today (the button moved there)');
 }
 
@@ -88,7 +88,7 @@ const home = html.slice(html.indexOf('data-page="home"'), html.indexOf('data-pag
 }
 
 // ---- 3. one subscription to hub/today; nothing drawn as known before the first snapshot ----
-ok(DB.subs.length === 1 && DB.subs[0].p === 'hub/today', 'subscribes once, to the document hub/today', DB.subs.map((s) => s.p));
+ok(DB.subs.filter((x) => x.p === 'hub/today').length === 1 && DB.subs[0].p === 'hub/today', 'subscribes once, to the document hub/today', DB.subs.map((s) => s.p));
 ok(OS.hub.state() === 'loading', 'before the first snapshot the state is loading', OS.hub.state());
 ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'loading: the four tiles show —', counts());
 ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: false }), 'loading: no sentence shows yet', notes());
@@ -218,7 +218,7 @@ const DOC = {
   ok(OS.hub.state() === 'error', 'an error on the subscription: state error', OS.hub.state());
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: true }), 'error: only the "couldn\'t be read" sentence shows', notes());
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']) && draw('hub-open', 'a').hidden === true && draw('hub-badge', 'span').hidden === true, 'error: tiles —, no Open button, no badge');
-  ok(DB.subs.length === 1, 'no second subscription was opened along the way', DB.subs.length);
+  ok(DB.subs.filter((x) => x.p === 'hub/today').length === 1, 'no second subscription to hub/today was opened along the way', DB.subs.map((x) => x.p));
 }
 
 // ---- 9. no database at all: a child run where claude.use("db") resolves null ----
