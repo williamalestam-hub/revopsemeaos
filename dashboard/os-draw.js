@@ -1327,6 +1327,8 @@ dash.draw('dec-note', (el) => {
 dash.draw('dec-at', (el) => { const d = OS.lanes.doc('decisions'); el.textContent = d && d.at ? 'Prepared ' + laneWhen(d.at) + (d.by ? ' by ' + String(d.by) : '') : ''; });
 
 const leoAsk = (x, to) => 'Send this Slack message as me, exactly as written, as a direct message to ' + (to.name || 'Leo') + ' (' + to.slackId + '). Show me the message and the recipient first and send only after my OK.\n\n' + String(x.message || x.pack || x.headline || '') + '\n\n(For Leo item ' + x.id + ' in the EMEA RevOps OS.)';
+// the English version (x.en) is for a wider group: Claude asks where to send it
+const leoAskEn = (x) => 'Here is an English version of this RevOps recommendation for a wider group. Ask me which channel or people to send it to, then show me the message and the recipients and send only after my OK.\n\n' + OS.lanes.enOf(x, 'message') + '\n\n(For Leo item ' + x.id + ' in the EMEA RevOps OS.)';
 dash.draw('leo-list', (ul) => {
   const to = OS.lanes.leoTo();
   ul.replaceChildren(...OS.lanes.items('leo').map((x) => {
@@ -1335,31 +1337,39 @@ dash.draw('leo-list', (ul) => {
     const head = OS.el('div', 'lane-head');
     head.append(OS.el('span', 'itm-dot sev-' + (LANE_SEV.includes(x.severity) ? x.severity : 'normal')));
     if (x.topic) head.append(OS.el('span', 'chip lane-topic', String(x.topic)));
-    head.append(OS.el('h3', 'lane-q', String(x.headline || 'Untitled').slice(0, 200)));
+    head.append(OS.el('h3', 'lane-q', String(x.headline || 'Utan rubrik').slice(0, 200)));
     li.append(head);
     if (acted) {
-      li.append(OS.el('p', 'lane-meta', ({ sent: 'Sent to Leo through Claude', done: 'Done', later: 'Not now' }[acted.action] || 'Done') + (acted.at ? ' · ' + laneWhen(acted.at) : '')));
+      li.append(OS.el('p', 'lane-meta', ({ sent: 'Skickat till Leo via Claude', done: 'Klar', later: 'Inte nu' }[acted.action] || 'Klar') + (acted.at ? ' · ' + laneWhen(acted.at) : '')));
       const row = OS.el('div', 'hub-acts');
-      if (OS.lanes.canWrite()) row.append(hubBtn('Undo', '', () => OS.lanes.leoAct(x.id, null)));
+      if (OS.lanes.canWrite()) row.append(hubBtn('Ångra', '', () => OS.lanes.leoAct(x.id, null)));
       li.append(row);
       return li;
     }
-    if (x.recommendation) { const p = OS.el('p', 'leo-rec'); p.append(OS.el('b', '', 'Recommend: '), String(x.recommendation)); li.append(p); }
+    if (x.recommendation) { const p = OS.el('p', 'leo-rec'); p.append(OS.el('b', '', 'Rekommendation: '), String(x.recommendation)); li.append(p); }
     const ev = laneEvidence(x.evidence); if (ev) li.append(ev);
-    if (x.ask) { const p = OS.el('p', 'leo-ask'); p.append(OS.el('b', '', 'Ask Leo: '), String(x.ask)); li.append(p); }
-    if (x.message) { const det = OS.el('details', 'dec-det'); det.append(OS.el('summary', '', 'Show the message to Leo'), OS.el('pre', 'lane-body', String(x.message))); li.append(det); }
+    if (x.ask) { const p = OS.el('p', 'leo-ask'); p.append(OS.el('b', '', 'Fråga till Leo: '), String(x.ask)); li.append(p); }
+    if (x.message) { const det = OS.el('details', 'dec-det'); det.append(OS.el('summary', '', 'Visa meddelandet till Leo'), OS.el('pre', 'lane-body', String(x.message))); li.append(det); }
+    const en = OS.lanes.enOf(x, 'message');
+    if (en) { const det = OS.el('details', 'dec-det'); det.lang = 'en'; det.append(OS.el('summary', '', 'In English, for a wider group'), OS.el('pre', 'lane-body', en)); li.append(det); }
     const row = OS.el('div', 'hub-acts');
     if (to && OS.ask.can() && x.message) {
-      row.append(hubBtn('Send to Leo via Claude', 'btn-primary', (b) => {
-        OS.ask.send(OS.ask.data('For Leo: ' + String(x.headline || '').slice(0, 100), leoAsk(x, to), { kind: 'leo', leoId: x.id }, 'cut to fit; the full text is in the For Leo tab'))
-          .then(() => OS.lanes.leoAct(x.id, 'sent'), () => { b.textContent = 'Claude is not available here'; });
+      row.append(hubBtn('Skicka till Leo via Claude', 'btn-primary', (b) => {
+        OS.ask.send(OS.ask.data('Till Leo: ' + String(x.headline || '').slice(0, 100), leoAsk(x, to), { kind: 'leo', leoId: x.id }, 'cut to fit; the full text is in the For Leo tab'))
+          .then(() => OS.lanes.leoAct(x.id, 'sent'), () => { b.textContent = 'Claude är inte tillgänglig här'; });
       }));
     }
-    if (x.pack) row.append(hubBtn(OS.lanes.inPack(x.id) ? 'In the pack ✓' : 'Add to pack', OS.lanes.inPack(x.id) ? 'on' : '', () => OS.lanes.togglePack(x.id)));
-    if (OS.lanes.canWrite()) { row.append(hubBtn('Done', '', () => OS.lanes.leoAct(x.id, 'done'))); row.append(hubBtn('Not now', '', () => OS.lanes.leoAct(x.id, 'later'))); }
-    if (!OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send to Leo from here.'));
+    if (en && OS.ask.can()) {
+      row.append(hubBtn('Send in English…', '', (b) => {
+        OS.ask.send(OS.ask.data('In English: ' + String(OS.lanes.enOf(x, 'headline') || x.headline || '').slice(0, 100), leoAskEn(x), { kind: 'leo_en', leoId: x.id }, 'cut to fit; the full text is in the For Leo tab'))
+          .then(() => {}, () => { b.textContent = 'Claude is not available here'; });
+      }));
+    }
+    if (x.pack) row.append(hubBtn(OS.lanes.inPack(x.id) ? 'I paketet ✓' : 'Lägg i paketet', OS.lanes.inPack(x.id) ? 'on' : '', () => OS.lanes.togglePack(x.id)));
+    if (OS.lanes.canWrite()) { row.append(hubBtn('Klar', '', () => OS.lanes.leoAct(x.id, 'done'))); row.append(hubBtn('Inte nu', '', () => OS.lanes.leoAct(x.id, 'later'))); }
+    if (!OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Öppna Claude-chatten bredvid sidan för att skicka härifrån.'));
     li.append(row);
-    if (x.source) li.append(OS.el('p', 'lane-meta', 'From ' + String(x.source)));
+    if (x.source) li.append(OS.el('p', 'lane-meta', 'Källa: ' + String(x.source)));
     return li;
   }));
 });
@@ -1369,7 +1379,7 @@ dash.draw('leo-note', (el) => {
   const s = OS.lanes.state('leo'); const open = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length;
   el.hidden = !((el.dataset.note === 'empty' && (s === 'missing' || (s === 'ok' && !open))) || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
 });
-dash.draw('leo-at', (el) => { const d = OS.lanes.doc('leo'); el.textContent = d && d.at ? 'Prepared ' + laneWhen(d.at) + (d.to && d.to.name ? ' · for ' + String(d.to.name) : '') : ''; });
+dash.draw('leo-at', (el) => { const d = OS.lanes.doc('leo'); el.textContent = d && d.at ? 'Förberett ' + laneWhen(d.at) + (d.to && d.to.name ? ' · till ' + String(d.to.name) : '') : ''; });
 
 
 // ===================== INSTINCT AND MUSE (top of Today) =====================

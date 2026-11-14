@@ -48,8 +48,9 @@ const DEC = { at: '2026-11-11T06:40:00Z', by: 'the decisions task', items: [
     no: { effect: 'Tells Fredrik no.', sends: [{ type: 'slack', to: [{ name: 'Fredrik', slackId: 'U0FREDRIK1' }], body: 'Nej, Emile.' }] } },
 ] };
 const LEO = { at: '2026-11-11T06:40:00Z', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, packIntro: 'Hi Leo,', items: [
-  { id: 'leo-pipegen', topic: 'Pipegen', headline: 'Value per opp down', recommendation: 'Set targets in ARR.', evidence: [{ label: 'Oct', value: '$37.4M' }], ask: 'Agree ARR targets.', message: 'Leo, pipegen note.', pack: 'Pipegen: value per opp down.' },
-  { id: 'leo-capacity', topic: 'Street capacity', headline: 'Pipe per AE ranges 3x', recommendation: 'Route away from DACH.', message: 'Leo, capacity note.', pack: 'Capacity: 3x spread.' },
+  { id: 'leo-pipegen', topic: 'Pipegen', headline: 'Värde per affär ner', recommendation: 'Sätt mål i ARR.', evidence: [{ label: 'Okt', value: '$37.4M' }], ask: 'Enas om ARR-mål.', message: 'Leo, pipegen-notis.', pack: 'Pipegen: värde per affär ner.',
+    en: { headline: 'Value per opp down', message: 'Team, a pipegen note.', pack: 'Pipegen: value per opp down.' } },
+  { id: 'leo-capacity', topic: 'Street capacity', headline: 'Pipe per AE skiljer 3x', recommendation: 'Routa bort från DACH.', message: 'Leo, kapacitetsnotis.', pack: 'Kapacitet: 3x spridning.', en: { pack: 'Capacity: 3x spread.' } },
 ] };
 (async () => {
   await tick(); await tick(); await tick();
@@ -85,16 +86,24 @@ const LEO = { at: '2026-11-11T06:40:00Z', to: { name: 'Leonard Schreij', slackId
   ok(SENT.length === 2 && /I decided NO/.test(SENT[1].ask) && /Nej, Emile\./.test(SENT[1].ask) && !/Ja\./.test(SENT[1].ask) && /Fredrik \(U0FREDRIK1\)/.test(SENT[1].ask), 'No sends only the No message, to its recipient');
   // For Leo
   let lul = draw('leo-list', 'ul'); let lc = lul.children;
-  ok(lc.length === 2 && /Pipegen/.test(lc[0].textContent) && /Recommend: Set targets in ARR\./.test(lc[0].textContent) && /Ask Leo: Agree ARR targets\./.test(lc[0].textContent), 'For Leo shows topic, recommendation and the ask');
+  ok(lc.length === 2 && /Pipegen/.test(lc[0].textContent) && /Rekommendation: Sätt mål i ARR\./.test(lc[0].textContent) && /Fråga till Leo: Enas om ARR-mål\./.test(lc[0].textContent), 'For Leo shows topic, recommendation and the ask, in Swedish');
+  ok(/In English, for a wider group/.test(lc[0].textContent) && /Team, a pipegen note\./.test(lc[0].textContent) && !label(lc[1], 'Send in English…'), 'the English version shows when the item has one, with its own send button');
   ok(draw('leo-badge', 'span').textContent === '2', 'the For Leo badge counts open items');
-  fire(label(lc[0], 'Send to Leo via Claude'), 'click'); await tick(); await tick();
-  ok(SENT.length === 3 && /direct message to Leonard Schreij \(U0LEO12345\)/.test(SENT[2].ask) && /Leo, pipegen note\./.test(SENT[2].ask), 'Send to Leo hands Claude the message as a DM to Leo with his id');
+  fire(label(lc[0], 'Send in English…'), 'click'); await tick(); await tick();
+  ok(SENT.length === 3 && /Ask me which channel or people/.test(SENT[2].ask) && /Team, a pipegen note\./.test(SENT[2].ask) && !/Leo, pipegen-notis/.test(SENT[2].ask) && SENT[2].kind === 'leo_en' && !OS.lanes.leoActed('leo-pipegen'), 'Send in English hands Claude the English text, asks where to, and does not mark it sent to Leo');
+  SENT.pop();
+  fire(label(lc[0], 'Skicka till Leo via Claude'), 'click'); await tick(); await tick();
+  ok(SENT.length === 3 && /direct message to Leonard Schreij \(U0LEO12345\)/.test(SENT[2].ask) && /Leo, pipegen-notis\./.test(SENT[2].ask), 'Skicka till Leo hands Claude the Swedish message as a DM to Leo with his id');
   ok(DB.writes[DB.writes.length - 1].p === 'data/users/' + UID + '/leo-acts' && DB.writes[DB.writes.length - 1].data.acts['leo-pipegen'].action === 'sent', 'a sent item is marked sent in William\'s own Leo document');
   lul = draw('leo-list', 'ul'); lc = lul.children;
-  fire(label(lc[1], 'Add to pack'), 'click');
-  ok(OS.lanes.packSize() === 1 && draw('leo-pack-n', 'b').textContent === '1', 'Add to pack ticks it (the button count follows)');
+  fire(label(lc[1], 'Lägg i paketet'), 'click');
+  ok(OS.lanes.packSize() === 1 && draw('leo-pack-n', 'b').textContent === '1', 'Lägg i paketet ticks it (the button count follows)');
+  ok(/^A few things from EMEA RevOps:\n\n1\. Capacity: 3x spread\.$/.test(OS.lanes.packText('en')), 'the pack in English uses each item\'s English line', OS.lanes.packText('en'));
+  OS.lanes.sendPack('en'); await tick(); await tick();
+  ok(SENT.length === 4 && SENT[3].kind === 'leo_pack_en' && /Ask me which channel/.test(SENT[3].ask) && OS.lanes.packSize() === 1, 'the English pack goes to Claude to ask where, and the pack stays');
+  SENT.pop();
   OS.lanes.sendPack(); await tick(); await tick();
-  ok(SENT.length === 4 && /Hi Leo,\n\n1\. Capacity: 3x spread\./.test(SENT[3].ask) && SENT[3].kind === 'leo_pack', 'the pack goes as one message with the ticked lines', SENT[3] && SENT[3].ask);
+  ok(SENT.length === 4 && /Hi Leo,\n\n1\. Kapacitet: 3x spridning\./.test(SENT[3].ask) && SENT[3].kind === 'leo_pack', 'the pack goes to Leo as one Swedish message with the ticked lines', SENT[3] && SENT[3].ask);
   ok(OS.lanes.leoActed('leo-capacity') && OS.lanes.leoActed('leo-capacity').action === 'sent' && OS.lanes.packSize() === 0, 'packed items are marked sent and the pack empties');
   ok(draw('leo-badge', 'span').hidden === true, 'both handled: the badge hides');
   // without Claude beside the page: no send buttons, answers still saved
@@ -103,7 +112,7 @@ const LEO = { at: '2026-11-11T06:40:00Z', to: { name: 'Leonard Schreij', slackId
   const before = SENT.length;
   fire(label(cards[0], 'Yes'), 'click'); await tick(); await tick();
   ok(SENT.length === before && OS.lanes.answered('dec-subsidiary-segment').answer === 'yes', 'without Claude beside the page: the answer is saved and nothing is handed on');
-  ok(/open the Claude chat beside this page/i.test(draw('dec-list', 'ul').children.map((n) => n.textContent).join(' ')) || draw('dec-list', 'ul').children.length === 0, 'and the card says how to send');
+  ok(/open the Claude chat beside this page|Öppna Claude-chatten/i.test(draw('dec-list', 'ul').children.map((n) => n.textContent).join(' ')) || draw('dec-list', 'ul').children.length === 0, 'and the card says how to send');
   console.log(`\n${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.log('FAIL crashed', e && e.stack); process.exit(1); });

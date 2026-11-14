@@ -32,12 +32,13 @@ A `msg` is `{ type: slack|email, to: [{name, slackId?, email?}], channelId?, cha
 
 **For Leo** (at most 8): recommendations William should take to Leonard Schreij (VP Revenue EMEA): pipegen, conversion and Q4 risk, street capacity (pipeline per AE, ramp, territories), SMB load, sourcing mix, hiring, plus anything leadership-level from the Hub or Granola. For each:
 `{ id: 'leo-<slug>', topic, headline (one line), recommendation, evidence: [{label, value, source?}] (≤ 8), ask (what Leo should decide or do), message (a complete Slack DM to Leo in William's voice), pack (one line for a combined message, bold topic first), severity, source }`.
+Write For Leo in Swedish (William and Leo talk Swedish): topic, headline, recommendation, evidence labels, ask, pack and message (a complete Slack DM to Leo in William's voice, in Swedish, starting "Hej Leo,"); keep numbers as numbers and Salesforce terms (stage, pipeline, ARR, opps) as they are. Add `en` with the English version for wider groups: `en: { topic, headline, recommendation, ask, evidence, pack, message }`, where `en.message` greets no one: a short post for a group, with the headline, the recommendation and the key numbers.
 Numbers must come from this run's queries; round money to $0.1M or $k and say what they cover in `source`. No client or firm names, no Subscriber Content (law-firm client material): counts and colleague names only.
 
 ## 4. Write
 
 - `set` `hub/decisions` (if_version when it exists) to `{ at: now, by: 'the decisions task', items }`, leaving out decisions William has answered.
-- `set` `hub/leo` (if_version) to `{ at: now, to: { name: 'Leonard Schreij', slackId: 'U07VDDYG4KW' }, packIntro: 'Hi Leo, a few things from RevOps this week (numbers from the EMEA RevOps OS):', items }`, leaving out items marked sent, done or later unless their numbers changed materially (then a new id).
+- `set` `hub/leo` (if_version) to `{ at: now, to: { name: 'Leonard Schreij', slackId: 'U07VDDYG4KW' }, lang: 'sv', packIntro: 'Hej Leo, några saker från RevOps den här veckan (siffror från EMEA RevOps OS):', packIntroEn: 'A few things from EMEA RevOps (numbers from the EMEA RevOps OS):', items }`, leaving out items marked sent, done or later unless their numbers changed materially (then a new id).
 - On a version conflict, read again once and redo the write.
 
 ## Rules

@@ -56,7 +56,7 @@ if (NODB) { console.log('NODB ' + OS.hub.state() + ' ' + JSON.stringify(notes())
   ok(navs.length === 12 && navs[0] === 'today' && navs[1] === 'decide' && navs[2] === 'leo' && navs[3] === 'home', 'tab strip: 12 tabs, Today first, then Decide, For Leo, Home', navs);
   const cur = [...html.matchAll(/data-nav="([^"]+)" data-nav-item[^>]*aria-current="page"/g)].map((m) => m[1]);
   ok(cur.length === 1 && cur[0] === 'today', 'tab strip: Today is the current tab in the markup', cur);
-  const pages = [...html.matchAll(/<section class="scr" id="([^"]+)" data-page="\1"( hidden)?>/g)].map((m) => [m[1], !!m[2]]);
+  const pages = [...html.matchAll(/<section class="scr" id="([^"]+)" data-page="\1"(?: lang="[a-z-]+")?( hidden)?>/g)].map((m) => [m[1], !!m[2]]);
   ok(pages.length === 12 && pages[0][0] === 'today' && !pages[0][1] && pages[3][0] === 'home' && pages.slice(1).every((p) => p[1]), 'sections: Today first and shown, every other section hidden', pages);
   const screens = ((core.match(/const SCREENS = \[([^\]]+)\]/) || [])[1] || '').split(',').map((x) => x.trim().replace(/'/g, ''));
   ok(screens.length === 12 && screens.join() === navs.join(), 'SCREENS in os-core.js lists the twelve screens in tab order', screens);

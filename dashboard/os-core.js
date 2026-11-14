@@ -2,6 +2,17 @@
 // Fixed text lives in index.html. Outside drawings this file only listens and sets
 // hidden / aria-* / class / style / value / checked / disabled, and defines helpers the drawings use.
 
+// ---------- Page-wide listeners ----------
+// The dashboard runs these scripts again when a file changes while the page is open, in the same window. A listener
+// added to document each time would stack up: two click handlers tick an item and untick it at once. So each one
+// replaces the last one with its name.
+const onDoc = (type, name, fn) => {
+  const k = '__osListener_' + name;
+  try { if (typeof window[k] === 'function') document.removeEventListener(type, window[k]); } catch (e) { /* none yet */ }
+  window[k] = fn;
+  document.addEventListener(type, fn);
+};
+
 // ---------- Calc inputs ----------
 // Kept so state() can tell a calc that failed because a connector isn't connected (show "Connect …") from a real error.
 const CALC_IN = {};
@@ -1256,22 +1267,32 @@ OS.lanes = (() => {
   const items = (k) => (docs[k] ? docs[k].items.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 40) : []);
   // the For Leo pack: the ticked recommendations as one direct message to Leo, through Claude beside the page
   const leoTo = () => { const t = docs.leo && docs.leo.to; return t && typeof t.slackId === 'string' && /^[UW][A-Z0-9]{6,}$/.test(t.slackId) ? t : null; };
-  const packText = () => {
+  // Swedish for Leo; English (each item's `en`) for a wider group, sent where William says
+  const enOf = (x, f) => (x && x.en && typeof x.en[f] === 'string' && x.en[f] ? x.en[f] : '');
+  const packText = (lang) => {
     const list = items('leo').filter((x) => pack.has(x.id));
-    const intro = docs.leo && typeof docs.leo.packIntro === 'string' ? docs.leo.packIntro : 'Hi Leo, a few things from RevOps:';
-    return intro + '\n\n' + list.map((x, i) => (i + 1) + '. ' + String(x.pack || x.headline || '')).join('\n');
+    const d = docs.leo || {};
+    const intro = lang === 'en' ? (typeof d.packIntroEn === 'string' ? d.packIntroEn : 'A few things from EMEA RevOps:')
+      : (typeof d.packIntro === 'string' ? d.packIntro : 'Hej Leo, några saker från RevOps:');
+    return intro + '\n\n' + list.map((x, i) => (i + 1) + '. ' + String((lang === 'en' ? enOf(x, 'pack') || enOf(x, 'headline') : '') || x.pack || x.headline || '')).join('\n');
   };
-  const sendPack = () => {
+  const sendPack = (lang) => {
     const to = leoTo(); const ids = [...pack];
-    if (!to || !ids.length || !OS.ask.can()) return;
-    const data = OS.ask.data('For Leo: ' + ids.length + ' recommendation' + (ids.length === 1 ? '' : 's'),
-      'Send this Slack message as me, exactly as written, as a direct message to ' + (to.name || 'Leo') + ' (' + to.slackId + '). Show me the message and the recipient first and send only after my OK. When it has gone, tell me so I can mark these sent.\n\n' + packText(),
+    if (!ids.length || !OS.ask.can() || (lang !== 'en' && !to)) return;
+    if (lang === 'en') {
+      OS.ask.send(OS.ask.data('In English: ' + ids.length + ' recommendation' + (ids.length === 1 ? '' : 's'),
+        'Here is an English version of these RevOps recommendations for a wider group. Ask me which channel or people to send it to, then show me the message and the recipients and send only after my OK.\n\n' + packText('en'),
+        { kind: 'leo_pack_en', items: ids.join(',') }, 'cut to fit; the full pack is in the For Leo tab')).then(() => {}, () => {});
+      return;
+    }
+    const data = OS.ask.data('Till Leo: ' + ids.length + (ids.length === 1 ? ' rekommendation' : ' rekommendationer'),
+      'Send this Slack message as me, exactly as written, as a direct message to ' + (to.name || 'Leo') + ' (' + to.slackId + '). Show me the message and the recipient first and send only after my OK. When it has gone, tell me so I can mark these sent.\n\n' + packText('sv'),
       { kind: 'leo_pack', items: ids.join(',') }, 'cut to fit; the full pack is in the For Leo tab');
     OS.ask.send(data).then(() => { ids.forEach((id) => leoAct(id, 'sent')); }, () => {});
   };
-  document.addEventListener('click', (e) => { const b = e.target && e.target.closest ? e.target.closest('[data-leo-pack]') : null; if (b && !b.disabled) sendPack(); });
+  onDoc('click', 'leoPack', (e) => { const b = e.target && e.target.closest ? e.target.closest('[data-leo-pack]') : null; if (b && !b.disabled) sendPack(b.dataset.leoPack === 'en' ? 'en' : 'sv'); });
   return { state: (k) => state[k], doc: (k) => docs[k], items, answer, answered: (id) => answers[id] || null, leoAct, leoActed: (id) => leoActs[id] || null,
-    canWrite: () => canWrite, inPack: (id) => pack.has(id), togglePack: (id) => { if (pack.has(id)) pack.delete(id); else pack.add(id); redraw(); }, packSize: () => pack.size, packText, sendPack, leoTo, redraw };
+    canWrite: () => canWrite, inPack: (id) => pack.has(id), togglePack: (id) => { if (pack.has(id)) pack.delete(id); else pack.add(id); redraw(); }, packSize: () => pack.size, packText, sendPack, leoTo, enOf, redraw };
 })();
 
 // ---------- App shell ----------
@@ -1582,7 +1603,7 @@ OS.lanes = (() => {
   };
   const syncCopyList = () => document.querySelectorAll('[data-copy-list]').forEach((b) => { b.disabled = !actionRows().length; });
 
-  document.addEventListener('click', (e) => {
+  onDoc('click', 'shell', (e) => {
     if (!e.target.closest('.scope')) scopeOpen(false);
     const t = e.target.closest('[data-ask], [data-ask-agenda], [data-scope-toggle], [data-region], [data-mgr], [data-scope-reset], [data-done-key], [data-oo-who], [data-prep-oo], [data-copy-agenda], [data-gr-done], [data-nav], [data-open-palette], [data-clear-mgr], [data-gr-group], [data-gr-11], [data-gr-due], [data-view-tab], [data-person], [data-close-person], [data-copy-text], [data-copy-list], [data-copy-summary], [data-copy-checks], [data-copy-table], [data-copy-person-id], [data-pq], [data-crm], [data-gr-window], [data-gr-owner], [data-check-area], [data-deal-flag], [data-renew-flag], [data-ld-ready], [data-ld-prob], [data-act-role], [data-act-look], [data-act-left], [data-cv-seg], [data-cv-rt], [data-cv-clean], th[data-sort]');
     if (!t) return;
@@ -1673,7 +1694,7 @@ OS.lanes = (() => {
       OS.redraw(name);
     }
   });
-  document.addEventListener('keydown', (e) => {
+  onDoc('keydown', 'keys', (e) => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '');
     if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openPalette(); return; }
     if (!typing && e.key === '/' ) { e.preventDefault(); openPalette(); return; }

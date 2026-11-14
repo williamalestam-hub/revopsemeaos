@@ -60,7 +60,8 @@ them; **Undo** puts an item back until then. `tools/harness/test36.js` covers th
   and recipients, and Claude sends on your OK. Answers are kept in your private `data/users/<you>/decisions`; the task
   closes the matching Hub item, logs the decision in `hub/decision-log` and drops it from the list.
 - *For Leo*: recommendations to take to Leonard (pipegen, Q4 conversion, street capacity, ramp, SMB load, sourcing mix),
-  each with its numbers, the ask and a ready DM. Send one through Claude, or tick several and send them as one pack;
+  each with its numbers, the ask and a ready DM. The tab is in Swedish; each item also carries an English version (`en`) for wider
+  groups: **Send in English…** and **Pack in English…** hand Claude the English text and Claude asks where to send it. Send one through Claude, or tick several and send them as one pack;
   Done and Not now are kept in `data/users/<you>/leo-acts`. `tools/harness/test37.js` covers both tabs.
 - The OS page is within about 250 bytes of the store's 256 KB limit per file (`files/index.html`): new copy goes in a
   drawing or another file.
