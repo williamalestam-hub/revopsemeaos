@@ -504,6 +504,15 @@
   .lane-sub { font-size: 1em; margin: var(--cds-pad-lg) 0 var(--cds-pad-sm); color: var(--color-fg-muted); }
   .leo-rec b, .leo-ask b { font-weight: var(--cds-font-weight-medium); }
   .hub-acts .btn.on { border-color: var(--color-fg-muted); }
+  .sense { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: var(--cds-pad-lg); padding: var(--cds-pad-md) var(--cds-pad-lg); margin-bottom: var(--cds-pad-lg); }
+  .sense-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .sense-col > .pane-note { margin: 0; }
+  .sense-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--color-warn); align-self: center; }
+  .sense-dot.alert { background: var(--color-bad); } .sense-dot.good { background: var(--color-ok); }
+  .sense-change { font-family: var(--font-anthropic-serif); font-size: 1.05em; }
+  .sense-challenge { font-style: italic; color: var(--color-fg-muted); }
+  .sense-links { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: var(--cds-font-size-caption); }
+  .sense-card.kept { border-color: var(--color-fg-muted); }
   .home-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--color-panel); box-shadow: var(--lift); padding: var(--cds-pad-lg); gap: 6px; }
   .home-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--acc), transparent 80%); }
   .home-card::after { content: ""; position: absolute; right: -3rem; top: -3rem; width: 9rem; height: 9rem; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--acc) 16%, transparent), transparent); pointer-events: none; }

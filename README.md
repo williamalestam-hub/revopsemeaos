@@ -69,6 +69,20 @@ them; **Undo** puts an item back until then. `tools/harness/test36.js` covers th
 Salesforce, Calendar, Granola, Slack and Gmail as you; anything it writes for others becomes a draft in the Hub's Needs you.
 The OS's own page can't run Claude (its dashboard type has no in-page model access), so the button is a link to the Hub with
 `#chat`, shown only once `hub/today` carries a claude.ai Hub URL.
+**Instinct and Muse** sit at the top of Today, in two columns. The scheduled task *RevOps Instinct, Muse and done-check*
+(`trig_01XkowHJQs8VXTURGsuve4Bp`, bound to its own session; instructions in `hub/sense-worker.md`) runs weekdays every two
+hours from 08:07 to 16:07 Stockholm.
+- *Done-check* (every run): for each open task or ask in the Hub, it looks for clear evidence you have done it since it was
+  created (your reply in the thread, a sent email, the message posted, the record changed). Clear evidence: the item is
+  set to done with that evidence in its log, and Today drops it and moves it into Done today. Unclear: it stays, and if it
+  looks likely, Instinct shows "Looks done: ..." so you can press Done yourself. It never reopens or changes a closed item.
+- *Instinct* (every run): up to 6 signals worth acting on now (deals slipping out of the quarter, losses, pipegen pace,
+  wins), each with its change, the evidence and Salesforce links. It compares with its last snapshot
+  (`hub/instinct-state`) so it only speaks when something moved.
+- *Muse* (first run of the day): 2 or 3 data-backed ideas, logged in `hub/muse-log` so it doesn't repeat itself.
+- Each card can be sent on through Claude (on your OK), sent to Leo, or marked Got it / Keep / Not useful (kept in your
+  private `data/users/<you>/sense-acts`). `tools/harness/test38.js` covers the panel.
+
 `tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering that the hero still draws and the Chat links.
 
 ## Screens
@@ -329,7 +343,8 @@ Salesforce role and changing scope never re-runs a query.
 
 ## Action items from Granola
 
-- The app lists your Granola meetings in the chosen window (7, 30 or 90 days; notes you took or were
+- The app lists your Granola meetings in the chosen window (through Granola's `search_meetings`; the older
+  `list_meetings` was retired) (7, 30 or 90 days; notes you took or were
   invited to), reads each note ten at a time, and keeps the bullets under a "Next steps", "Action items",
   "Follow-ups" or "To-dos" heading, plus to-dos in your private notes.
 - Owner is the name in brackets after the item (Granola's format, `**Task** (Name)`), before a colon,

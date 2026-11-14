@@ -1371,6 +1371,86 @@ dash.draw('leo-note', (el) => {
 });
 dash.draw('leo-at', (el) => { const d = OS.lanes.doc('leo'); el.textContent = d && d.at ? 'Prepared ' + laneWhen(d.at) + (d.to && d.to.name ? ' · for ' + String(d.to.name) : '') : ''; });
 
+
+// ===================== INSTINCT AND MUSE (top of Today) =====================
+// Instinct: what changed and needs a look, each with the evidence, links to the deals in Salesforce (no account names
+// shown) and a prepared action. Muse: ideas with the numbers, a first step and a challenge. Sending goes through Claude
+// beside the page, which shows the message and sends on William's OK.
+const SENSE_LEVEL = { alert: 'Needs a look', watch: 'Watch', good: 'Good news' };
+const senseLink = (l) => {
+  if (!l || typeof l !== 'object' || !/^[A-Za-z0-9]{15,18}$/.test(String(l.oppId || ''))) return null;
+  const a = OS.el('a', 'sense-link', String(l.label || 'Open in Salesforce'));
+  a.href = 'https://legora.lightning.force.com/lightning/r/Opportunity/' + l.oppId + '/view'; a.target = '_blank'; a.rel = 'noopener';
+  return a;
+};
+const senseLeoBtn = (x, label) => {
+  const to = OS.lanes.leoTo();
+  if (!to || !OS.ask.can() || typeof x.message !== 'string' || !x.message.trim()) return null;
+  return hubBtn(label || 'Send to Leo via Claude', 'btn-primary', (b) => {
+    OS.ask.send(OS.ask.data(String(x.title || '').slice(0, 100), 'Send this Slack message as me, exactly as written, as a direct message to ' + (to.name || 'Leo') + ' (' + to.slackId + '). Show me the message and the recipient first and send only after my OK.\n\n' + x.message + '\n\n(' + x.id + ' in the EMEA RevOps OS.)', { kind: 'sense', senseId: x.id }, 'cut to fit; the full text is in the OS'))
+      .then(() => OS.sense.act(x.id, 'sent'), () => { b.textContent = 'Claude is not available here'; });
+  });
+};
+const senseCard = (x, kind) => {
+  const acted = OS.sense.acted(x.id);
+  const li = OS.el('li', 'lane-card sense-card sense-' + kind + (acted && acted.action === 'keep' ? ' kept' : ''));
+  const head = OS.el('div', 'lane-head');
+  if (kind === 'instinct') {
+    const lv = Object.hasOwn(SENSE_LEVEL, x.level) ? x.level : 'watch';
+    head.append(OS.el('span', 'sense-dot ' + lv), OS.el('span', 'chip', SENSE_LEVEL[lv]));
+  } else if (x.kind === 'challenge') head.append(OS.el('span', 'chip', 'Challenge'));
+  head.append(OS.el('h3', 'lane-q', String(x.title || 'Untitled').slice(0, 200)));
+  li.append(head);
+  if (x.change && typeof x.change === 'object' && (x.change.from != null || x.change.to != null)) {
+    li.append(OS.el('p', 'sense-change', (x.change.label ? x.change.label + ': ' : '') + String(x.change.from ?? '—') + ' → ' + String(x.change.to ?? '—')));
+  }
+  for (const k of ['why', 'idea', 'whyNow']) if (typeof x[k] === 'string' && x[k]) li.append(OS.el('p', k === 'why' || k === 'whyNow' ? 'hub-why' : 'sense-idea', x[k]));
+  const ev = laneEvidence(x.evidence); if (ev) li.append(ev);
+  if (typeof x.firstStep === 'string' && x.firstStep) { const p = OS.el('p', 'leo-ask'); p.append(OS.el('b', '', 'First step: '), x.firstStep); li.append(p); }
+  if (typeof x.challenge === 'string' && x.challenge) li.append(OS.el('p', 'sense-challenge', x.challenge));
+  const links = (Array.isArray(x.links) ? x.links : []).map(senseLink).filter(Boolean).slice(0, 6);
+  if (links.length) { const box = OS.el('div', 'sense-links'); box.append(...links); li.append(box); }
+  const row = OS.el('div', 'hub-acts');
+  const a = x.action && typeof x.action === 'object' ? x.action : null;
+  const sends = laneSends(a);
+  if (acted && acted.action === 'sent') row.append(OS.el('span', 'hub-note', 'Sent to Claude' + (acted.at ? ' · ' + laneWhen(acted.at) : '')));
+  else {
+    if (a && sends.length && OS.ask.can()) {
+      row.append(hubBtn(String(a.label || 'Send via Claude') + ' via Claude', 'btn-primary', () => {
+        OS.ask.send(OS.ask.data(String(x.title || '').slice(0, 100), 'Send the message' + (sends.length > 1 ? 's' : '') + ' below as me, exactly as written. Show me each message and its recipient first and send only after my OK.'
+          + sends.map((m, i) => '\n\n--- Message ' + (i + 1) + ': ' + (HUB_TYPE[m.type] || 'Message') + ' to ' + (hubDest(m) || 'the right recipient (find them and show me who first)') + '\n' + m.body).join('') + '\n\n(' + x.id + ' in the EMEA RevOps OS.)', { kind: 'sense', senseId: x.id }, 'cut to fit; the full text is in the OS'))
+          .then(() => OS.sense.act(x.id, 'sent'), () => {});
+      }));
+    }
+    const leo = senseLeoBtn(x); if (leo) row.append(leo);
+  }
+  if (OS.sense.canWrite()) {
+    if (kind === 'muse') row.append(hubBtn(acted && acted.action === 'keep' ? 'Kept ✓' : 'Keep', acted && acted.action === 'keep' ? 'on' : '', () => OS.sense.act(x.id, acted && acted.action === 'keep' ? null : 'keep')));
+    else row.append(hubBtn('Got it', '', () => OS.sense.act(x.id, 'ack')));
+    row.append(hubBtn('Not useful', '', () => OS.sense.act(x.id, 'notuseful')));
+  }
+  if (sends.length && !OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send from here.'));
+  li.append(row);
+  return li;
+};
+dash.draw('sense', (el) => {
+  const col = (k, title, note) => {
+    const sec = OS.el('section', 'sense-col');
+    const h = OS.el('div', 'sense-h'); h.append(OS.el('h2', 'pane-title', title)); sec.append(h);
+    const d = OS.sense.doc(k);
+    sec.append(OS.el('p', 'pane-note', note + (d && d.at ? ' Updated ' + laneWhen(d.at) + '.' : '')));
+    const list = OS.sense.items(k).filter((x) => { const a = OS.sense.acted(x.id); return !a || a.action === 'keep' || a.action === 'sent'; });
+    const hiddenN = OS.sense.items(k).length - list.length;
+    const ul = OS.el('ul', 'lane-list'); ul.append(...list.map((x) => senseCard(x, k))); sec.append(ul);
+    const s = OS.sense.state(k);
+    if (!list.length) sec.append(OS.el('p', 'os-empty', s === 'nodb' ? 'No database access in this view.' : s === 'error' ? "Couldn't be read. Reload to try again." : s === 'loading' ? '' : 'Nothing right now.'));
+    if (hiddenN) sec.append(OS.el('p', 'lane-meta', hiddenN + ' handled today.'));
+    return sec;
+  };
+  el.replaceChildren(col('instinct', 'Instinct', 'What changed and needs a look, with the evidence and a prepared action.'),
+    col('muse', 'Muse', 'Ideas worth your time, with the numbers, a first step and a challenge.'));
+});
+
 // ===================== HOME HERO =====================
 dash.draw('hero-date', (el) => { el.textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); });
 dash.draw('hero-name', (el) => {

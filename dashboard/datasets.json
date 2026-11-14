@@ -427,18 +427,15 @@
   "title": "Granola meeting notes",
   "description": "Your Granola meetings in the chosen window (notes you took or were invited to), with up to three attendees' emails; the page then reads each note and keeps every line of its summary and private notes, with the headings above it.",
   "source": {
-   "kind": "query",
+   "kind": "call",
    "connector": "Granola",
-   "tool": "list_meetings",
+   "tool": "search_meetings",
    "args": {
     "from_date": "{{gr_since}}",
     "to_date": "{{gr_until}}",
-    "involvement": {
-     "captured_by_me": true,
-     "listed_as_participant": true
-    },
+    "attended_only": true,
     "max_participants": 3,
-    "limit": 200
+    "limit": 100
    },
    "rules": {
     "gr_since": {

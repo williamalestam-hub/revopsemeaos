@@ -167,7 +167,7 @@ dash.loader('sf_me', {
   },
 });
 
-// Granola: list_meetings gives the meetings in the window (following next pages); get_meetings, ten at a time,
+// Granola: search_meetings (no keywords) gives the meetings in the window (following next pages); get_meetings, ten at a time,
 // gives each note. Every non-empty, non-heading line of a summary or private notes becomes a row, with the headings
 // above it, its indent and whether a blank line came before. The rules for what counts as an action item are in gr_actions.
 dash.loader('gr_notes', {
@@ -213,7 +213,7 @@ dash.loader('gr_notes', {
       const cursor = pg && attr(pg[1], 'has_more') === 'true' ? attr(pg[1], 'next_cursor') : null;
       if (!cursor) break;
       if (n >= 9) { cut = true; break; }
-      try { page = txt(await call('list_meetings', { ...args, cursor })); } catch (e) { cut = true; break; }
+      try { page = txt(await call('search_meetings', { ...args, cursor })); } catch (e) { cut = true; break; }
     }
     const rows = [];
     const parse = (md, source, meta) => {
@@ -651,7 +651,7 @@ window.OS = (() => {
 // click; the platform asks them to confirm). The page itself never writes to Salesforce, LeanData, mail or calendars.
 OS.ask = (() => {
   let room = null, mode = 'off';
-  const DRAWS = ['hub-top', 'dec-list', 'leo-list', 'act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table', 'act-table', 'act-monday', 'act-trust-list', 'act-bdr-table', 'act-bdr-plan', 'conv-step-table', 'conv-monday', 'conv-cohort-table', 'conv-smb', 'conv-reason-table', 'conv-src-ask', 'conv-trust-list'];
+  const DRAWS = ['sense', 'hub-top', 'dec-list', 'leo-list', 'act-list', 'home-actions', 'check-list', 'home-checks', 'oo-follow', 'oo-talk', 'deal-table', 'pd-deals', 'renew-table', 'home-next', 'pd-act', 'lv-table', 'ld-team-table', 'ld-rep-table', 'ld-backlog-table', 'ld-prob-table', 'ld-src-table', 'act-table', 'act-monday', 'act-trust-list', 'act-bdr-table', 'act-bdr-plan', 'conv-step-table', 'conv-monday', 'conv-cohort-table', 'conv-smb', 'conv-reason-table', 'conv-src-ask', 'conv-trust-list'];
   const refresh = async () => {
     if (!room || typeof room.canSendToClaudeSession !== 'function') return;
     let m = 'off';
@@ -1148,6 +1148,50 @@ OS.hub = (() => {
   const counts = () => (doc && doc.counts && typeof doc.counts === 'object' ? doc.counts : null);
   const top12 = () => (doc && Array.isArray(doc.top) ? doc.top.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 12) : []);
   return { state: () => state, doc: () => doc, counts, top: top12, when, stale, DRAWS, act, acted: (id) => acts[id] || null, acts: () => acts, canAct: () => canAct };
+})();
+
+// ---------- Instinct and Muse (top of Today) ----------
+// Prepared by the Hub's sense task (hub/sense-worker.md) into hub/instinct (what changed and needs a look: alerts,
+// watches and good news, each with evidence and a prepared action) and hub/muse (two or three ideas a morning, with the
+// numbers, a first step and a challenge). William's reactions (got it, not useful, keep, sent) live in his private
+// data/users/<id>/sense-acts; the task reads "not useful" to learn what to stop raising. Nothing here sends anything.
+OS.sense = (() => {
+  const docs = { instinct: null, muse: null }, state = { instinct: 'loading', muse: 'loading' };
+  let acts = {}, ref = null, canWrite = false, writing = Promise.resolve();
+  const redraw = () => { try { dash.draw('sense'); } catch (e) { /* not registered yet */ } };
+  (async () => {
+    try {
+      const c = window.claude;
+      if (!c || typeof c.use !== 'function') { state.instinct = state.muse = 'nodb'; return; }
+      const db = await c.use('db');
+      if (!db) { state.instinct = state.muse = 'nodb'; redraw(); return; }
+      for (const k of ['instinct', 'muse']) {
+        db.doc('hub/' + k).onSnapshot((snap) => {
+          const d = snap && snap.exists ? snap.data() : null;
+          docs[k] = d && typeof d === 'object' && Array.isArray(d.items) ? d : null;
+          state[k] = docs[k] ? 'ok' : 'missing'; redraw();
+        }, () => { state[k] = 'error'; redraw(); });
+      }
+      const user = await c.use('user');
+      const uid = user ? await user.id() : null;
+      if (!uid) return;
+      ref = db.doc('data/users/' + uid + '/sense-acts');
+      ref.onSnapshot((snap) => {
+        const d = snap && snap.exists ? snap.data() : null;
+        acts = d && d.acts && typeof d.acts === 'object' ? { ...d.acts } : {};
+        canWrite = true; redraw();
+      }, () => { canWrite = false; redraw(); });
+    } catch (e) { state.instinct = state.muse = 'nodb'; redraw(); }
+  })();
+  const act = (id, a) => {
+    if (!ref || !canWrite || !id) return;
+    const next = { ...acts };
+    if (a) next[id] = { action: a, at: new Date().toISOString() }; else delete next[id];
+    acts = next; redraw();
+    writing = writing.then(() => ref.set({ acts: next, updatedAt: new Date().toISOString() })).catch(() => { canWrite = false; redraw(); });
+  };
+  const items = (k) => (docs[k] ? docs[k].items.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 12) : []);
+  return { state: (k) => state[k], doc: (k) => docs[k], items, act, acted: (id) => acts[id] || null, canWrite: () => canWrite, redraw };
 })();
 
 // ---------- Decide and For Leo ----------

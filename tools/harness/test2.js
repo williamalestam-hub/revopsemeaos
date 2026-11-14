@@ -38,7 +38,7 @@ const M = [
   let n = 0;
   const call = async (tool, args) => {
     n++;
-    if (tool === 'list_meetings') return listPage(M.slice(2), false);
+    if (tool === 'search_meetings') return listPage(M.slice(2), false);
     if (n === 2) return '{"error":"rate_limit","retry_after_seconds":1}';  // first get_meetings call is rate-limited once
     return notesFor(M.filter((m) => args.meeting_ids.includes(m.id)));
   };

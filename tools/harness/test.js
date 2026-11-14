@@ -55,7 +55,7 @@ const notes = `<connected_user_email>jo.doe@example.com</connected_user_email>
 </meetings_data>`;
 (async () => {
   const calls = [];
-  const call = async (tool, args) => { calls.push([tool, JSON.stringify(args)]); return tool === 'list_meetings' ? list2 : notes; };
+  const call = async (tool, args) => { calls.push([tool, JSON.stringify(args)]); return tool === 'search_meetings' ? list2 : notes; };
   const res = await loaders.gr_notes.fn({ answer: list1, call, args: { from_date: '2026-10-04', to_date: '2026-11-03' } });
   console.log('calls', calls.map((c) => c[0] + ' ' + c[1].slice(0, 80)));
   console.log('rows', res.rows.length);

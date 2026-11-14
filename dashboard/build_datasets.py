@@ -257,10 +257,12 @@ D["deals"] = {"title": "Open deals of one person",
 DATE = "^20[0-9]{2}-[01][0-9]-[0-3][0-9]$"
 D["gr_notes"] = {"title": "Granola meeting notes",
   "description": "Your Granola meetings in the chosen window (notes you took or were invited to), with up to three attendees' emails; the page then reads each note and keeps every line of its summary and private notes, with the headings above it.",
-  "source": {"kind": "query", "connector": "Granola", "tool": "list_meetings",
-    "args": {"from_date": "{{gr_since}}", "to_date": "{{gr_until}}",
-             "involvement": {"captured_by_me": True, "listed_as_participant": True},
-             "max_participants": 3, "limit": 200},
+  # Granola retired list_meetings (Nov 2026); search_meetings with no keywords lists the window newest first, in the
+  # same <meetings_data> format, 100 a page (the loader follows next_cursor). attended_only = notes you captured or
+  # where you are listed as creator or attendee, as list_meetings' involvement filter did.
+  "source": {"kind": "call", "connector": "Granola", "tool": "search_meetings",
+    "args": {"from_date": "{{gr_since}}", "to_date": "{{gr_until}}", "attended_only": True,
+             "max_participants": 3, "limit": 100},
     "rules": {"gr_since": {"type": "string", "pattern": DATE}, "gr_until": {"type": "string", "pattern": DATE}}}}
 
 
