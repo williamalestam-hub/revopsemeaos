@@ -66,6 +66,13 @@ them; **Undo** puts an item back until then. `tools/harness/test36.js` covers th
 - The OS page is within about 250 bytes of the store's 256 KB limit per file (`files/index.html`): new copy goes in a
   drawing or another file.
 
+**Monday performance review** goes to William's own Slack DM every Monday at 07:37 Stockholm, from the scheduled task
+*RevOps Monday performance review* (`trig_01Gy89asrmVGsPL6DqFX6RpH`, bound to its own session; instructions in
+`hub/weekly-review-worker.md`). A parent message with what Leo should hear and an agenda for the week, then one thread
+reply each for Hiring, Ramp, Productivity, PG, Stage progression, Call quality and W/L, cut by segment (AE/SMB), team and
+first-line manager. A copy is kept in `hub/weekly` in this dashboard's database. Call quality is coverage only (logged
+calls, Outreach Kaia recordings) until Gong is connected.
+
 **Chat** (in the header and on the Today pane) opens the Hub's chat panel, where Claude answers in that page and reads
 Salesforce, Calendar, Granola, Slack and Gmail as you; anything it writes for others becomes a draft in the Hub's Needs you.
 The OS's own page can't run Claude (its dashboard type has no in-page model access), so the button is a link to the Hub with
