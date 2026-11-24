@@ -11,7 +11,7 @@ const ok = (c, l, x) => { if (c) passes++; else fails++; if (!c || process.env.V
 
 // ---- stand-ins ----
 const mkCtx = () => {
-  const rec = { calls: 0, bad: 0, texts: [] };
+  const rec = { calls: 0, bad: 0, texts: [], alphas: [] };
   const grad = { addColorStop() {} };
   const fixed = {
     measureText: (s) => ({ width: String(s).length * 4, actualBoundingBoxAscent: 5, actualBoundingBoxDescent: 1 }),
@@ -31,7 +31,7 @@ const mkCtx = () => {
         if (k === 'fillText' || k === 'strokeText') t.texts.push(String(args[0]));
       };
     },
-    set(t, k, v) { t[k] = v; return true; },
+    set(t, k, v) { if (k === 'globalAlpha') t.alphas.push(v); t[k] = v; return true; },
   });
   return ctx;
 };
@@ -209,6 +209,22 @@ for (const name of Object.keys(FX)) {
   s.start(); t = pump(30, 1000 / 60, t); s.destroy(); const d0 = canvas.ctx.calls; t = pump(30, 1000 / 60, t);
   ok(canvas.ctx.calls === d0 && raf.q.size === 0, 'destroy() ends the loop and leaves no frame request', [canvas.ctx.calls - d0, raf.q.size]);
   ok(docL.length === 0, 'destroy() removes the document listeners', docL.map((x) => x[0]));
+}
+// reduced motion on the real page: the first crew is all unknown (documents still loading), the real one follows.
+// The picture must then be the one a scene draws when it gets the real crew first: same calls, same opacities.
+{
+  const fx = FX.morning, unknown = fx.crew.map((a) => Object.assign({}, a, { state: 'unknown', waiting: 0, fresh: 0 }));
+  // both scenes are drawn at the same three times; only the first crew differs
+  const shot = (first) => {
+    const canvas = mkCanvas(); const s = API.create(canvas, { now: () => fx.clock, seed: 7, reducedMotion: true, onHover() {}, onPick() {} });
+    s.setCrew(first); s.resize(888); s.frame(0);
+    s.setCrew(fx.crew); s.frame(1000);
+    canvas.ctx.calls = 0; canvas.ctx.alphas.length = 0; s.frame(5000);
+    const out = { calls: canvas.ctx.calls, alphas: canvas.ctx.alphas.join(','), anchors: fx.crew.map((a) => s.anchor(a.id)) }; s.destroy(); return out;
+  };
+  const late = shot(unknown), direct = shot(fx.crew);
+  ok(late.calls === direct.calls && late.alphas === direct.alphas, 'reduced motion: agents that were unknown at first are drawn like any other (same calls, same opacity)', [late.calls, direct.calls, late.alphas.slice(0, 80), direct.alphas.slice(0, 80)]);
+  ok(late.anchors.every((p, i) => p && direct.anchors[i] && Math.hypot(p.x - direct.anchors[i].x, p.y - direct.anchors[i].y) <= 1.5), 'reduced motion: and they stand in the same places', [late.anchors, direct.anchors]);
 }
 // reduced motion: start() does not loop
 {

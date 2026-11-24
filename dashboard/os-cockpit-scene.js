@@ -576,7 +576,7 @@
         a.fresh = fresh;
         if (state !== was) {
           const appearing = isNew || was === 'unknown' || was === '';
-          if (appearing) { a.placed = false; a.alpha = 0; }
+          if (appearing) { a.placed = false; a.alpha = reduced ? 1 : 0; }   // the fade-in runs in step(), which reduced motion never calls
           const loud = state === 'due' || state === 'late' || state === 'error';   // on arrival only trouble speaks; later every change does
           if (bubble && !reduced && state !== 'unknown' && (!appearing || loud)) { a.bubbleText = bubble; a.bubbleUntil = simT + 4200 + (appearing ? 600 : 0); } else a.bubbleUntil = -1;
         }
