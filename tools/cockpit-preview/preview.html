@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cockpit preview</title>
+<!-- Local preview of the cockpit scene only (dashboard/os-cockpit-scene.js) with made-up crews. It is not the dashboard:
+     nothing here reads the database or a connector. tools/cockpit-preview/shoot.js drives it and saves PNGs. -->
+<style>
+  html, body { margin: 0; background: #ece8df; font: 13px/1.4 system-ui, sans-serif; color: #222; }
+  body.dark { background: #17151c; color: #ddd; }
+  #host, #sheetwrap { margin: 12px; }
+  #host { border-radius: 10px; overflow: hidden; }
+  canvas { display: block; }
+  #msg { margin: 12px; white-space: pre-wrap; color: #b00020; }
+</style>
+<div id="host"></div>
+<div id="sheetwrap"></div>
+<pre id="msg"></pre>
+<script src="fixtures.js"></script>
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const say = (m) => { document.getElementById('msg').textContent += m + '\n'; };
+  window.__errors = [];
+  window.addEventListener('error', (e) => { window.__errors.push(String(e.message)); say('error: ' + e.message); });
+  if (q.get('theme') === 'dark') document.body.classList.add('dark');
+  const s = document.createElement('script');
+  s.src = q.get('scene') || '../../dashboard/os-cockpit-scene.js';
+  s.onload = () => { window.__ready = true; if (q.get('fx')) live(); };
+  s.onerror = () => { window.__errors.push('scene script failed to load: ' + s.src); window.__ready = true; };
+  document.head.append(s);
+
+  const FPS = 15, STEP = 1000 / FPS;
+  const make = (fx, width, opts) => {
+    const host = document.getElementById('host');
+    host.replaceChildren(); host.style.width = width + 'px';
+    const canvas = document.createElement('canvas');
+    host.append(canvas);
+    let simT = 0;
+    const scene = window.OSCockpit.create(canvas, Object.assign({
+      now: () => fx.clock + simT, seed: 7, reducedMotion: false, onHover() {}, onPick() {},
+    }, opts || {}));
+    scene.setCrew(fx.crew);
+    const height = scene.resize(width);
+    return { scene, canvas, height, tick: (t) => { simT = t; scene.frame(t); } };
+  };
+
+  // Runs a fixture without real time: frames every 1/15 s up to the last requested time, applying the fixture's script.
+  // Each requested time is copied onto a contact sheet (frames stacked, left margin holds the time). Returns sizes.
+  window.__run = ({ fx: name, width, times, reduced }) => {
+    const fx = window.CK_FIXTURES[name];
+    if (!fx) throw new Error('no fixture ' + name);
+    const m = make(fx, width, { reducedMotion: !!reduced });
+    const dpr = window.devicePixelRatio || 1, wrap = document.getElementById('sheetwrap');
+    const sheet = document.createElement('canvas'); sheet.id = 'sheet';
+    const h = Math.round(m.height), gap = 6;
+    sheet.width = Math.round(width * dpr); sheet.height = Math.round((h + gap) * times.length * dpr);
+    sheet.style.width = width + 'px'; sheet.style.height = (h + gap) * times.length + 'px';
+    const g = sheet.getContext('2d');
+    const script = (fx.script || []).slice().sort((a, b) => a.at - b.at);
+    let si = 0, ti = 0;
+    const last = Math.max(...times);
+    for (let t = 0; t <= last + 1e-6; t += STEP) {
+      while (si < script.length && script[si].at <= t) { m.scene.setCrew(script[si].crew); si++; }
+      m.tick(t);
+      while (ti < times.length && times[ti] <= t + 1e-6) {
+        g.drawImage(m.canvas, 0, Math.round(ti * (h + gap) * dpr), Math.round(width * dpr), Math.round(h * dpr));
+        ti++;
+      }
+    }
+    wrap.replaceChildren(sheet);
+    document.getElementById('host').style.display = 'none';
+    const hits = (fx.crew || []).map((a) => { const p = m.scene.anchor(a.id); return { id: a.id, anchor: p, hit: p ? m.scene.hit(p.x, p.y) : null }; });
+    return { height: m.height, frames: times.length, canvasW: m.canvas.width, canvasH: m.canvas.height, hits, errors: window.__errors };
+  };
+
+  // average and worst time of one frame, in ms, over `frames` frames of a fixture (a real browser, the real canvas)
+  window.__bench = ({ fx: name, width, frames }) => {
+    const fx = window.CK_FIXTURES[name], m = make(fx, width, {});
+    const script = (fx.script || []).slice().sort((a, b) => a.at - b.at); let si = 0, worst = 0;
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) {
+      const t = i * STEP;
+      while (si < script.length && script[si].at <= t) { m.scene.setCrew(script[si].crew); si++; }
+      const a = performance.now(); m.tick(t); const d = performance.now() - a; if (i > 5 && d > worst) worst = d;
+    }
+    return { avg: (performance.now() - t0) / frames, worst };
+  };
+
+  // ?fx=name&w=888 : watch it live with real time (for a person; the shots don't use this)
+  function live() {
+    const fx = window.CK_FIXTURES[q.get('fx')]; if (!fx) return say('no fixture ' + q.get('fx'));
+    const w = +q.get('w') || 888, t0 = performance.now();
+    const m = make(fx, w, { now: () => fx.clock + (performance.now() - t0) });
+    const script = (fx.script || []).slice(); 
+    script.forEach((s) => setTimeout(() => m.scene.setCrew(s.crew), s.at));
+    m.scene.start();
+  }
+})();
+</script>
