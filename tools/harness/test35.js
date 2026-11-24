@@ -3,6 +3,9 @@
 // worker's last run (red when failed or older than 8 hours) and Open the Hub (hidden without a URL); the empty state when the
 // document is missing; a document that can't be read; no database at all (a child run); and the hero that moved under the
 // Hub block still draws. Synthetic data only, on a fake database; prints labels and counts.
+// The fixed sentences and the two kinds of Hub link (Open the Hub, Chat) are stored in the HTML, not drawn: one empty
+// drawing beside each group (hub-note, hub-links) only sets hidden on them, so the test hands the drawings the stored
+// elements through document.querySelectorAll and reads their hidden.
 const { Node } = require('./fakedom.js');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
@@ -29,7 +32,9 @@ const fakeDb = { doc: docRef, collection: (c) => ({ path: c, doc: (id) => docRef
 global.claude = { use: async (n) => (n === 'db' ? (NODB ? null : fakeDb) : null) };
 global.location.hash = '';
 document.querySelector = (sel) => (/data-view-panel/.test(sel) ? new Node('div') : null);
-document.querySelectorAll = () => [];
+// what the drawings look for in the page: filled from the stored index.html below, before anything is drawn
+const PAGE = { '[data-note-for]': [], '[data-hub-link]': [] };
+document.querySelectorAll = (sel) => PAGE[sel] || [];
 document.addEventListener = () => {};
 Object.defineProperty(global, 'navigator', { value: { clipboard: { writeText: () => Promise.resolve() } }, configurable: true, writable: true });
 for (const f of ['os-core.js', 'os-calcs.js', 'os-calcs-leads.js', 'os-calcs-act.js', 'os-calcs-conv.js', 'os-draw.js']) require(D + f);
@@ -38,17 +43,25 @@ const walk = (n, f) => { f(n); for (const c of n.children || []) walk(c, f); };
 const nodes = (el, pick) => { const out = []; walk(el, (n) => { if (pick(n)) out.push(n); }); return out; };
 const draw = (name, tag = 'div', ds = {}) => { const el = new Node(tag); el.dataset.draw = name; Object.assign(el.dataset, ds); draws[name](el); return el; };
 const count = (field) => draw('hub-count', 'b', { field });
-const note = (kind) => draw('hub-note', 'p', { note: kind });
-const notes = () => ({ empty: !note('empty').hidden, nodb: !note('nodb').hidden, error: !note('error').hidden });
+// the Hub's three sentences after its one drawing ran: which of them show
+const notes = () => { draw('hub-note', 'span'); const shown = (k) => PAGE['[data-note-for]'].some((p) => p.dataset.noteFor === 'hub' && p.dataset.note === k && !p.hidden); return { empty: shown('empty'), nodb: shown('nodb'), error: shown('error') }; };
+// the Hub links after their one drawing ran: Open the Hub, and the two Chat links (header and Today pane)
+const links = () => { draw('hub-links', 'span'); const all = PAGE['[data-hub-link]']; return { open: all.filter((a) => !/#chat$/.test(a.getAttribute('href'))), chat: all.filter((a) => /#chat$/.test(a.getAttribute('href'))) }; };
+const openLink = () => links().open[0];
+const chatShown = () => links().chat.map((a) => !a.hidden);
 const counts = () => ['waiting', 'critical', 'prepared', 'doneToday'].map((f) => count(f).textContent);
 const iso = (t) => new Date(t).toISOString();
-const HUB_URL = 'https://claude.ai/artifact/hubTestOnly123';
 const html = fs.readFileSync(D + 'index.html', 'utf8');
 const core = fs.readFileSync(D + 'os-core.js', 'utf8');
+for (const m of html.matchAll(/<p class="os-empty" data-note-for="([a-z]+)" data-note="([a-z]+)" hidden>/g)) { const p = new Node('p'); p.dataset.noteFor = m[1]; p.dataset.note = m[2]; p.hidden = true; PAGE['[data-note-for]'].push(p); }
+for (const m of html.matchAll(/<a class="[^"]*" data-hub-link href="([^"]+)"[^>]*hidden>/g)) { const a = new Node('a'); a.setAttribute('href', m[1]); a.hidden = true; PAGE['[data-hub-link]'].push(a); }
+// the Hub's address is fixed in the page's links; a document that names any other address shows none of them
+const HUB_URL = (PAGE['[data-hub-link]'].map((a) => a.getAttribute('href')).find((h) => !/#/.test(h)) || '');
+const OTHER_HUB = 'https://claude.ai/artifact/hubTestOnly123';
 
 (async () => {
 await new Promise((r) => setTimeout(r, 0)); // claude.use resolves after the first tick
-if (NODB) { console.log('NODB ' + OS.hub.state() + ' ' + JSON.stringify(notes()) + ' ' + JSON.stringify(counts()) + ' ' + draw('hub-open', 'a').hidden); process.exit(0); }
+if (NODB) { console.log('NODB ' + OS.hub.state() + ' ' + JSON.stringify(notes()) + ' ' + JSON.stringify(counts()) + ' ' + openLink().hidden); process.exit(0); }
 
 // ---- 1. the tab order: Today first, before Home, in the strip, the sections, the palette and the shell ----
 {
@@ -77,8 +90,11 @@ const home = html.slice(html.indexOf('data-page="home"'), html.indexOf('data-pag
   ok(!/class="hero"/.test(home) && !/data-draw="hero-date"/.test(home) && /class="home-cards"/.test(home) && /class="home-grid"/.test(home), 'Home: no hero any more, the cards and the grid stay');
   const tiles = [...today.matchAll(/<span class="stat-label">([^<]+)<\/span><span class="stat-value"><b data-draw="hub-count" data-field="([^"]+)">—<\/b>/g)].map((m) => [m[1], m[2]]);
   ok(JSON.stringify(tiles) === JSON.stringify([['Needs you', 'waiting'], ['Critical', 'critical'], ['Prepared', 'prepared'], ['Done today', 'doneToday']]), 'four count tiles: Needs you, Critical, Prepared, Done today', tiles);
-  ok(/<p class="os-empty" data-draw="hub-note" data-note="empty" hidden>The Hub has not run yet\.<\/p>/.test(today), 'the empty sentence is fixed in the HTML: "The Hub has not run yet."');
-  ok(/<a class="btn btn-primary" data-draw="hub-open" target="_blank" rel="noopener" hidden>Open the Hub</.test(today), 'one Open the Hub link, a new tab, hidden until the URL is known');
+  ok(/<p class="os-empty" data-note-for="hub" data-note="empty" hidden>The Hub has not run yet\.<\/p>/.test(today), 'the empty sentence is fixed in the HTML: "The Hub has not run yet."');
+  ok(/<div class="msgs"><span class="msg-slot" data-draw="hub-note"><\/span>\s*<p class="os-empty" data-note-for="hub"/.test(today) && (today.match(/data-draw="hub-note"/g) || []).length === 1 && PAGE['[data-note-for]'].filter((p) => p.dataset.noteFor === 'hub').length === 3, 'the three Hub sentences are plain HTML; one empty drawing beside them picks which shows');
+  ok(/<a class="btn btn-primary" data-hub-link href="https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+" target="_blank" rel="noopener" hidden>Open the Hub</.test(today) && (today.match(/>Open the Hub</g) || []).length === 1, 'one Open the Hub link with the Hub\'s address fixed in the HTML, a new tab, hidden until hub/today names that Hub');
+  ok(!/data-draw="hub-(open|chat)"/.test(html) && (html.match(/data-draw="hub-links"/g) || []).length === 1 && /<span class="msg-slot" data-draw="hub-links"><\/span>/.test(html.slice(0, html.indexOf('<nav class="app-tabs"'))), 'the links are not drawings: one empty drawing in the header (never under a hidden tab) shows or hides them');
+  ok(/^https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+$/.test(HUB_URL) && PAGE['[data-hub-link]'].length === 3 && PAGE['[data-hub-link]'].every((a) => a.getAttribute('href').split('#')[0] === HUB_URL), 'the three Hub links carry one claude.ai address', PAGE['[data-hub-link]'].map((a) => a.getAttribute('href')));
   ok(/<ul class="ilist" data-draw="hub-top"><\/ul>/.test(today) && /data-draw="hub-brief" hidden/.test(today) && /data-draw="hub-run"/.test(today), 'the top items list, the brief headline and the last run have their slots');
   ok(/data-draw="hub-badge" hidden/.test(html.slice(0, html.indexOf('data-page="today"'))), 'the Today tab carries a badge slot');
   ok(!/data-draw="hub-[a-z]+"[^>]*data-source=/.test(today), 'no Hub element names a dataset: the Hub block reads the database only');
@@ -92,7 +108,7 @@ ok(DB.subs.filter((x) => x.p === 'hub/today').length === 1 && DB.subs[0].p === '
 ok(OS.hub.state() === 'loading', 'before the first snapshot the state is loading', OS.hub.state());
 ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'loading: the four tiles show —', counts());
 ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: false }), 'loading: no sentence shows yet', notes());
-ok(draw('hub-open', 'a').hidden === true && draw('hub-run', 'p').textContent === '' && draw('hub-badge', 'span').hidden === true, 'loading: no Open button, no run line, no badge');
+ok(openLink().hidden === true && draw('hub-run', 'p').textContent === '' && draw('hub-badge', 'span').hidden === true, 'loading: no Open button, no run line, no badge');
 const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
 
 // ---- 4. the empty state: the document is missing ----
@@ -102,18 +118,20 @@ const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: true, nodb: false, error: false }), 'missing: "The Hub has not run yet." shows, the other sentences stay hidden', notes());
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'missing: tiles show —', counts());
   ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 0, 'missing: no items');
-  ok(draw('hub-open', 'a').hidden === true && draw('hub-open', 'a').getAttribute('href') === null, 'missing: Open the Hub hidden (no URL known)');
-  ok(draw('hub-chat', 'a').hidden === true, 'missing: Chat hidden (no URL known)');
+  ok(openLink().hidden === true && openLink().getAttribute('href') === HUB_URL, 'missing: Open the Hub hidden (no URL known); its fixed href is left alone');
+  ok(JSON.stringify(chatShown()) === '[false,false]', 'missing: Chat hidden (no URL known)', chatShown());
   const run = draw('hub-run', 'p');
   ok(run.textContent === 'Worker: has not run yet' && !run.classList.contains('os-bad'), 'missing: the run line says the worker has not run yet', run.textContent);
   ok(draw('hub-brief', 'p').hidden === true && draw('hub-badge', 'span').hidden === true, 'missing: no headline, no badge');
   // a document seeded with the Hub's URL only (before the first run): still the empty state, now with the Open button
   push({ hubUrl: HUB_URL });
   ok(OS.hub.state() === 'missing' && notes().empty === true, 'a document with only hubUrl: still "The Hub has not run yet."', [OS.hub.state(), notes()]);
-  const a = draw('hub-open', 'a');
+  const a = openLink();
   ok(a.hidden === false && a.getAttribute('href') === HUB_URL, 'a document with only hubUrl: Open the Hub shows with that href', [a.hidden, a.getAttribute('href')]);
-  const ch = draw('hub-chat', 'a');
-  ok(ch.hidden === false && ch.getAttribute('href') === HUB_URL + '#chat', 'a document with only hubUrl: Chat links to the Hub with #chat', [ch.hidden, ch.getAttribute('href')]);
+  const ch = links().chat;
+  ok(ch.length === 2 && ch.every((c) => c.hidden === false && c.getAttribute('href') === HUB_URL + '#chat'), 'a document with only hubUrl: both Chat links show and lead to the Hub with #chat', ch.map((c) => [c.hidden, c.getAttribute('href')]));
+  push({ hubUrl: OTHER_HUB });
+  ok(openLink().hidden === true && JSON.stringify(chatShown()) === '[false,false]' && openLink().getAttribute('href') === HUB_URL, 'a document naming another Hub address: the links stay hidden and keep their own href', [openLink().hidden, chatShown()]);
 }
 
 // ---- 5. a full document: counts, items, headline, Open button, failed run in red ----
@@ -148,8 +166,8 @@ const DOC = {
   const status = lis.map((li) => (nodes(li, (n) => n.classList.contains('itm-detail'))[0] || {}).textContent || '');
   ok(JSON.stringify(status) === JSON.stringify(['Waiting for you', 'Prepared, waiting for you', 'New', 'New']), 'the status reads in words under the title', status);
   ok(!/innerHTML/.test(String(draws['hub-top'])) && lis.every((li) => li.children.length === 3), 'rows are built from elements with textContent only');
-  const a = draw('hub-open', 'a');
-  ok(a.hidden === false && a.getAttribute('href') === HUB_URL, 'Open the Hub: shown, href is the hubUrl from the document', [a.hidden, a.getAttribute('href')]);
+  const a = openLink();
+  ok(a.hidden === false && a.getAttribute('href') === HUB_URL, 'Open the Hub: shown, its href is the hubUrl the document names', [a.hidden, a.getAttribute('href')]);
   const run = draw('hub-run', 'p');
   ok(run.classList.contains('os-bad') && /^Worker: last run 09:00 · failed$/.test(run.textContent), 'last run failed an hour ago: red, with its time and status', [run.className, run.textContent]);
   const brief = draw('hub-brief', 'p');
@@ -197,10 +215,12 @@ const DOC = {
   ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 0, 'top not a list: no rows, no crash');
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'counts that are not numbers show —', counts());
   ok(draw('hub-brief', 'p').hidden === true, 'a blank headline hides the line');
-  ok(draw('hub-open', 'a').hidden === true && draw('hub-open', 'a').getAttribute('href') === null, 'a hubUrl that is not a claude.ai https link is not followed');
-  ok(draw('hub-chat', 'a').hidden === true && draw('hub-chat', 'a').getAttribute('href') === null, 'Chat follows no hubUrl that is not a claude.ai https link');
+  ok(openLink().hidden === true && openLink().getAttribute('href') === HUB_URL, 'a hubUrl that is not the Hub\'s address hides Open the Hub and never reaches its href');
+  ok(JSON.stringify(chatShown()) === '[false,false]' && links().chat.every((c) => c.getAttribute('href') === HUB_URL + '#chat'), 'Chat follows no hubUrl from the document either');
   push({ ...DOC, hubUrl: 'https://example.com/claude.ai/' });
-  ok(draw('hub-open', 'a').hidden === true, 'a non-claude.ai host is not followed either');
+  ok(openLink().hidden === true, 'a non-claude.ai host is not followed either');
+  const near = [HUB_URL + '#chat', HUB_URL + '/', HUB_URL + 'x', ' ' + HUB_URL, HUB_URL.toUpperCase(), 42, null, { href: HUB_URL }].filter((odd) => { push({ ...DOC, hubUrl: odd }); return !openLink().hidden || chatShown().some(Boolean); });
+  ok(near.length === 0, 'near misses of the address (a fragment, a slash, other case, a non-string) keep the links hidden', near);
   push({ ...DOC, top: [{ id: 'y', title: 'x'.repeat(200), kind: 'mystery', severity: 'urgent', status: 'odd' }, null, 'junk'] });
   const li = nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI');
   ok(li.length === 1, 'junk entries are skipped', li.length);
@@ -217,7 +237,7 @@ const DOC = {
   DB.subs[0].error({ code: 'unavailable', message: 'bridge gone' });
   ok(OS.hub.state() === 'error', 'an error on the subscription: state error', OS.hub.state());
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: true }), 'error: only the "couldn\'t be read" sentence shows', notes());
-  ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']) && draw('hub-open', 'a').hidden === true && draw('hub-badge', 'span').hidden === true, 'error: tiles —, no Open button, no badge');
+  ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']) && openLink().hidden === true && draw('hub-badge', 'span').hidden === true, 'error: tiles —, no Open button, no badge');
   ok(DB.subs.filter((x) => x.p === 'hub/today').length === 1, 'no second subscription to hub/today was opened along the way', DB.subs.map((x) => x.p));
 }
 
@@ -250,9 +270,9 @@ const DOC = {
 // Chat: the header and the Today pane open the Hub's chat (#chat), only for a claude.ai Hub URL
 {
   const html = fs.readFileSync(D + 'index.html', 'utf8');
-  ok((html.match(/data-draw="hub-chat"/g) || []).length === 2, 'Chat: one link in the header and one on the Today pane');
-  ok(/<a class="app-chat" data-draw="hub-chat" target="_blank" rel="noopener"[^>]*hidden>/.test(html), 'Chat: the header link opens a new tab and is hidden until the Hub URL is known');
-  ok(/'hub-chat'/.test(fs.readFileSync(D + 'os-core.js', 'utf8')), 'Chat: redrawn when hub/today changes');
+  ok((html.match(/data-hub-link href="[^"#]+#chat"/g) || []).length === 2 && /data-hub-link href="[^"#]+#chat"/.test(html.slice(0, html.indexOf('<nav class="app-tabs"'))) && /data-hub-link href="[^"#]+#chat"/.test(html.slice(html.indexOf('id="hub-today"'), html.indexOf('class="hub-tiles"'))), 'Chat: one link in the header and one on the Today pane');
+  ok(/<a class="app-chat" data-hub-link href="[^"#]+#chat" target="_blank" rel="noopener"[^>]*hidden>/.test(html), 'Chat: the header link opens a new tab and is hidden until the Hub URL is known');
+  ok(/const DRAWS = \[[^\]]*'hub-links'[^\]]*'hub-note'\]/.test(fs.readFileSync(D + 'os-core.js', 'utf8')) && !/'hub-(open|chat)'/.test(fs.readFileSync(D + 'os-core.js', 'utf8')), 'Chat and Open the Hub: shown or hidden again when hub/today changes');
 }
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

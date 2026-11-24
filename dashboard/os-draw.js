@@ -1214,26 +1214,21 @@ dash.draw('hub-run', (el) => {
   el.classList.toggle('os-bad', bad);
   el.classList.toggle('os-warn', !bad && !!run && status !== 'ok');
 });
-// Open the Hub: the URL comes from the document, so only a claude.ai link is followed
-dash.draw('hub-open', (el) => {
+// Open the Hub and Chat are plain links in the HTML ([data-hub-link]) with the Hub's address fixed there; Chat's ends in
+// #chat, which opens the Hub's chat panel on arrival (this page's type has no in-page model access, so the Hub answers in
+// its own page). This empty drawing only shows or hides them: a link shows while hub/today names that same address, so
+// an address from the document is compared, never followed.
+dash.draw('hub-links', () => {
   const d = OS.hub.doc();
-  const url = d && typeof d.hubUrl === 'string' && /^https:\/\/claude\.ai\/[^\s"'<>]+$/.test(d.hubUrl) ? d.hubUrl : '';
-  if (url) el.setAttribute('href', url); else el.removeAttribute('href');
-  el.hidden = !url;
+  const url = d && typeof d.hubUrl === 'string' ? d.hubUrl : '';
+  document.querySelectorAll('[data-hub-link]').forEach((a) => { a.hidden = !url || String(a.getAttribute('href') || '').split('#')[0] !== url; });
 });
-// Chat: the OS's page can't run Claude itself (its type has no in-page model access), so Chat opens the Hub's chat panel,
-// which answers in its own page. Same claude.ai-only rule as Open the Hub; #chat opens the panel on arrival.
-dash.draw('hub-chat', (el) => {
-  const d = OS.hub.doc();
-  const url = d && typeof d.hubUrl === 'string' && /^https:\/\/claude\.ai\/[^\s"'<>#]+$/.test(d.hubUrl) ? d.hubUrl + '#chat' : '';
-  if (url) el.setAttribute('href', url); else el.removeAttribute('href');
-  el.hidden = !url;
-});
-// the fixed sentences: the Hub has not run yet, no database here, or the document couldn't be read
-dash.draw('hub-note', (el) => {
-  const s = OS.hub.state();
-  el.hidden = !((el.dataset.note === 'empty' && s === 'missing') || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
-});
+// The fixed sentences of a list (nothing yet, no database here, couldn't be read) are in the HTML, [data-note-for]. An
+// empty drawing beside each group shows the one that applies (k) and hides the rest.
+const pickNote = (name, k) => document.querySelectorAll('[data-note-for]').forEach((p) => { if (p.dataset.noteFor === name) p.hidden = p.dataset.note !== k; });
+const noteOf = (s, empty) => (empty ? 'empty' : s === 'nodb' || s === 'error' ? s : '');
+// the Hub has not run yet, no database here, or the document couldn't be read
+dash.draw('hub-note', () => { const s = OS.hub.state(); pickNote('hub', noteOf(s, s === 'missing')); });
 
 
 // ===================== DECIDE AND FOR LEO =====================
@@ -1320,9 +1315,9 @@ const decCard = (d, done) => {
 dash.draw('dec-list', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).map((d) => decCard(d, null))); });
 dash.draw('dec-done', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => OS.lanes.answered(d.id)).map((d) => decCard(d, OS.lanes.answered(d.id)))); });
 dash.draw('dec-badge', (el) => { const n = OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length; el.textContent = n ? OS.num(n) : ''; el.hidden = !n; });
-dash.draw('dec-note', (el) => {
+dash.draw('dec-note', () => {
   const s = OS.lanes.state('decisions'); const open = OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length;
-  el.hidden = !((el.dataset.note === 'empty' && (s === 'missing' || (s === 'ok' && !open))) || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
+  pickNote('dec', noteOf(s, s === 'missing' || (s === 'ok' && !open)));
 });
 dash.draw('dec-at', (el) => { const d = OS.lanes.doc('decisions'); el.textContent = d && d.at ? 'Prepared ' + laneWhen(d.at) + (d.by ? ' by ' + String(d.by) : '') : ''; });
 
@@ -1375,9 +1370,9 @@ dash.draw('leo-list', (ul) => {
 });
 dash.draw('leo-badge', (el) => { const n = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length; el.textContent = n ? OS.num(n) : ''; el.hidden = !n; });
 dash.draw('leo-pack-n', (el) => { el.textContent = OS.num(OS.lanes.packSize()); });
-dash.draw('leo-note', (el) => {
+dash.draw('leo-note', () => {
   const s = OS.lanes.state('leo'); const open = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length;
-  el.hidden = !((el.dataset.note === 'empty' && (s === 'missing' || (s === 'ok' && !open))) || (el.dataset.note === 'nodb' && s === 'nodb') || (el.dataset.note === 'error' && s === 'error'));
+  pickNote('leo', noteOf(s, s === 'missing' || (s === 'ok' && !open)));
 });
 dash.draw('leo-at', (el) => { const d = OS.lanes.doc('leo'); el.textContent = d && d.at ? 'Förberett ' + laneWhen(d.at) + (d.to && d.to.name ? ' · till ' + String(d.to.name) : '') : ''; });
 

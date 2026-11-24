@@ -1,5 +1,6 @@
 <meta name="dash-one-writer">
 <link rel="stylesheet" href="os.css">
+<link rel="stylesheet" href="os-cockpit.css">
 
 <div class="app" id="app">
   <!-- ===================== HEADER AND TABS ===================== -->
@@ -10,7 +11,7 @@
     </div>
     <div class="app-tools">
       <button class="app-search" type="button" data-open-palette><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><span>Search people, pools, books…</span><kbd>Ctrl K</kbd></button>
-      <a class="app-chat" data-draw="hub-chat" target="_blank" rel="noopener" title="Chat in the RevOps Hub: reads Salesforce, Calendar, Granola, Slack and Gmail as you" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg><span>Chat</span></a>
+      <a class="app-chat" data-hub-link href="https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU#chat" target="_blank" rel="noopener" title="Chat in the RevOps Hub: reads Salesforce, Calendar, Granola, Slack and Gmail as you" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg><span>Chat</span></a><span class="msg-slot" data-draw="hub-links"></span>
       <div class="scope">
         <button class="scope-btn" type="button" data-scope-toggle aria-expanded="false" aria-haspopup="dialog" aria-label="Choose a team or manager"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5s1.1-6.1 3.5-8.5"/></svg><span class="scope-lbl" data-draw="scope-label">—</span><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
         <div class="scope-pop" data-scope-pop role="dialog" aria-label="Team and manager" hidden>
@@ -166,6 +167,28 @@
 
     <!-- ===== TODAY: the Hub's summary, then the greeting hero ===== -->
     <section class="scr" id="today" data-page="today">
+      <!-- ===== COCKPIT: your agents at work. The picture is drawn (os-cockpit*.js); the names and sentences are here ===== -->
+      <div class="pane cockpit" id="cockpit">
+        <div class="ck-stage" data-draw="cockpit"></div>
+        <div class="ck-bar">
+          <ul class="ck-strip" aria-label="Agents">
+            <li><button class="ck-chip" type="button" data-ck="desk" data-nav="today" data-ck-go="hub-today"><i class="ck-dot" aria-hidden="true"></i><b>Desk</b><span class="ck-line" data-draw="ck-line" data-ck-id="desk">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="decide" data-nav="decide"><i class="ck-dot" aria-hidden="true"></i><b>Decide</b><span class="ck-line" data-draw="ck-line" data-ck-id="decide">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="instinct" data-nav="today" data-ck-go="sense"><i class="ck-dot" aria-hidden="true"></i><b>Instinct</b><span class="ck-line" data-draw="ck-line" data-ck-id="instinct">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="muse" data-nav="today" data-ck-go="sense"><i class="ck-dot" aria-hidden="true"></i><b>Muse</b><span class="ck-line" data-draw="ck-line" data-ck-id="muse">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="review"><i class="ck-dot" aria-hidden="true"></i><b>Review</b><span class="ck-line" data-draw="ck-line" data-ck-id="review">—</span></button></li>
+          </ul>
+          <button class="ck-help" type="button" data-ck-help aria-expanded="false" aria-controls="ck-legend" aria-label="How to read the cockpit">?</button>
+        </div>
+        <p class="ck-legend" id="ck-legend" hidden>At its desk: a run is under way or due. At your desk: waiting on you. By the coffee: nothing needs you.</p>
+        <div class="ck-roles" hidden>
+          <span data-ck-role="desk">Prepares replies and next steps from Slack, mail and meetings.</span>
+          <span data-ck-role="decide">Prepares your yes/no decisions and the points for Leo.</span>
+          <span data-ck-role="instinct">Watches the numbers and says what changed.</span>
+          <span data-ck-role="muse">Works out ideas from your numbers.</span>
+          <span data-ck-role="review">Posts the Monday performance review to your DM.</span>
+        </div>
+      </div>
       <div class="pane sense" id="sense" data-draw="sense"></div>
       <div class="pane hub" id="hub-today">
         <div class="pane-head">
@@ -173,8 +196,8 @@
             <h2 class="pane-title">RevOps Hub</h2>
             <p class="pane-note">What the Hub's worker has prepared for you: asks, meeting prep, next steps and insights, ready to approve in the Hub. It runs twice a day on weekdays, and nothing leaves the Hub without your click.</p>
           </div>
-          <a class="btn" data-draw="hub-chat" target="_blank" rel="noopener" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</a>
-          <a class="btn btn-primary" data-draw="hub-open" target="_blank" rel="noopener" hidden>Open the Hub<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+          <a class="btn" data-hub-link href="https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU#chat" target="_blank" rel="noopener" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</a>
+          <a class="btn btn-primary" data-hub-link href="https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU" target="_blank" rel="noopener" hidden>Open the Hub<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
         </div>
         <div class="hub-tiles">
           <div class="stat" id="stat-hub-waiting"><span class="stat-label">Needs you</span><span class="stat-value"><b data-draw="hub-count" data-field="waiting">—</b></span><span class="stat-sub">waiting for your click</span></div>
@@ -184,10 +207,10 @@
         </div>
         <p class="hub-brief" data-draw="hub-brief" hidden></p>
         <ul class="ilist" data-draw="hub-top"></ul>
-        <div class="msgs">
-          <p class="os-empty" data-draw="hub-note" data-note="empty" hidden>The Hub has not run yet.</p>
-          <p class="os-empty" data-draw="hub-note" data-note="nodb" hidden>The Hub's summary can't be read here: this view has no access to the dashboard's database.</p>
-          <p class="os-empty" data-draw="hub-note" data-note="error" hidden>The Hub's summary couldn't be read. Reload to try again.</p>
+        <div class="msgs"><span class="msg-slot" data-draw="hub-note"></span>
+          <p class="os-empty" data-note-for="hub" data-note="empty" hidden>The Hub has not run yet.</p>
+          <p class="os-empty" data-note-for="hub" data-note="nodb" hidden>The Hub's summary can't be read here: this view has no access to the dashboard's database.</p>
+          <p class="os-empty" data-note-for="hub" data-note="error" hidden>The Hub's summary couldn't be read. Reload to try again.</p>
         </div>
         <div class="pane-foot"><p class="pane-note hub-run" data-draw="hub-run"></p></div>
       </div>
@@ -229,10 +252,10 @@
       </header>
       <div class="pane lanes">
         <ul class="lane-list" data-draw="dec-list"></ul>
-        <div class="msgs">
-          <p class="os-empty" data-draw="dec-note" data-note="empty" hidden>Nothing to decide right now.</p>
-          <p class="os-empty" data-draw="dec-note" data-note="nodb" hidden>No database access in this view.</p>
-          <p class="os-empty" data-draw="dec-note" data-note="error" hidden>Couldn't be read. Reload to try again.</p>
+        <div class="msgs"><span class="msg-slot" data-draw="dec-note"></span>
+          <p class="os-empty" data-note-for="dec" data-note="empty" hidden>Nothing to decide right now.</p>
+          <p class="os-empty" data-note-for="dec" data-note="nodb" hidden>No database access in this view.</p>
+          <p class="os-empty" data-note-for="dec" data-note="error" hidden>Couldn't be read. Reload to try again.</p>
         </div>
         <h2 class="lane-sub">Decided</h2>
         <ul class="lane-list" data-draw="dec-done"></ul>
@@ -247,14 +270,14 @@
           <h1>For Leo</h1>
           <p>Det du tar upp med Leo, med siffrorna. Skicka en eller ett paket; Claude skickar på ditt OK. På engelska för bredare grupper.</p>
         </div>
-        <button class="btn btn-primary" type="button" data-leo-pack disabled>Skicka paketet till Leo (<b data-draw="leo-pack-n">0</b>)</button><button class="btn" type="button" data-leo-pack="en" lang="en" disabled>Pack in English…</button>
+        <button class="btn btn-primary" type="button" data-leo-pack disabled>Skicka paketet till Leo (<b data-draw="leo-pack-n">—</b>)</button><button class="btn" type="button" data-leo-pack="en" lang="en" disabled>Pack in English…</button>
       </header>
       <div class="pane lanes">
         <ul class="lane-list" data-draw="leo-list"></ul>
-        <div class="msgs">
-          <p class="os-empty" data-draw="leo-note" data-note="empty" hidden>Inget till Leo just nu.</p>
-          <p class="os-empty" data-draw="leo-note" data-note="nodb" hidden>Ingen databasåtkomst här.</p>
-          <p class="os-empty" data-draw="leo-note" data-note="error" hidden>Kunde inte läsas. Ladda om.</p>
+        <div class="msgs"><span class="msg-slot" data-draw="leo-note"></span>
+          <p class="os-empty" data-note-for="leo" data-note="empty" hidden>Inget till Leo just nu.</p>
+          <p class="os-empty" data-note-for="leo" data-note="nodb" hidden>Ingen databasåtkomst här.</p>
+          <p class="os-empty" data-note-for="leo" data-note="error" hidden>Kunde inte läsas. Ladda om.</p>
         </div>
         <div class="pane-foot"><p class="pane-note" data-draw="leo-at"></p></div>
       </div>
@@ -2333,3 +2356,6 @@
 <script src="os-calcs-act.js"></script>
 <script src="os-calcs-conv.js"></script>
 <script src="os-draw.js"></script>
+<script src="os-cockpit-model.js"></script>
+<script src="os-cockpit-scene.js"></script>
+<script src="os-cockpit.js"></script>

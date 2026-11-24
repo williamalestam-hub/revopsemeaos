@@ -1,7 +1,9 @@
 // Decide and For Leo tabs (built on the Today-tab harness): yes/no decisions with the recommendation, the evidence and
 // what each answer does; an answer that carries messages hands Claude beside the page the exact texts and recipients,
 // and is kept only in William's own decisions document. For Leo: send one recommendation, or tick several and send the
-// pack as one direct message to Leo; Done / Not now / Undo. Original header follows.
+// pack as one direct message to Leo; Done / Not now / Undo. The fixed sentences of both tabs (nothing right now, no
+// database, couldn't be read) are plain HTML: one empty drawing beside each group (dec-note, leo-note) sets hidden on
+// them, and the pack count is stored as a dash and drawn. Original header follows.
 // Today tab actions (taking action from the OS): an item opens in place with its why, summary and the prepared draft
 // (editable); "Send on Slack via Claude" hands Claude beside the page the exact edited text and the recipient with ids,
 // and asks it to wait for William's OK; Open in Hub links to the item; Done / Snooze / Dismiss write only William's own
@@ -37,6 +39,11 @@ const find = (el, pick) => { const out = []; walk(el, (n) => { if (pick(n)) out.
 const draw = (name, tag = 'div', ds = {}) => { const el = new Node(tag); el.dataset.draw = name; Object.assign(el.dataset, ds); draws[name](el); return el; };
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const HUB = 'https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU';
+// the sentences as the stored page has them; the note drawings find them in the document and set their hidden
+const html = require('fs').readFileSync(D + 'index.html', 'utf8');
+const NOTES = [...html.matchAll(/<p class="os-empty" data-note-for="([a-z]+)" data-note="([a-z]+)" hidden>([^<]+)<\/p>/g)].map((m) => { const p = new Node('p'); p.dataset.noteFor = m[1]; p.dataset.note = m[2]; p.textContent = m[3]; p.hidden = true; return p; });
+document.querySelectorAll = (sel) => (sel === '[data-note-for]' ? NOTES : []);
+const noteShown = (name) => { draw(name + '-note', 'span'); return NOTES.filter((p) => p.dataset.noteFor === name && !p.hidden).map((p) => p.dataset.note + ': ' + p.textContent); };
 
 const DEC = { at: '2026-11-11T06:40:00Z', by: 'the decisions task', items: [
   { id: 'dec-subsidiary-segment', question: 'Should subsidiaries inherit their parent\'s Client Segment?', recommend: 'yes', severity: 'high', why: 'Stops subsidiaries landing in SMB pools.',
@@ -71,6 +78,9 @@ const LEO = { at: '2026-11-11T06:40:00Z', to: { name: 'Leonard Schreij', slackId
   const yes = label(cards[0], 'Yes'), no = label(cards[0], 'No');
   ok(yes && no && /btn-primary/.test(yes.className) && !/btn-primary/.test(no.className), 'Yes and No, the recommended one primary');
   ok(draw('dec-badge', 'span').textContent === '2', 'the Decide badge counts open decisions');
+  ok(NOTES.filter((p) => p.dataset.noteFor === 'dec').length === 3 && NOTES.filter((p) => p.dataset.noteFor === 'leo').length === 3 && !/data-draw="(dec|leo)-note"[^>]*data-note=/.test(html) && (html.match(/<span class="msg-slot" data-draw="(dec|leo)-note"><\/span>/g) || []).length === 2, 'the three sentences of each tab are plain HTML, with one empty drawing beside each group');
+  ok(noteShown('dec').length === 0 && noteShown('leo').length === 0, 'with open decisions and Leo items no sentence shows', [noteShown('dec'), noteShown('leo')]);
+  ok(/\(<b data-draw="leo-pack-n">—<\/b>\)/.test(html) && draw('leo-pack-n', 'b').textContent === '0', 'the pack count is stored as a dash and drawn: 0 with nothing ticked');
   fire(yes, 'click'); await tick(); await tick();
   ok(SENT.length === 1 && /I decided YES/.test(SENT[0].ask) && /Vicky Han \(U0VICKY123\)/.test(SENT[0].ask) === false && /#em-account-assignment \(C0CHANNEL12\), in the thread 1\.2/.test(SENT[0].ask), 'Yes hands Claude the message for the channel thread with its ids', SENT[0] && SENT[0].ask);
   ok(/My view: inherit from the parent\./.test(SENT[0].ask) && /send only after my OK/.test(SENT[0].ask) && SENT[0].decisionId === 'dec-subsidiary-segment', '... with the exact text, waiting for OK, naming the decision');
@@ -106,6 +116,7 @@ const LEO = { at: '2026-11-11T06:40:00Z', to: { name: 'Leonard Schreij', slackId
   ok(SENT.length === 4 && /Hi Leo,\n\n1\. Kapacitet: 3x spridning\./.test(SENT[3].ask) && SENT[3].kind === 'leo_pack', 'the pack goes to Leo as one Swedish message with the ticked lines', SENT[3] && SENT[3].ask);
   ok(OS.lanes.leoActed('leo-capacity') && OS.lanes.leoActed('leo-capacity').action === 'sent' && OS.lanes.packSize() === 0, 'packed items are marked sent and the pack empties');
   ok(draw('leo-badge', 'span').hidden === true, 'both handled: the badge hides');
+  ok(JSON.stringify(noteShown('leo')) === JSON.stringify(['empty: Inget till Leo just nu.']), 'both handled: "Inget till Leo just nu." shows, alone', noteShown('leo'));
   // without Claude beside the page: no send buttons, answers still saved
   room.canSendToClaudeSession = async () => 'off'; await OS.ask.refresh(); await tick();
   ul = draw('dec-list', 'ul'); cards = ul.children;
@@ -113,6 +124,13 @@ const LEO = { at: '2026-11-11T06:40:00Z', to: { name: 'Leonard Schreij', slackId
   fire(label(cards[0], 'Yes'), 'click'); await tick(); await tick();
   ok(SENT.length === before && OS.lanes.answered('dec-subsidiary-segment').answer === 'yes', 'without Claude beside the page: the answer is saved and nothing is handed on');
   ok(/open the Claude chat beside this page|Öppna Claude-chatten/i.test(draw('dec-list', 'ul').children.map((n) => n.textContent).join(' ')) || draw('dec-list', 'ul').children.length === 0, 'and the card says how to send');
+  // the sentences follow the documents: all answered or none prepared, then a document that can't be read
+  ok(OS.lanes.answered('dec-commissions') && JSON.stringify(noteShown('dec')) === JSON.stringify(['empty: Nothing to decide right now.']), 'every decision answered: "Nothing to decide right now." shows, alone', noteShown('dec'));
+  sub('hub/decisions')[0](snapOf('hub/decisions', null));
+  ok(OS.lanes.state('decisions') === 'missing' && JSON.stringify(noteShown('dec')) === JSON.stringify(['empty: Nothing to decide right now.']), 'no decisions document: the same sentence', noteShown('dec'));
+  sub('hub/decisions')[0](snapOf('hub/decisions', DEC));
+  fire(label(draw('dec-done', 'ul').children[0], 'Undo'), 'click'); await tick(); await tick();
+  ok(noteShown('dec').length === 0, 'an open decision again: the sentence hides', noteShown('dec'));
   console.log(`\n${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.log('FAIL crashed', e && e.stack); process.exit(1); });

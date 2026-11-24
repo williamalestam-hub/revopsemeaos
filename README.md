@@ -42,7 +42,7 @@ Done today), up to 8 top items (severity dot, kind, title, due date), the day's 
 status, red when it failed or is older than 8 hours) and the Hub's URL behind **Open the Hub**. The tab subscribes to that
 document once (`claude.use('db')`, like the ticks) and redraws when it changes; it makes no connector call, never asks
 Claude and writes nothing. Before the worker's first run it says "The Hub has not run yet", with the Open button as soon as
-the document carries the URL. Below the Hub block sits the greeting hero that used to open Home (what needs you, your next
+the document carries the Hub's URL (the link's address is fixed in `index.html`; it shows while `hub/today` names that same address). Below the Hub block sits the greeting hero that used to open Home (what needs you, your next
 1:1, Copy weekly summary), so Today = the Hub's summary + the OS's own severity lines; Home keeps the numbers.
 **Acting from Today**: click an item to open it in place: why it matters, the summary, and the prepared draft in an
 editable box. From there, **Send on Slack / Create Gmail draft / Create Google Doc / Create Notion page via Claude** hands
@@ -63,8 +63,10 @@ them; **Undo** puts an item back until then. `tools/harness/test36.js` covers th
   each with its numbers, the ask and a ready DM. The tab is in Swedish; each item also carries an English version (`en`) for wider
   groups: **Send in English…** and **Pack in English…** hand Claude the English text and Claude asks where to send it. Send one through Claude, or tick several and send them as one pack;
   Done and Not now are kept in `data/users/<you>/leo-acts`. `tools/harness/test37.js` covers both tabs.
-- The OS page is within about 250 bytes of the store's 256 KB limit per file (`files/index.html`): new copy goes in a
-  drawing or another file.
+- The OS page (`files/index.html`) is stored without its indentation (`build_store.py` strips each line's leading
+  whitespace in the stored copy only), which leaves about 22 KB under the store's 256 KB limit per document. The build
+  prints every document's size and fails when one is over. To compare the stored page with the repo, strip the
+  source's indentation first.
 
 **Monday performance review** goes to William's own Slack DM every Monday at 07:37 Stockholm, from the scheduled task
 *RevOps Monday performance review* (`trig_01Gy89asrmVGsPL6DqFX6RpH`, bound to its own session; instructions in
@@ -76,7 +78,7 @@ calls, Outreach Kaia recordings) until Gong is connected.
 **Chat** (in the header and on the Today pane) opens the Hub's chat panel, where Claude answers in that page and reads
 Salesforce, Calendar, Granola, Slack and Gmail as you; anything it writes for others becomes a draft in the Hub's Needs you.
 The OS's own page can't run Claude (its dashboard type has no in-page model access), so the button is a link to the Hub with
-`#chat`, shown only once `hub/today` carries a claude.ai Hub URL.
+`#chat`, shown only while `hub/today` names the Hub's own address (the one the link carries in `index.html`).
 **Instinct and Muse** sit at the top of Today, in two columns. The scheduled task *RevOps Instinct, Muse and done-check*
 (`trig_01XkowHJQs8VXTURGsuve4Bp`, bound to its own session; instructions in `hub/sense-worker.md`) runs weekdays every two
 hours from 08:07 to 16:07 Stockholm.
@@ -92,6 +94,35 @@ hours from 08:07 to 16:07 Stockholm.
   private `data/users/<you>/sense-acts`). `tools/harness/test38.js` covers the panel.
 
 `tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering that the hero still draws and the Chat links.
+
+## Cockpit
+
+The first pane of Today is a picture of the scheduled agents at work: a small pixel-art office on one canvas, where each
+agent is a robot and where it stands is its state. At its own desk: a run is under way, due, late or failed. In the queue
+at your desk, holding a slip with a number: that many things wait on you. By the coffee: nothing needs you. An empty chair:
+its document can't be read, or was never written. When a document changes while the page is open, the robots walk to their new places. Under
+the picture is one chip per agent (last run and count). A chip, or a click on its robot, opens that agent's tab or pane;
+pointing at a robot shows what it is for, its last result and its next run. It makes no connector call, asks nothing of
+Claude and writes nothing: it reads the documents Today already reads (`hub/today`, `hub/decisions`, `hub/leo`,
+`hub/instinct`, `hub/muse`), plus `hub/weekly` and the optional `hub/pulse`.
+
+- `dashboard/os-cockpit-model.js` (`OSCrew`): the agents and their schedules (`ROSTER`, Stockholm time), and the rules that
+  turn a few facts into a state and a few words. `tools/harness/test40.js`.
+- `dashboard/os-cockpit-scene.js` (`OSCockpit`): the picture, drawn from scratch with canvas calls (no images, fonts or
+  network). `node tools/harness/test41.js` checks it against its contract.
+- `dashboard/os-cockpit.js` and `os-cockpit.css`: the wiring (facts from `OS.hub`, `OS.sense`, `OS.lanes`, the chips, the
+  tooltip, a redraw every 30 seconds and whenever a document changes) and the styles. The agents' names, their role
+  sentences and the legend are in `index.html`. `tools/harness/test42.js`.
+- **Preview the scene** alone, with the made-up crews of `tools/cockpit-preview/fixtures.js`:
+  `node tools/cockpit-preview/shoot.js --out <dir> [--fx morning,trouble] [--widths 400,888,1280]` saves one PNG per
+  crew and width (frames stacked top to bottom); `tools/cockpit-preview/preview.html?fx=morning&w=888` in a browser plays
+  one live. Neither opens the dashboard or reads its data.
+- **Heartbeat (optional)**: an agent may `update` the document `hub/pulse` in the OS database when a run starts, with
+  `{ agents: { <id>: { state: 'running', startedAt: <ISO time>, finishedAt: null, step: 'Reading Slack' } } }` (ids `desk`,
+  `decide`, `instinct`, `muse`, `review`; `update` merges, so the other agents' entries stay; `set` it once if it does not
+  exist yet), change `step` (at most 24 characters) as it goes, and set `state` to `'ok'` or `'error'` with `finishedAt` when it ends. While an agent is
+  `running` and started less than 45 minutes ago, its robot types at its desk with the step in a bubble. Without the
+  document the picture follows the schedule and each document's own time.
 
 ## Screens
 

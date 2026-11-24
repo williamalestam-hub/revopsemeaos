@@ -1,6 +1,7 @@
 // The dashboard runs its scripts again, in the same window, when a file changes while the page is open. Listeners on
 // document must not stack: with two click handlers, one click ticked an action item and the second unticked it at once.
 // Loads os-core.js twice and checks that each page-wide listener is there once, and that one click toggles a tick once.
+// Also the small bus the cockpit listens on (OS.docs): on, off and changed, and a fresh one after a second run.
 const { Node } = require('./fakedom.js');
 const D = '/home/user/revopsemeaos/dashboard/';
 global.dash = { loader: () => {}, calc: () => {}, draw: () => {}, params: () => ({ region: 'All', mgr: '', person: '' }), setParams: () => {}, onData: () => {}, colors: Array(8).fill('#111'), setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
@@ -25,5 +26,23 @@ btn.closest = (sel) => (/data-done-key/.test(sel) ? btn : null); btn.matches = (
 const ev = { target: btn, preventDefault() {}, stopPropagation() {} };
 for (const [type, fn] of L) if (type === 'click') { try { fn(ev); } catch (e) { /* other handlers may need more of the page */ } }
 ok(toggles === 1, 'one click on a tick toggles it once', toggles);
+// OS.docs, the bus the cockpit listens on: a second run of the scripts makes a new one (no listener carried over), a
+// listener hears each change once until its off() is called, and one that throws does not stop the others
+{
+  let heard = 0, other = 0;
+  const off = OS.docs.on(() => { heard++; });
+  OS.docs.on(() => { throw new Error('a listener of its own'); });
+  OS.docs.on(() => { other++; });
+  OS.docs.changed(); OS.docs.changed();
+  ok(heard === 2 && other === 2, 'OS.docs: every listener hears each change once, also after one of them threw', [heard, other]);
+  off(); off(); OS.docs.changed();
+  ok(heard === 2 && other === 3, 'OS.docs: off() stops that listener only, and is safe to call twice', [heard, other]);
+  const before = OS.docs;
+  delete require.cache[require.resolve(D + 'os-core.js')];
+  require(D + 'os-core.js');
+  OS.docs.changed();
+  ok(OS.docs !== before && other === 3, 'OS.docs: a second run of the scripts starts with no listeners', other);
+  ok(L.filter((x) => x[0] === 'click').length === 2 && L.filter((x) => x[0] === 'keydown').length === 1, 'a third run still leaves two click listeners and one keydown', L.map((x) => x[0]));
+}
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

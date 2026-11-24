@@ -1093,15 +1093,23 @@ OS.oo = (() => {
   return { rowsOf, who, nextFor, nameOf, when, text, points, kind, ops, lastOf, loading, userOf };
 })();
 
+// ---------- The agents' documents changed ----------
+// A tiny bus. OS.hub, OS.sense and OS.lanes call changed() where they redraw, after one of the agents' documents or
+// William's own reactions to it changed; the cockpit (os-cockpit.js) listens and redraws. on(fn) returns its own off().
+OS.docs = (() => {
+  const fns = new Set();
+  return { on: (fn) => { fns.add(fn); return () => { fns.delete(fn); }; }, changed: () => { [...fns].forEach((fn) => { try { fn(); } catch (e) { /* a listener's own fault */ } }); } };
+})();
+
 // ---------- The Hub's summary (Today tab) ----------
 // The RevOps Hub's worker writes one small document, hub/today, into this dashboard's database: counts, the top items,
 // the brief's headline, its last run and the Hub's URL (docs/hub-spec.md §3). Read here only, with one subscription for
 // the page's life: no connector call, nothing written, nothing asked of Claude. Without a database the tab says so.
 OS.hub = (() => {
   let doc = null, state = 'loading'; // loading | nodb | missing | ok | error
-  const DRAWS = ['hub-count', 'hub-badge', 'hub-top', 'hub-brief', 'hub-run', 'hub-open', 'hub-chat', 'hub-note'];
+  const DRAWS = ['hub-count', 'hub-badge', 'hub-top', 'hub-brief', 'hub-run', 'hub-links', 'hub-note'];
   // the drawings read the state when they draw; a redraw before they are registered is skipped, not an error
-  const redraw = () => DRAWS.forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } });
+  const redraw = () => { DRAWS.forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } }); OS.docs.changed(); };
   // a document holding only the Hub's URL (seeded before the first run) still reads as "has not run yet"
   const summarised = (d) => !!d && typeof d === 'object' && (!!d.counts || !!d.lastRun || Array.isArray(d.top) || !!d.brief);
   const set = (s, d) => { state = s; doc = d && typeof d === 'object' ? d : null; redraw(); };
@@ -1169,7 +1177,7 @@ OS.hub = (() => {
 OS.sense = (() => {
   const docs = { instinct: null, muse: null }, state = { instinct: 'loading', muse: 'loading' };
   let acts = {}, ref = null, canWrite = false, writing = Promise.resolve();
-  const redraw = () => { try { dash.draw('sense'); } catch (e) { /* not registered yet */ } };
+  const redraw = () => { try { dash.draw('sense'); } catch (e) { /* not registered yet */ } OS.docs.changed(); };
   (async () => {
     try {
       const c = window.claude;
@@ -1219,6 +1227,7 @@ OS.lanes = (() => {
   const redraw = () => {
     DRAWS.forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } });
     document.querySelectorAll('[data-leo-pack]').forEach((b) => { b.disabled = !pack.size || !OS.ask.can(); });
+    OS.docs.changed();
   };
   (async () => {
     try {

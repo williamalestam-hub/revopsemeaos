@@ -327,8 +327,10 @@ const summarySources = () => {
   // ===================== U6) the local store holds the committed files =====================
   const store = D + 'store/files/';
   if (fs.existsSync(store)) {
-    const stale = fs.readdirSync(store).filter((f) => JSON.parse(fs.readFileSync(store + f, 'utf8')).text !== fs.readFileSync(D + f.replace(/\.json$/, ''), 'utf8'));
-    ok(!stale.length, 'U6: every store/files/*.json text equals its source file (rebuild with build_store.py before publishing)', stale);
+    // build_store.py stores index.html without its indentation (each line's leading whitespace), every other file as it is
+    const asStored = (name) => { const t = fs.readFileSync(D + name, 'utf8'); return name === 'index.html' ? t.split('\n').map((l) => l.replace(/^[ \t]+/, '')).join('\n') : t; };
+    const stale = fs.readdirSync(store).filter((f) => JSON.parse(fs.readFileSync(store + f, 'utf8')).text !== asStored(f.replace(/\.json$/, '')));
+    ok(!stale.length, 'U6: every store/files/*.json text equals its source file, index.html without its indentation (rebuild with build_store.py before publishing)', stale);
   } else console.log('skip U6: no local store/ (build_store.py writes it before publishing)');
 
   // ===================== U7) the trust rows say which quarters they count =====================
