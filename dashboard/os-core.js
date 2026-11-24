@@ -12,6 +12,16 @@ const onDoc = (type, name, fn) => {
   window[k] = fn;
   document.addEventListener(type, fn);
 };
+// The same goes for the database: left open, every run's subscriptions would stay, and each document would be read
+// twice after one re-run, three times after two. Each run keeps its unsubscribe functions on window and the next run
+// closes them before it opens its own. A run that has been replaced opens none (the database may answer it late).
+try { (window.__osSubs || []).forEach((off) => { try { off(); } catch (e) { /* closed already */ } }); } catch (e) { /* none yet */ }
+const SUBS = window.__osSubs = [];
+const watch = (ref, next, error) => {
+  if (window.__osSubs !== SUBS) return;
+  const off = ref.onSnapshot(next, error);
+  if (typeof off === 'function') SUBS.push(off);
+};
 
 // ---------- Calc inputs ----------
 // Kept so state() can tell a calc that failed because a connector isn't connected (show "Connect …") from a real error.
@@ -876,7 +886,7 @@ OS.done = (() => {
       // can('data.write') (shared documents) is not the signal: write, and a refusal turns ticks off for the visit
       ref = db.doc('data/users/' + uid + '/os-done');
       can = true;
-      ref.onSnapshot((snap) => {
+      watch(ref, (snap) => {
         stored.clear();
         const d = snap && snap.exists ? snap.data() : null;
         exists = !!(snap && snap.exists);
@@ -1107,6 +1117,8 @@ OS.docs = (() => {
 // the page's life: no connector call, nothing written, nothing asked of Claude. Without a database the tab says so.
 OS.hub = (() => {
   let doc = null, state = 'loading'; // loading | nodb | missing | ok | error
+  // William's own actions have answered once, or never will (no database, no user): until then a count may still drop
+  let answered = false;
   const DRAWS = ['hub-count', 'hub-badge', 'hub-top', 'hub-brief', 'hub-run', 'hub-links', 'hub-note'];
   // the drawings read the state when they draw; a redraw before they are registered is skipped, not an error
   const redraw = () => { DRAWS.forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } }); OS.docs.changed(); };
@@ -1116,10 +1128,10 @@ OS.hub = (() => {
   (async () => {
     try {
       const c = window.claude;
-      if (!c || typeof c.use !== 'function') { state = 'nodb'; return; }
+      if (!c || typeof c.use !== 'function') { state = 'nodb'; answered = true; return; }
       const db = await c.use('db');
-      if (!db) { set('nodb', null); return; }
-      db.doc('hub/today').onSnapshot((snap) => {
+      if (!db) { answered = true; set('nodb', null); return; }
+      watch(db.doc('hub/today'), (snap) => {
         const d = snap && snap.exists ? snap.data() : null;
         set(summarised(d) ? 'ok' : 'missing', d);
       }, () => set('error', null));
@@ -1129,13 +1141,13 @@ OS.hub = (() => {
       const uid = user ? await user.id() : null;
       if (uid) {
         actRef = db.doc('data/users/' + uid + '/hub-actions');
-        actRef.onSnapshot((snap) => {
+        watch(actRef, (snap) => {
           const d = snap && snap.exists ? snap.data() : null;
           acts = d && d.actions && typeof d.actions === 'object' ? { ...d.actions } : {};
-          canAct = true; redraw();
-        }, () => { canAct = false; redraw(); });
-      }
-    } catch (e) { if (state === 'loading') set('nodb', null); }
+          canAct = true; answered = true; redraw();
+        }, () => { canAct = false; answered = true; redraw(); });
+      } else { answered = true; redraw(); }
+    } catch (e) { answered = true; if (state === 'loading') set('nodb', null); else redraw(); }
   })();
   let actRef = null, acts = {}, canAct = false, actWriting = Promise.resolve();
   // one write at a time; the whole small document each time (only William writes it, the worker clears applied entries)
@@ -1161,12 +1173,9 @@ OS.hub = (() => {
     if (key(d) === key(new Date(now.getTime() - 864e5))) return 'yesterday ' + hm;
     return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + hm;
   };
-  // the worker runs twice a day, so a last run older than 8 hours (or with no readable time) means it has missed one
-  const STALE_MS = 8 * 36e5;
-  const stale = (iso) => { const t = Date.parse(iso || ''); return !Number.isFinite(t) || Date.now() - t > STALE_MS; };
   const counts = () => (doc && doc.counts && typeof doc.counts === 'object' ? doc.counts : null);
   const top12 = () => (doc && Array.isArray(doc.top) ? doc.top.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 12) : []);
-  return { state: () => state, doc: () => doc, counts, top: top12, when, stale, DRAWS, act, acted: (id) => acts[id] || null, acts: () => acts, canAct: () => canAct };
+  return { state: () => state, doc: () => doc, counts, top: top12, when, DRAWS, act, acted: (id) => acts[id] || null, acts: () => acts, canAct: () => canAct, ready: () => answered };
 })();
 
 // ---------- Instinct and Muse (top of Today) ----------
@@ -1177,15 +1186,16 @@ OS.hub = (() => {
 OS.sense = (() => {
   const docs = { instinct: null, muse: null }, state = { instinct: 'loading', muse: 'loading' };
   let acts = {}, ref = null, canWrite = false, writing = Promise.resolve();
+  let answered = false; // William's reactions have answered once, or never will (no database, no user)
   const redraw = () => { try { dash.draw('sense'); } catch (e) { /* not registered yet */ } OS.docs.changed(); };
   (async () => {
     try {
       const c = window.claude;
-      if (!c || typeof c.use !== 'function') { state.instinct = state.muse = 'nodb'; return; }
+      if (!c || typeof c.use !== 'function') { state.instinct = state.muse = 'nodb'; answered = true; return; }
       const db = await c.use('db');
-      if (!db) { state.instinct = state.muse = 'nodb'; redraw(); return; }
+      if (!db) { state.instinct = state.muse = 'nodb'; answered = true; redraw(); return; }
       for (const k of ['instinct', 'muse']) {
-        db.doc('hub/' + k).onSnapshot((snap) => {
+        watch(db.doc('hub/' + k), (snap) => {
           const d = snap && snap.exists ? snap.data() : null;
           docs[k] = d && typeof d === 'object' && Array.isArray(d.items) ? d : null;
           state[k] = docs[k] ? 'ok' : 'missing'; redraw();
@@ -1193,14 +1203,14 @@ OS.sense = (() => {
       }
       const user = await c.use('user');
       const uid = user ? await user.id() : null;
-      if (!uid) return;
+      if (!uid) { answered = true; redraw(); return; }
       ref = db.doc('data/users/' + uid + '/sense-acts');
-      ref.onSnapshot((snap) => {
+      watch(ref, (snap) => {
         const d = snap && snap.exists ? snap.data() : null;
         acts = d && d.acts && typeof d.acts === 'object' ? { ...d.acts } : {};
-        canWrite = true; redraw();
-      }, () => { canWrite = false; redraw(); });
-    } catch (e) { state.instinct = state.muse = 'nodb'; redraw(); }
+        canWrite = true; answered = true; redraw();
+      }, () => { canWrite = false; answered = true; redraw(); });
+    } catch (e) { state.instinct = state.muse = 'nodb'; answered = true; redraw(); }
   })();
   const act = (id, a) => {
     if (!ref || !canWrite || !id) return;
@@ -1210,7 +1220,7 @@ OS.sense = (() => {
     writing = writing.then(() => ref.set({ acts: next, updatedAt: new Date().toISOString() })).catch(() => { canWrite = false; redraw(); });
   };
   const items = (k) => (docs[k] ? docs[k].items.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 12) : []);
-  return { state: (k) => state[k], doc: (k) => docs[k], items, act, acted: (id) => acts[id] || null, canWrite: () => canWrite, redraw };
+  return { state: (k) => state[k], doc: (k) => docs[k], items, act, acted: (id) => acts[id] || null, canWrite: () => canWrite, ready: () => answered, redraw };
 })();
 
 // ---------- Decide and For Leo ----------
@@ -1222,6 +1232,8 @@ OS.sense = (() => {
 OS.lanes = (() => {
   const docs = { decisions: null, leo: null }, state = { decisions: 'loading', leo: 'loading' };
   let answers = {}, leoActs = {}, canWrite = false, writing = Promise.resolve();
+  // William's answers and his Leo actions have each answered once, or never will (no database, no user)
+  const known = { answers: false, leo: false };
   const refs = {}, pack = new Set();
   const DRAWS = ['dec-list', 'dec-done', 'dec-badge', 'dec-note', 'dec-at', 'leo-list', 'leo-badge', 'leo-note', 'leo-at', 'leo-pack-n'];
   const redraw = () => {
@@ -1232,11 +1244,11 @@ OS.lanes = (() => {
   (async () => {
     try {
       const c = window.claude;
-      if (!c || typeof c.use !== 'function') { state.decisions = state.leo = 'nodb'; return; }
+      if (!c || typeof c.use !== 'function') { state.decisions = state.leo = 'nodb'; known.answers = known.leo = true; return; }
       const db = await c.use('db');
-      if (!db) { state.decisions = state.leo = 'nodb'; redraw(); return; }
+      if (!db) { state.decisions = state.leo = 'nodb'; known.answers = known.leo = true; redraw(); return; }
       for (const k of ['decisions', 'leo']) {
-        db.doc('hub/' + k).onSnapshot((snap) => {
+        watch(db.doc('hub/' + k), (snap) => {
           const d = snap && snap.exists ? snap.data() : null;
           docs[k] = d && typeof d === 'object' && Array.isArray(d.items) ? d : null;
           state[k] = docs[k] ? 'ok' : 'missing'; redraw();
@@ -1244,20 +1256,20 @@ OS.lanes = (() => {
       }
       const user = await c.use('user');
       const uid = user ? await user.id() : null;
-      if (!uid) return;
+      if (!uid) { known.answers = known.leo = true; redraw(); return; }
       refs.answers = db.doc('data/users/' + uid + '/decisions');
       refs.leo = db.doc('data/users/' + uid + '/leo-acts');
-      refs.answers.onSnapshot((snap) => {
+      watch(refs.answers, (snap) => {
         const d = snap && snap.exists ? snap.data() : null;
         answers = d && d.answers && typeof d.answers === 'object' ? { ...d.answers } : {};
-        canWrite = true; redraw();
-      }, () => { canWrite = false; redraw(); });
-      refs.leo.onSnapshot((snap) => {
+        canWrite = true; known.answers = true; redraw();
+      }, () => { canWrite = false; known.answers = true; redraw(); });
+      watch(refs.leo, (snap) => {
         const d = snap && snap.exists ? snap.data() : null;
         leoActs = d && d.acts && typeof d.acts === 'object' ? { ...d.acts } : {};
-        redraw();
-      }, () => {});
-    } catch (e) { state.decisions = state.leo = 'nodb'; redraw(); }
+        known.leo = true; redraw();
+      }, () => { known.leo = true; redraw(); });
+    } catch (e) { state.decisions = state.leo = 'nodb'; known.answers = known.leo = true; redraw(); }
   })();
   // one write at a time; the whole small document each time (only William writes it; the task clears what it applied)
   const save = (ref, key, map) => { writing = writing.then(() => ref.set({ [key]: map, updatedAt: new Date().toISOString() })).catch(() => { canWrite = false; redraw(); }); };
@@ -1301,7 +1313,7 @@ OS.lanes = (() => {
   };
   onDoc('click', 'leoPack', (e) => { const b = e.target && e.target.closest ? e.target.closest('[data-leo-pack]') : null; if (b && !b.disabled) sendPack(b.dataset.leoPack === 'en' ? 'en' : 'sv'); });
   return { state: (k) => state[k], doc: (k) => docs[k], items, answer, answered: (id) => answers[id] || null, leoAct, leoActed: (id) => leoActs[id] || null,
-    canWrite: () => canWrite, inPack: (id) => pack.has(id), togglePack: (id) => { if (pack.has(id)) pack.delete(id); else pack.add(id); redraw(); }, packSize: () => pack.size, packText, sendPack, leoTo, enOf, redraw };
+    canWrite: () => canWrite, ready: () => known.answers && known.leo, inPack: (id) => pack.has(id), togglePack: (id) => { if (pack.has(id)) pack.delete(id); else pack.add(id); redraw(); }, packSize: () => pack.size, packText, sendPack, leoTo, enOf, redraw };
 })();
 
 // ---------- App shell ----------

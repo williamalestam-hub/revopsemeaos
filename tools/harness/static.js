@@ -1,5 +1,5 @@
 const fs=require("fs"); process.chdir('/home/user/revopsemeaos/dashboard');
-const html=fs.readFileSync("index.html","utf8"); const js=["os-core.js","os-calcs.js","os-calcs-leads.js","os-calcs-act.js","os-calcs-conv.js","os-draw.js"].map(f=>fs.readFileSync(f,"utf8")).join("\n");
+const html=fs.readFileSync("index.html","utf8"); const js=["os-core.js","os-calcs.js","os-calcs-leads.js","os-calcs-act.js","os-calcs-conv.js","os-draw.js","os-cockpit-model.js","os-cockpit-scene.js","os-cockpit.js"].map(f=>fs.readFileSync(f,"utf8")).join("\n");
 const draws=new Set([...html.matchAll(/data-draw="([^"]+)"/g)].map(m=>m[1]));
 const regA=[...js.matchAll(/(?:dash\.draw|OS\.defTable|OS\.defList|OS\.defChart)\(\s*["\x27]([^"\x27]+)["\x27]\s*,/g)].map(m=>m[1]); const reg=new Set(regA);
 console.log("draw w/o handler:", [...draws].filter(d=>!reg.has(d)), "handler w/o html:", [...reg].filter(d=>!draws.has(d)));
@@ -23,4 +23,4 @@ for (const m of js.matchAll(/view: \x27([a-z]+)\x27/g)) if (!views.some(v=>v.end
 const ids=[...html.matchAll(/ id="([^"]+)"/g)].map(m=>m[1]); console.log("duplicate ids:", [...new Set(ids.filter((x,i)=>ids.indexOf(x)!==i))]);
 const d=fs.readFileSync("os-draw.js","utf8"); let bad=0,n=0;
 for (const m of html.matchAll(/<table[^>]*data-row-key="([^"]+)"[^>]*>([\s\S]*?)<tbody data-draw="([^"]+)"/g)) { const ths=[...m[2].matchAll(/<th[^>]*data-field="([^"]+)"/g)].map(x=>x[1]); const i=d.indexOf("defTable(\x27"+m[3]+"\x27"); const seg=d.slice(i, d.indexOf("], {", i)); const cols=[...seg.matchAll(/\{ f: \x27([A-Za-z0-9_]+)\x27/g)].map(x=>x[1]); n++; if (ths.join()!==cols.join()) { bad++; console.log("MISMATCH", m[3], ths.join(), "|", cols.join()); } } console.log(n, "tables,", bad, "mismatches");
-const sizes={}; for (const f of ["index.html","os-core.js","os-calcs.js","os-calcs-leads.js","os-calcs-act.js","os-calcs-conv.js","os-draw.js","os.css"]) sizes[f]=fs.statSync(f).size; console.log('sizes', JSON.stringify(sizes));
+const sizes={}; for (const f of ["index.html","os-core.js","os-calcs.js","os-calcs-leads.js","os-calcs-act.js","os-calcs-conv.js","os-draw.js","os-cockpit-model.js","os-cockpit-scene.js","os-cockpit.js","os.css","os-cockpit.css"]) sizes[f]=fs.statSync(f).size; console.log('sizes', JSON.stringify(sizes));

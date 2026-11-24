@@ -39,7 +39,8 @@ The first tab, **Today**, is the front door the OS shares with the **RevOps Hub*
 own artifact at https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU (the contract is `docs/hub-spec.md`, the page is `hub/`). The Hub's intake worker writes one small document, `hub/today`, into
 this dashboard's database on each run (weekdays 07:13 and 13:13 Stockholm): four counts (Needs you, Critical, Prepared,
 Done today), up to 8 top items (severity dot, kind, title, due date), the day's brief headline, its last run (time and
-status, red when it failed or is older than 8 hours) and the Hub's URL behind **Open the Hub**. The tab subscribes to that
+status: red when it failed, amber when it was partial or when the worker's schedule says a run has left no result, as
+the Desk chip in the cockpit says too) and the Hub's URL behind **Open the Hub**. The tab subscribes to that
 document once (`claude.use('db')`, like the ticks) and redraws when it changes; it makes no connector call, never asks
 Claude and writes nothing. Before the worker's first run it says "The Hub has not run yet", with the Open button as soon as
 the document carries the Hub's URL (the link's address is fixed in `index.html`; it shows while `hub/today` names that same address). Below the Hub block sits the greeting hero that used to open Home (what needs you, your next
@@ -75,10 +76,11 @@ reply each for Hiring, Ramp, Productivity, PG, Stage progression, Call quality a
 first-line manager. A copy is kept in `hub/weekly` in this dashboard's database. Call quality is coverage only (logged
 calls, Outreach Kaia recordings) until Gong is connected.
 
-**Chat** (in the header and on the Today pane) opens the Hub's chat panel, where Claude answers in that page and reads
+**Chat**, beside **Open the Hub** at the top of the Hub pane on Today, opens the Hub's chat panel, where Claude answers in that page and reads
 Salesforce, Calendar, Granola, Slack and Gmail as you; anything it writes for others becomes a draft in the Hub's Needs you.
 The OS's own page can't run Claude (its dashboard type has no in-page model access), so the button is a link to the Hub with
-`#chat`, shown only while `hub/today` names the Hub's own address (the one the link carries in `index.html`).
+`#chat`. Both links carry the Hub's address in `index.html` and show only while `hub/today` names that same address
+(compared without `?…`, `#…` and a trailing slash).
 **Instinct and Muse** sit at the top of Today, in two columns. The scheduled task *RevOps Instinct, Muse and done-check*
 (`trig_01XkowHJQs8VXTURGsuve4Bp`, bound to its own session; instructions in `hub/sense-worker.md`) runs weekdays every two
 hours from 08:07 to 16:07 Stockholm.
@@ -98,13 +100,21 @@ hours from 08:07 to 16:07 Stockholm.
 ## Cockpit
 
 The first pane of Today is a picture of the scheduled agents at work: a small pixel-art office on one canvas, where each
-agent is a robot and where it stands is its state. At its own desk: a run is under way, due, late or failed. In the queue
-at your desk, holding a slip with a number: that many things wait on you. By the coffee: nothing needs you. An empty chair:
-its document can't be read, or was never written. When a document changes while the page is open, the robots walk to their new places. Under
-the picture is one chip per agent (last run and count). A chip, or a click on its robot, opens that agent's tab or pane;
-pointing at a robot shows what it is for, its last result and its next run. It makes no connector call, asks nothing of
-Claude and writes nothing: it reads the documents Today already reads (`hub/today`, `hub/decisions`, `hub/leo`,
-`hub/instinct`, `hub/muse`), plus `hub/weekly` and the optional `hub/pulse`.
+agent is a robot and where it stands is its state. At its own desk: a run is under way or due; an amber lamp means the
+run has left no result yet, a red one that it failed. In the queue at your desk, holding a slip with a number: that many
+things wait on you. By the coffee: nothing needs you. An empty chair: no data (its document can't be read, or was never
+written). When a document changes while the page is open, the robots walk to their new places. The room stays empty for
+a moment after the page opens, until every document and your own reactions to it have answered (2.5 seconds at most),
+so that no robot sets off with a count that is about to drop.
+
+Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
+chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide
+its tab, or For Leo when nothing is left to decide and something is there for Leo. Review's chip opens nothing: it only
+shows its tooltip. Pointing at a robot or a chip, or tabbing to a chip, shows the tooltip: what the agent is for, what
+it is doing, its last result and its next run. The picture itself is hidden from screen readers; the chips and the
+tooltip say all of it. The cockpit makes no connector call, asks nothing of Claude and writes nothing: it reads the
+documents Today already reads (`hub/today`, `hub/decisions`, `hub/leo`, `hub/instinct`, `hub/muse`), plus `hub/weekly`
+and the optional `hub/pulse`.
 
 - `dashboard/os-cockpit-model.js` (`OSCrew`): the agents and their schedules (`ROSTER`, Stockholm time), and the rules that
   turn a few facts into a state and a few words. `tools/harness/test40.js`.
@@ -118,11 +128,13 @@ Claude and writes nothing: it reads the documents Today already reads (`hub/toda
   crew and width (frames stacked top to bottom); `tools/cockpit-preview/preview.html?fx=morning&w=888` in a browser plays
   one live. Neither opens the dashboard or reads its data.
 - **Heartbeat (optional)**: an agent may `update` the document `hub/pulse` in the OS database when a run starts, with
-  `{ agents: { <id>: { state: 'running', startedAt: <ISO time>, finishedAt: null, step: 'Reading Slack' } } }` (ids `desk`,
+  `{ agents: { <id>: { state: 'running', startedAt: <time>, finishedAt: null, step: 'Reading Slack' } } }` (ids `desk`,
   `decide`, `instinct`, `muse`, `review`; `update` merges, so the other agents' entries stay; `set` it once if it does not
-  exist yet), change `step` (at most 24 characters) as it goes, and set `state` to `'ok'` or `'error'` with `finishedAt` when it ends. While an agent is
-  `running` and started less than 45 minutes ago, its robot types at its desk with the step in a bubble. Without the
-  document the picture follows the schedule and each document's own time.
+  exist yet), change `step` (at most 24 characters) as it goes, and set `state` to `'ok'` or `'error'` with `finishedAt`
+  when it ends. Times are UTC, written as `date -u +%Y-%m-%dT%H:%M:%SZ` gives them (`2026-11-24T12:13:05Z`): a time
+  without its zone is not read. While an agent is `running` and started less than 45 minutes ago, its robot types at its
+  desk with the step in a bubble. Without the document the picture follows the schedule and each document's own time.
+- `hub/weekly` with `slack: null` (the Monday post failed) shows Review as failed, not as posted.
 
 ## Screens
 

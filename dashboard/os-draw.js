@@ -1200,28 +1200,33 @@ dash.draw('hub-brief', (el) => {
   el.textContent = h;
   el.hidden = !h;
 });
-// the worker's last run: red when it failed or is older than 8 hours; amber for anything else that is not ok (partial, a run
-// still marked running, an unknown word), so a stuck run never looks healthy
+// The worker's last run: red when it failed; amber for anything else that is not ok (partial, a run still marked
+// running, an unknown word), so a stuck run never looks healthy. Whether a run is missing is the schedule's to say, not
+// the clock's (a result from 13:13 is not old at midnight or on a Sunday): the cockpit's model knows the schedule, and
+// when its latest run has brought no result this line says which, in amber, as the Desk chip above does.
 dash.draw('hub-run', (el) => {
   const d = OS.hub.doc();
   const run = d && d.lastRun && typeof d.lastRun === 'object' ? d.lastRun : null;
   const status = run && typeof run.status === 'string' ? run.status : '';
   const at = run ? OS.hub.when(run.at) : '';
-  const old = !!run && OS.hub.stale(run.at);
-  const bad = !!run && (status === 'failed' || old);
+  const crew = window.OSCrew, now = Date.now();
+  let missed = null;
+  try { missed = run && crew && typeof crew.overdue === 'function' ? crew.overdue('desk', run.at, now) : null; } catch (e) { missed = null; }
+  const none = typeof missed === 'number' && Number.isFinite(missed) && typeof crew.when === 'function' ? ' · no result from the ' + crew.when(missed, now, true) + ' run' : '';
+  const bad = !!run && status === 'failed';
   el.textContent = OS.hub.state() === 'loading' ? '' : !run ? 'Worker: has not run yet'
-    : 'Worker: last run ' + (at || 'at an unknown time') + ' · ' + (status || 'unknown') + (old && at ? ' · over 8 hours ago' : '');
+    : 'Worker: last run ' + (at || 'at an unknown time') + ' · ' + (status || 'unknown') + none;
   el.classList.toggle('os-bad', bad);
-  el.classList.toggle('os-warn', !bad && !!run && status !== 'ok');
+  el.classList.toggle('os-warn', !bad && !!run && (status !== 'ok' || !!none));
 });
 // Open the Hub and Chat are plain links in the HTML ([data-hub-link]) with the Hub's address fixed there; Chat's ends in
 // #chat, which opens the Hub's chat panel on arrival (this page's type has no in-page model access, so the Hub answers in
 // its own page). This empty drawing only shows or hides them: a link shows while hub/today names that same address, so
-// an address from the document is compared, never followed.
+// an address from the document is compared, never followed. The two are compared without ?…, #… and a trailing slash.
+const hubAddress = (u) => (typeof u === 'string' ? u.split('#')[0].split('?')[0].replace(/\/$/, '') : '');
 dash.draw('hub-links', () => {
-  const d = OS.hub.doc();
-  const url = d && typeof d.hubUrl === 'string' ? d.hubUrl : '';
-  document.querySelectorAll('[data-hub-link]').forEach((a) => { a.hidden = !url || String(a.getAttribute('href') || '').split('#')[0] !== url; });
+  const d = OS.hub.doc(), url = hubAddress(d && d.hubUrl);
+  document.querySelectorAll('[data-hub-link]').forEach((a) => { a.hidden = !url || hubAddress(a.getAttribute('href')) !== url; });
 });
 // The fixed sentences of a list (nothing yet, no database here, couldn't be read) are in the HTML, [data-note-for]. An
 // empty drawing beside each group shows the one that applies (k) and hides the rest.

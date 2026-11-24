@@ -1,6 +1,7 @@
 // Today tab (RevOps Hub v1, docs/hub-spec.md §6 and §7): Today is the first tab and the default screen; the page subscribes
 // once to hub/today and draws the four counts, the top items (severity dot, kind, title, due), the brief headline, the
-// worker's last run (red when failed or older than 8 hours) and Open the Hub (hidden without a URL); the empty state when the
+// worker's last run (red when it failed, amber when it is not ok or when the schedule says a run left no result; no age
+// rule) and Open the Hub (hidden without a URL); the empty state when the
 // document is missing; a document that can't be read; no database at all (a child run); and the hero that moved under the
 // Hub block still draws. Synthetic data only, on a fake database; prints labels and counts.
 // The fixed sentences and the two kinds of Hub link (Open the Hub, Chat) are stored in the HTML, not drawn: one empty
@@ -45,7 +46,7 @@ const draw = (name, tag = 'div', ds = {}) => { const el = new Node(tag); el.data
 const count = (field) => draw('hub-count', 'b', { field });
 // the Hub's three sentences after its one drawing ran: which of them show
 const notes = () => { draw('hub-note', 'span'); const shown = (k) => PAGE['[data-note-for]'].some((p) => p.dataset.noteFor === 'hub' && p.dataset.note === k && !p.hidden); return { empty: shown('empty'), nodb: shown('nodb'), error: shown('error') }; };
-// the Hub links after their one drawing ran: Open the Hub, and the two Chat links (header and Today pane)
+// the Hub links after their one drawing ran: Open the Hub and Chat, both in the Hub pane
 const links = () => { draw('hub-links', 'span'); const all = PAGE['[data-hub-link]']; return { open: all.filter((a) => !/#chat$/.test(a.getAttribute('href'))), chat: all.filter((a) => /#chat$/.test(a.getAttribute('href'))) }; };
 const openLink = () => links().open[0];
 const chatShown = () => links().chat.map((a) => !a.hidden);
@@ -94,7 +95,7 @@ const home = html.slice(html.indexOf('data-page="home"'), html.indexOf('data-pag
   ok(/<div class="msgs"><span class="msg-slot" data-draw="hub-note"><\/span>\s*<p class="os-empty" data-note-for="hub"/.test(today) && (today.match(/data-draw="hub-note"/g) || []).length === 1 && PAGE['[data-note-for]'].filter((p) => p.dataset.noteFor === 'hub').length === 3, 'the three Hub sentences are plain HTML; one empty drawing beside them picks which shows');
   ok(/<a class="btn btn-primary" data-hub-link href="https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+" target="_blank" rel="noopener" hidden>Open the Hub</.test(today) && (today.match(/>Open the Hub</g) || []).length === 1, 'one Open the Hub link with the Hub\'s address fixed in the HTML, a new tab, hidden until hub/today names that Hub');
   ok(!/data-draw="hub-(open|chat)"/.test(html) && (html.match(/data-draw="hub-links"/g) || []).length === 1 && /<span class="msg-slot" data-draw="hub-links"><\/span>/.test(html.slice(0, html.indexOf('<nav class="app-tabs"'))), 'the links are not drawings: one empty drawing in the header (never under a hidden tab) shows or hides them');
-  ok(/^https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+$/.test(HUB_URL) && PAGE['[data-hub-link]'].length === 3 && PAGE['[data-hub-link]'].every((a) => a.getAttribute('href').split('#')[0] === HUB_URL), 'the three Hub links carry one claude.ai address', PAGE['[data-hub-link]'].map((a) => a.getAttribute('href')));
+  ok(/^https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+$/.test(HUB_URL) && PAGE['[data-hub-link]'].length === 2 && PAGE['[data-hub-link]'].every((a) => a.getAttribute('href').split('#')[0] === HUB_URL), 'the two Hub links carry one claude.ai address', PAGE['[data-hub-link]'].map((a) => a.getAttribute('href')));
   ok(/<ul class="ilist" data-draw="hub-top"><\/ul>/.test(today) && /data-draw="hub-brief" hidden/.test(today) && /data-draw="hub-run"/.test(today), 'the top items list, the brief headline and the last run have their slots');
   ok(/data-draw="hub-badge" hidden/.test(html.slice(0, html.indexOf('data-page="today"'))), 'the Today tab carries a badge slot');
   ok(!/data-draw="hub-[a-z]+"[^>]*data-source=/.test(today), 'no Hub element names a dataset: the Hub block reads the database only');
@@ -119,7 +120,7 @@ const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'missing: tiles show —', counts());
   ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 0, 'missing: no items');
   ok(openLink().hidden === true && openLink().getAttribute('href') === HUB_URL, 'missing: Open the Hub hidden (no URL known); its fixed href is left alone');
-  ok(JSON.stringify(chatShown()) === '[false,false]', 'missing: Chat hidden (no URL known)', chatShown());
+  ok(JSON.stringify(chatShown()) === '[false]', 'missing: Chat hidden (no URL known)', chatShown());
   const run = draw('hub-run', 'p');
   ok(run.textContent === 'Worker: has not run yet' && !run.classList.contains('os-bad'), 'missing: the run line says the worker has not run yet', run.textContent);
   ok(draw('hub-brief', 'p').hidden === true && draw('hub-badge', 'span').hidden === true, 'missing: no headline, no badge');
@@ -129,9 +130,9 @@ const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
   const a = openLink();
   ok(a.hidden === false && a.getAttribute('href') === HUB_URL, 'a document with only hubUrl: Open the Hub shows with that href', [a.hidden, a.getAttribute('href')]);
   const ch = links().chat;
-  ok(ch.length === 2 && ch.every((c) => c.hidden === false && c.getAttribute('href') === HUB_URL + '#chat'), 'a document with only hubUrl: both Chat links show and lead to the Hub with #chat', ch.map((c) => [c.hidden, c.getAttribute('href')]));
+  ok(ch.length === 1 && ch.every((c) => c.hidden === false && c.getAttribute('href') === HUB_URL + '#chat'), 'a document with only hubUrl: Chat shows and leads to the Hub with #chat', ch.map((c) => [c.hidden, c.getAttribute('href')]));
   push({ hubUrl: OTHER_HUB });
-  ok(openLink().hidden === true && JSON.stringify(chatShown()) === '[false,false]' && openLink().getAttribute('href') === HUB_URL, 'a document naming another Hub address: the links stay hidden and keep their own href', [openLink().hidden, chatShown()]);
+  ok(openLink().hidden === true && JSON.stringify(chatShown()) === '[false]' && openLink().getAttribute('href') === HUB_URL, 'a document naming another Hub address: the links stay hidden and keep their own href', [openLink().hidden, chatShown()]);
 }
 
 // ---- 5. a full document: counts, items, headline, Open button, failed run in red ----
@@ -177,25 +178,26 @@ const DOC = {
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: false }), 'ok: no sentence shows', notes());
 }
 
-// ---- 6. worker health colouring: ok and fresh, ok but old, partial, no time ----
+// ---- 6. the worker's last run: red when it failed, amber when it is not ok; age alone says nothing ----
 {
   const runWith = (lastRun) => { push({ ...DOC, lastRun }); const el = draw('hub-run', 'p'); return [el.classList.contains('os-bad'), el.classList.contains('os-warn'), el.textContent]; };
+  // without the cockpit's model (another script, loaded after this one) the line is the run's time and status
   let r = runWith({ at: iso(NOW - 60 * 60e3), status: 'ok' });
   ok(r[0] === false && r[1] === false && r[2] === 'Worker: last run 09:00 · ok', 'ok an hour ago: plain', r);
   r = runWith({ at: iso(NOW - 9 * 36e5), status: 'ok' });
-  ok(r[0] === true && r[2] === 'Worker: last run 01:00 · ok · over 8 hours ago', 'ok but 9 hours ago: red, says over 8 hours ago', r);
-  r = runWith({ at: iso(NOW - 8 * 36e5 + 60e3), status: 'ok' });
-  ok(r[0] === false, 'ok 7 h 59 min ago: not yet red', r);
+  ok(r[0] === false && r[1] === false && r[2] === 'Worker: last run 01:00 · ok', 'ok but 9 hours ago: plain too (an evening, a night or a weekend is no fault; there is no "over 8 hours ago")', r);
   r = runWith({ at: iso(NOW - 26 * 36e5), status: 'ok' });
-  ok(r[0] === true && /^Worker: last run yesterday 08:00 · ok · over 8 hours ago$/.test(r[2]), 'yesterday: the time says so', r);
+  ok(r[0] === false && r[1] === false && r[2] === 'Worker: last run yesterday 08:00 · ok', 'yesterday: the time says so', r);
   r = runWith({ at: iso(NOW - 4 * 864e5), status: 'ok' });
-  ok(r[0] === true && /^Worker: last run Sun 1 Nov, 10:00 · ok · over 8 hours ago$/.test(r[2]), 'days ago: day and time', r);
+  ok(r[0] === false && r[1] === false && r[2] === 'Worker: last run Sun 1 Nov, 10:00 · ok', 'days ago: day and time', r);
+  r = runWith({ at: iso(NOW - 60 * 60e3), status: 'failed' });
+  ok(r[0] === true && r[1] === false && r[2] === 'Worker: last run 09:00 · failed', 'failed: red', r);
   r = runWith({ at: iso(NOW - 60 * 60e3), status: 'partial' });
   ok(r[0] === false && r[1] === true && /· partial$/.test(r[2]), 'partial an hour ago: amber, not red', r);
   r = runWith({ at: iso(NOW - 9 * 36e5), status: 'partial' });
-  ok(r[0] === true && r[1] === false, 'partial 9 hours ago: red wins', r);
+  ok(r[0] === false && r[1] === true, 'partial 9 hours ago: still amber', r);
   r = runWith({ status: 'ok' });
-  ok(r[0] === true && r[2] === 'Worker: last run at an unknown time · ok', 'no time on the run: red, says the time is unknown', r);
+  ok(r[0] === false && r[2] === 'Worker: last run at an unknown time · ok', 'no time on the run: says the time is unknown', r);
   r = runWith({ at: iso(NOW - 60 * 60e3) });
   ok(r[0] === false && r[1] === true && /· unknown$/.test(r[2]), 'no status on the run: says unknown, amber (not healthy)', r);
   r = runWith({ at: iso(NOW - 10 * 60e3), status: 'running' });
@@ -205,6 +207,37 @@ const DOC = {
   r = runWith(null);
   ok(r[0] === false && r[2] === 'Worker: has not run yet', 'counts but no run yet: has not run yet', r);
   ok(OS.hub.state() === 'ok', '... and the counts still draw (state ok)', OS.hub.state());
+  ok(typeof OS.hub.stale === 'undefined' && !/STALE_MS|8 \* 36e5|over 8 hours/.test(core + fs.readFileSync(D + 'os-draw.js', 'utf8')), 'the 8-hour age rule is gone from the page\'s code');
+
+  // with the cockpit's model there (window.OSCrew.overdue): whether a run is missing is the schedule's to say
+  const asked = []; let missed = null;
+  global.OSCrew = { overdue: (id, at, now) => { asked.push([id, at, now]); if (missed === 'throw') throw new Error('no schedule'); return missed; }, when: (ms, now, brief) => (brief === true && now === NOW ? new Date(ms).toISOString().slice(11, 16) : 'wrong arguments') };
+  const AT = iso(NOW - 26 * 36e5);
+  r = runWith({ at: AT, status: 'ok' });
+  ok(r[0] === false && r[1] === false && r[2] === 'Worker: last run yesterday 08:00 · ok' && JSON.stringify(asked) === JSON.stringify([['desk', AT, NOW]]), 'the schedule is asked about Desk, with the run\'s time and the clock; nothing overdue: plain', [r, asked]);
+  missed = Date.parse('2026-11-05T06:13:00Z');
+  r = runWith({ at: AT, status: 'ok' });
+  ok(r[0] === false && r[1] === true && r[2] === 'Worker: last run yesterday 08:00 · ok · no result from the 06:13 run', 'a scheduled run left no result: the line names it (in the model\'s short words), in amber', r);
+  r = runWith({ at: AT, status: 'failed' });
+  ok(r[0] === true && r[1] === false && r[2] === 'Worker: last run yesterday 08:00 · failed · no result from the 06:13 run', 'failed stays red, whatever else', r);
+  r = runWith({ at: AT, status: 'partial' });
+  ok(r[0] === false && r[1] === true && / · partial · no result from the 06:13 run$/.test(r[2]), 'not ok and overdue: amber', r);
+  asked.length = 0; r = runWith(null);
+  ok(asked.length === 0 && r[2] === 'Worker: has not run yet' && r[1] === false, 'no run at all: the schedule is not asked', [asked, r]);
+  const wrong = ['throw', 'soon', NaN, Infinity, {}, true].filter((odd) => { missed = odd; r = runWith({ at: AT, status: 'ok' }); return r[0] || r[1] || r[2] !== 'Worker: last run yesterday 08:00 · ok'; });
+  ok(wrong.length === 0, 'a schedule that throws, or answers something that is no time, leaves the plain line', wrong.map(String));
+  delete global.OSCrew;
+  // ... and with the real model, when its file has overdue: Thursday 10:00 in Stockholm, Desk runs at 07:13 and 13:13
+  const modelFile = D + 'os-cockpit-model.js';
+  const real = fs.existsSync(modelFile) ? require(modelFile) : null;
+  if (real && typeof real.overdue === 'function' && typeof real.when === 'function') {
+    global.OSCrew = real;
+    r = runWith({ at: iso(NOW - 60 * 60e3), status: 'ok' });
+    const fresh = r.slice();
+    r = runWith({ at: iso(NOW - 9 * 36e5), status: 'ok' });
+    ok(fresh[0] === false && fresh[1] === false && fresh[2] === 'Worker: last run 09:00 · ok' && r[0] === false && r[1] === true && r[2] === 'Worker: last run 01:00 · ok · no result from the 07:13 run', 'the real schedule: a result at 09:00 answers the 07:13 run; one from 01:00 does not, and the line says so in amber', [fresh, r]);
+    delete global.OSCrew;
+  } else console.log('skip the run line with the real model: dashboard/os-cockpit-model.js is not there or has no overdue yet');
 }
 
 // ---- 7. defensive: odd documents never crash and never follow an odd link ----
@@ -216,11 +249,14 @@ const DOC = {
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'counts that are not numbers show —', counts());
   ok(draw('hub-brief', 'p').hidden === true, 'a blank headline hides the line');
   ok(openLink().hidden === true && openLink().getAttribute('href') === HUB_URL, 'a hubUrl that is not the Hub\'s address hides Open the Hub and never reaches its href');
-  ok(JSON.stringify(chatShown()) === '[false,false]' && links().chat.every((c) => c.getAttribute('href') === HUB_URL + '#chat'), 'Chat follows no hubUrl from the document either');
+  ok(JSON.stringify(chatShown()) === '[false]' && links().chat.every((c) => c.getAttribute('href') === HUB_URL + '#chat'), 'Chat follows no hubUrl from the document either');
   push({ ...DOC, hubUrl: 'https://example.com/claude.ai/' });
   ok(openLink().hidden === true, 'a non-claude.ai host is not followed either');
-  const near = [HUB_URL + '#chat', HUB_URL + '/', HUB_URL + 'x', ' ' + HUB_URL, HUB_URL.toUpperCase(), 42, null, { href: HUB_URL }].filter((odd) => { push({ ...DOC, hubUrl: odd }); return !openLink().hidden || chatShown().some(Boolean); });
-  ok(near.length === 0, 'near misses of the address (a fragment, a slash, other case, a non-string) keep the links hidden', near);
+  // the same address written another way is the same address: ?…, #… and a trailing slash are not compared
+  const alike = [HUB_URL + '#chat', HUB_URL + '/', HUB_URL + '?from=os', HUB_URL + '/?from=os#item=x', HUB_URL + '#'].filter((u) => { push({ ...DOC, hubUrl: u }); return openLink().hidden || !chatShown().every(Boolean); });
+  ok(alike.length === 0, 'the Hub\'s address with a fragment, a query or a trailing slash still shows the links', alike);
+  const near = [HUB_URL + 'x', HUB_URL + '/more', HUB_URL + '//', ' ' + HUB_URL, HUB_URL.toUpperCase(), HUB_URL.replace('https:', 'http:'), '', '#chat', '/', 42, null, { href: HUB_URL }].filter((odd) => { push({ ...DOC, hubUrl: odd }); return !openLink().hidden || chatShown().some(Boolean); });
+  ok(near.length === 0, 'near misses of the address (a longer path, other case, another scheme, nothing, a non-string) keep the links hidden', near);
   push({ ...DOC, top: [{ id: 'y', title: 'x'.repeat(200), kind: 'mystery', severity: 'urgent', status: 'odd' }, null, 'junk'] });
   const li = nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI');
   ok(li.length === 1, 'junk entries are skipped', li.length);
@@ -267,11 +303,12 @@ const DOC = {
 }
 
 
-// Chat: the header and the Today pane open the Hub's chat (#chat), only for a claude.ai Hub URL
+// Chat: the Hub pane's link opens the Hub's chat (#chat), only while hub/today names the Hub's own address
 {
   const html = fs.readFileSync(D + 'index.html', 'utf8');
-  ok((html.match(/data-hub-link href="[^"#]+#chat"/g) || []).length === 2 && /data-hub-link href="[^"#]+#chat"/.test(html.slice(0, html.indexOf('<nav class="app-tabs"'))) && /data-hub-link href="[^"#]+#chat"/.test(html.slice(html.indexOf('id="hub-today"'), html.indexOf('class="hub-tiles"'))), 'Chat: one link in the header and one on the Today pane');
-  ok(/<a class="app-chat" data-hub-link href="[^"#]+#chat" target="_blank" rel="noopener"[^>]*hidden>/.test(html), 'Chat: the header link opens a new tab and is hidden until the Hub URL is known');
+  const head = html.slice(0, html.indexOf('<nav class="app-tabs"'));
+  ok((html.match(/data-hub-link href="[^"#]+#chat"/g) || []).length === 1 && /<a class="btn" data-hub-link href="[^"#]+#chat" target="_blank" rel="noopener" hidden>/.test(html.slice(html.indexOf('id="hub-today"'), html.indexOf('class="hub-tiles"'))), 'Chat: one link, in the Hub pane, a new tab, hidden until hub/today names the Hub');
+  ok(!/data-hub-link|class="app-chat"|>Chat</.test(head) && /<span class="msg-slot" data-draw="hub-links"><\/span>/.test(head), 'Chat: no link in the page header (it never showed there, and would push the scope picker onto a second row); the empty hub-links drawing stays there, clear of any hidden tab');
   ok(/const DRAWS = \[[^\]]*'hub-links'[^\]]*'hub-note'\]/.test(fs.readFileSync(D + 'os-core.js', 'utf8')) && !/'hub-(open|chat)'/.test(fs.readFileSync(D + 'os-core.js', 'utf8')), 'Chat and Open the Hub: shown or hidden again when hub/today changes');
 }
 console.log(`\n${passes} passed, ${fails} failed`);
