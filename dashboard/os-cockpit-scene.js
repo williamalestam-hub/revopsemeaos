@@ -200,6 +200,7 @@
     const reduced = !!opts.reducedMotion;
     const seed = num(opts.seed, 1) | 0;
     const onHover = typeof opts.onHover === 'function' ? opts.onHover : () => {};
+    const onError = typeof opts.onError === 'function' ? opts.onError : null;
     const onPick = typeof opts.onPick === 'function' ? opts.onPick : () => {};
     const g = canvas.getContext('2d');
 
@@ -1484,8 +1485,19 @@
       if (typeof document !== 'undefined' && document.hidden) return;        // the visibilitychange listener starts it again
       if (!visible()) return;                                                // out of sight (another tab of the page, scrolled away): nothing is asked for until wake()
       raf = requestAnimationFrame(tick);
-      if (reduced) { if (needsDraw || ratio() !== dpr) frame(num(ts, 0)); return; }   // nothing moves: a frame only for a change (a crew, a size, the focus, a zoom of the page)
-      if (ts - lastDraw >= 62) { lastDraw = ts; frame(ts); }
+      try {
+        if (reduced) { if (needsDraw || ratio() !== dpr) frame(num(ts, 0)); return; }   // nothing moves: a frame only for a change (a crew, a size, the focus, a zoom of the page)
+        if (ts - lastDraw >= 62) { lastDraw = ts; frame(ts); }
+      } catch (e) { fail(e); }
+    }
+    // A frame of the loop that throws ends the picture for good. A canvas that stands still looks current, so it is
+    // wiped, the scene lets go of everything, and whoever made it is told (onError) and folds it away; with nobody to
+    // tell, the error goes on to the page.
+    function fail(e) {
+      destroy();
+      try { canvas.width = canvas.width; } catch (x) { /* no canvas left to wipe */ }
+      if (!onError) throw e;
+      onError(e);
     }
     // a new crew, a new size, a focus change or coming back into view: draw again, and start the loop if it stopped out of sight
     function wake() { needsDraw = true; if (running && !raf && !destroyed) raf = requestAnimationFrame(tick); }

@@ -3,6 +3,7 @@
 // hit their own agent, the same seed draws the same thing, the frame loop is capped and stops when the tab is hidden,
 // reduced motion places agents at once, and destroy() lets go of listeners and frames. The last part holds what the
 // review of the published scene asked for: nobody walks through anybody, tags at rest do not overlap, and so on.
+// The very last part: a frame that throws ends the picture (wiped, let go, said once) instead of leaving it standing.
 //   node tools/harness/test41.js [path/to/scene.js]
 const path = require('path');
 const FILE = path.resolve(process.argv[2] || path.join(__dirname, '../../dashboard/os-cockpit-scene.js'));
@@ -453,6 +454,40 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
   const once = track([[-1, []], [1000, FX.morning.crew], [14000, FX.clear.crew]]);
   const often = track([[-1, []], [1000, FX.morning.crew], [1067, FX.morning.crew], [2500, FX.morning.crew], [9000, FX.morning.crew], [14000, FX.clear.crew], [14200, FX.clear.crew], [16000, FX.clear.crew], [29000, FX.clear.crew]]);
   ok(once === often, 'setting the same crew again (as the page does every 30 s and on every document change) restarts nothing, at rest or on the way', [once.length, often.length, once.slice(-12), often.slice(-12)]);
+}
+// ---- a frame of the loop that throws ends the picture: wiped, let go, and said once ----
+{
+  const mk = (host) => {
+    const canvas = mkCanvas(), heard = []; let w = canvas.width, wipes = 0;
+    Object.defineProperty(canvas, 'width', { get: () => w, set: (v) => { if (v === w) wipes++; w = v; } });   // set to what it is already: the way a canvas is wiped
+    const s = API.create(canvas, Object.assign({ now: () => FX.morning.clock, seed: 7, reducedMotion: false, onHover() {}, onPick() {} }, host ? { onError: (e) => heard.push(e) } : {}));
+    s.setCrew(FX.morning.crew); s.resize(888); s.start();
+    return { canvas, s, heard, wipes: () => wipes };
+  };
+  const breakIt = (canvas, e) => { for (const k of ['fillRect', 'drawImage', 'fillText']) canvas.ctx[k] = () => { throw e; }; };
+  // with somebody to tell
+  const a = mk(true); let t = pump(30, 1000 / 60, 0);
+  const boom = new Error('the canvas threw'), wiped0 = a.wipes(), listening0 = a.canvas.listeners.length;
+  breakIt(a.canvas, boom);
+  let out = null; try { t = pump(30, 1000 / 60, t); } catch (e) { out = e; }
+  ok(out === null && a.heard.length === 1 && a.heard[0] === boom, 'a frame that throws: whoever made the scene is told once (onError), and nothing is thrown at the page', [out && String(out), a.heard.map(String)]);
+  ok(raf.q.size === 0 && listening0 > 0 && a.canvas.listeners.length === 0 && a.wipes() === wiped0 + 1, '... the loop has stopped, the listeners are gone and the canvas is wiped (a picture that stands still would look current)', [raf.q.size, a.canvas.listeners.length, a.wipes() - wiped0]);
+  let later = null; try { a.s.setCrew(FX.clear.crew); a.s.resize(700); a.s.frame(t + 100); a.s.start(); a.s.setFocus('desk'); t = pump(30, 1000 / 60, t); a.s.destroy(); } catch (e) { later = e; }
+  ok(later === null && raf.q.size === 0 && a.heard.length === 1, '... and afterwards it does nothing, quietly: a crew, a size, a frame, start and the focus neither throw nor ask for a frame', [later && String(later), raf.q.size, a.heard.length]);
+  // with nobody to tell
+  const b = mk(false); t = pump(30, 1000 / 60, 0);
+  const boom2 = new Error('the canvas threw again'); breakIt(b.canvas, boom2);
+  let out2 = null; try { t = pump(30, 1000 / 60, t); } catch (e) { out2 = e; }
+  let out3 = null; try { t = pump(30, 1000 / 60, t); } catch (e) { out3 = e; }
+  ok(out2 === boom2 && out3 === null && raf.q.size === 0 && b.canvas.listeners.length === 0, 'with nobody to tell, the error goes on to the page once, and the loop has stopped all the same', [out2 && String(out2), out3 && String(out3), raf.q.size]);
+  // under reduced motion the one frame for a change is guarded the same way
+  const c = mk(true); c.s.destroy();
+  const canvas = mkCanvas(), heard = [];
+  const r = API.create(canvas, { now: () => FX.morning.clock, seed: 7, reducedMotion: true, onHover() {}, onPick() {}, onError: (e) => heard.push(e) });
+  r.setCrew(FX.morning.crew); r.resize(888); r.start(); t = pump(10, 1000 / 60, 0);
+  const boom3 = new Error('threw under reduced motion'); breakIt(canvas, boom3); r.setCrew(FX.clear.crew);
+  let out4 = null; try { t = pump(10, 1000 / 60, t); } catch (e) { out4 = e; }
+  ok(out4 === null && heard.length === 1 && heard[0] === boom3 && raf.q.size === 0, 'under reduced motion a throwing frame is reported and ends the picture the same way', [out4 && String(out4), heard.map(String), raf.q.size]);
 }
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

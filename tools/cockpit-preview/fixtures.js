@@ -19,7 +19,7 @@
     // nothing needs you
     clear: { clock: at(15, 0), crew: five([['idle', {}], ['idle', {}], ['idle', {}], ['idle', {}], ['idle', {}]]) },
     // things going wrong
-    trouble: { clock: at(13, 50), crew: five([['late', { bubble: 'Missed 13:13' }], ['error', { bubble: 'Run failed' }], ['unknown', {}], ['idle', {}], ['needs', { waiting: 1 }]]) },
+    trouble: { clock: at(13, 50), crew: five([['late', { bubble: 'No result 13:13' }], ['error', { bubble: 'Run failed' }], ['unknown', {}], ['idle', {}], ['needs', { waiting: 1 }]]) },
     // late evening
     night: { clock: at(22, 30), crew: five([['needs', { waiting: 4 }], ['idle', {}], ['idle', {}], ['idle', {}], ['idle', {}]]) },
     // the smaller crew of three
