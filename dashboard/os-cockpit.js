@@ -165,13 +165,24 @@
   };
 
   // ---------- The stage: canvas, scene, tooltip ----------
+  // The picture threw (in one of its own frames, or when handed a crew or a size). A canvas that stands still looks
+  // current, so the stage folds away and the chips carry on alone, until the stage is mounted anew or a later run of
+  // this script takes over. The error is thrown on once, outside the drawing, so that the page's own check reports it.
+  const fold = (m, e) => {
+    if (m.failed === S) return;
+    m.failed = S;
+    if (m.tip && !m.dead) hideTip(m);
+    kill(m);
+    if (m.el) m.el.classList.add('ck-off');
+    setTimeout(() => { throw e; }, 0);
+  };
   const build = (el, m) => {
     const canvas = document.createElement('canvas'), tip = document.createElement('div');
     let ink = null;
     try { ink = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null; } catch (e) { ink = null; }
     // nothing to draw on here: the stage stays empty and folds away, and the chips carry it alone
     el.classList.toggle('ck-off', !ink);
-    if (!ink) { el.replaceChildren(); return Object.assign(m, { el, off: true, dead: false, scene: null, tip: null }); }
+    if (!ink) { el.replaceChildren(); return Object.assign(m, { el, off: true, dead: false, failed: null, scene: null, tip: null }); }
     canvas.className = 'ck-canvas';
     canvas.setAttribute('aria-hidden', 'true');
     tip.className = 'ck-tip';
@@ -179,12 +190,13 @@
     tip.setAttribute('id', 'ck-tip' + (S.tips++ ? '-' + S.tips : ''));
     tip.hidden = true;
     el.replaceChildren(canvas, tip);
-    Object.assign(m, { el, canvas, tip, off: false, width: null, dpr: null, out: NOTHING, tipFor: null, dead: false, started: false });
+    Object.assign(m, { el, canvas, tip, off: false, width: null, dpr: null, out: NOTHING, tipFor: null, dead: false, failed: null, started: false });
     m.scene = Scene.create(canvas, {
       now: () => Date.now(), seed: Math.floor(Date.now() / 1000) % 100000, reducedMotion: reduced(),
       onHover: (id) => { if (m.dead) return; if (id) showTip(m, id); else hideTip(m); canvas.style.cursor = id && linked(id) ? 'pointer' : ''; },
       // a click on a robot is a click on its chip: the page's own handler opens the chip's tab
       onPick: (id) => { const c = chipOf(id); if (!m.dead) hideTip(m); if (c && typeof c.click === 'function') c.click(); },
+      onError: (e) => fold(m, e),
     });
     S.live.add(m);
     return m;
@@ -212,16 +224,19 @@
   dash.draw('cockpit', {
     mount: (el) => build(el, {}),
     update: (el, m) => {
-      if (m.dead) build(el, m); // stopped by a later run of this script, or by a throw: start again in place
+      if (m.failed === S) return; // the picture threw in this run: folded away until the stage is mounted anew
+      if (m.dead) build(el, m);   // stopped by a later run of this script: start again in place
       if (m.off) return;
       const out = derive();
       m.out = out;
-      m.scene.setCrew(crewOf(out));
-      // under a hidden tab this is not called; when the tab comes back the width may have changed meanwhile
-      const w = el.clientWidth, dpr = window.devicePixelRatio || 1;
-      if (w !== m.width || dpr !== m.dpr) { m.width = w; m.dpr = dpr; m.scene.resize(w); }
-      // started in the same call that mounted it, once it has a crew and a size: the order the scene is previewed in
-      if (!m.started) { m.started = true; m.scene.start(); }
+      try {
+        m.scene.setCrew(crewOf(out));
+        // under a hidden tab this is not called; when the tab comes back the width may have changed meanwhile
+        const w = el.clientWidth, dpr = window.devicePixelRatio || 1;
+        if (w !== m.width || dpr !== m.dpr) { m.width = w; m.dpr = dpr; m.scene.resize(w); }
+        // started in the same call that mounted it, once it has a crew and a size: the order the scene is previewed in
+        if (!m.started) { m.started = true; m.scene.start(); }
+      } catch (e) { fold(m, e); return; }
       if (m.tipFor) showTip(m, m.tipFor);
     },
     unmount: (el, m) => kill(m),

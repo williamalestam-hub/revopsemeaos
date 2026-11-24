@@ -758,6 +758,51 @@ const standIns = async () => {
     global.OSCrew = modelStandIn;
   } else console.log('skip the real model on the stand-in page: dashboard/os-cockpit-model.js is not there, or does not have lead, brief and overdue yet');
 
+  // ---- a picture that throws folds away, says so once, and the chips carry on ----
+  {
+    const WEEK = { at: '2026-11-23T06:46:19Z', week: '2026-11-23', slack: { channel: 'D0AAAAAAAA', ts: '1.2' } };
+    // what the wiring throws on outside the drawing: the stand-in's zero-millisecond timeouts, run here and caught
+    const thrownOn = () => { const out = []; [...timeouts].filter(([, t]) => t.ms === 0).forEach(([id, t]) => { timeouts.delete(id); try { t.fn(); } catch (e) { out.push(e); } }); return out; };
+    const lines = () => IDS.map(lineOf);
+    T = 0; load('os-cockpit.js'); await tick(); await tick();
+    push('hub/weekly', WEEK); push('hub/pulse', undefined);
+    TYPE.all();
+    const st = stage(), s = scene(), n = scenes.length, before = lines(), boom = new Error('a frame threw');
+    ok(typeof s.opts.onError === 'function' && !st.classList.contains('ck-off') && !s.destroyed && before.every((l) => l && l !== '—'), 'the scene is told how to report a throw (onError), and the picture is up');
+    s.opts.onError(boom);
+    const first = thrownOn();
+    ok(st.classList.contains('ck-off') && s.destroyed === 1 && first.length === 1 && first[0] === boom && alive().length === 0, 'a frame that throws: the stage folds away, the scene is let go, and the error is thrown on once outside the drawing', [st.className, s.destroyed, first.map(String)]);
+    s.opts.onError(new Error('and again'));
+    ok(thrownOn().length === 0, '... a second report from the same picture is not thrown on again');
+    bus.changed(); tickNow(); TYPE.all();
+    ok(scenes.length === n && TYPE.thrown.length === 0 && st.classList.contains('ck-off') && thrownOn().length === 0, '... after that the drawing is left alone: no new scene, nothing thrown, still folded away', [scenes.length - n, TYPE.thrown.map(String), st.className]);
+    ok(same(lines(), before) && IDS.every((id) => stateOf(chip(id)).length === 1), '... and the chips keep their lines and states', lines());
+    // the stage mounted anew (the tab was left and came back): the picture gets another go
+    TYPE.leave(st); TYPE.all();
+    const s2 = scene();
+    ok(scenes.length === n + 1 && !st.classList.contains('ck-off') && st.children.length === 2 && same(s2.log, ['setCrew', 'resize 600', 'start']) && s2.crew.length === 5, 'mounted anew, the picture is back with the crew', [scenes.length - n, st.className, s2.log]);
+    // a throw when the picture is handed a crew
+    const boom2 = new Error('setCrew threw'); s2.setCrew = () => { throw boom2; };
+    let out = null; try { bus.changed(); } catch (e) { out = e; }
+    const second = out ? [out] : thrownOn();
+    ok(TYPE.thrown.length === 0 && st.classList.contains('ck-off') && s2.destroyed === 1 && second.length === 1 && second[0] === boom2, 'a throw when it is handed a crew: the drawing itself does not throw, the stage folds away, the error is thrown on once', [TYPE.thrown.map(String), st.className, s2.destroyed, second.map(String)]);
+    tickNow(); bus.changed();
+    ok(scenes.length === n + 1 && TYPE.thrown.length === 0 && thrownOn().length === 0 && same(lines(), before), '... and it is not tried again every tick', [scenes.length - n - 1, lines()]);
+    // a later run of the script (a new version of the file) takes over and tries again
+    load('os-cockpit.js'); await tick(); await tick();
+    push('hub/weekly', WEEK); push('hub/pulse', undefined);
+    TYPE.all();
+    ok(!st.classList.contains('ck-off') && alive().length === 1 && scene().crew.length === 5 && TYPE.thrown.length === 0 && thrownOn().length === 0, 'a later run of the script puts the picture back', [st.className, alive().length, TYPE.thrown.map(String)]);
+    // with the type keeping what mount made across the runs
+    TYPE.again = 'keep';
+    scene().opts.onError(new Error('threw under the kept mount')); thrownOn();
+    load('os-cockpit.js'); await tick(); await tick();
+    push('hub/weekly', WEEK); push('hub/pulse', undefined);
+    TYPE.all();
+    ok(!st.classList.contains('ck-off') && alive().length === 1 && scene().crew.length === 5 && TYPE.thrown.length === 0, '... also when the type keeps what the earlier run mounted', [st.className, alive().length, TYPE.thrown.map(String)]);
+    TYPE.again = 'unmount';
+  }
+
   bus.fire();
   if (window.__osCockpit) window.__osCockpit.stop();
   ok(timers.size === 0 && timeouts.size === 0 && live('hub/weekly').length + live('hub/pulse').length === 0 && winOn.length === 0 && docHeard('keydown') === 0 && $$('[data-ck]').every((c) => c._on.length === 0) && bus.size() === 0 && alive().length === 0, 'what a run leaves on window can stop everything it set up', [timers.size, timeouts.size]);
