@@ -918,7 +918,7 @@
       else { R(x - 9, y - 1, 4, 5, INK); R(x - 8, y - 1, 2, 3, shirt); R(x - 8, y + 2, 2, 1, skin); }
       R(x + 4 + wr, y - 1, 4, 5, INK); R(x + 5 + wr, y - 1, 2, 3, shirt); R(x + 5 + wr, y + 2, 2, 1, skin); R(x + 3 + wr, y + 3, 1, 3, INK);
       // the tray: a stack that grows with what is waiting (when a sheet is in the air, it grows as the sheet lands)
-      let total = 0; crew.forEach((a) => { if (a.state === 'needs') total += a.waiting; });
+      let total = 0; crew.forEach((a) => { if (a.state !== 'unknown') total += a.waiting; });   // what waits on you is still waiting while its agent is at its desk
       const target = total > 0 ? Math.min(10, 1 + Math.floor(Math.log2(total + 1) * 1.15)) : 0;
       if (reduced || !flights.length || target < trayShown) trayShown = target;
       const since = simT - trayPop, hs = trayShown + (trayShown && since < 240 ? 1 : 0), tx = d.tray.x, ty = d.tray.y;
@@ -1090,11 +1090,13 @@
     function tick(ts) {
       raf = 0; if (!running || destroyed) return;
       if (typeof document !== 'undefined' && document.hidden) return;        // the visibilitychange listener starts it again
-      if (reduced) { if (needsDraw) { if (visible()) frame(num(ts, 0)); else raf = requestAnimationFrame(tick); } return; }
+      if (!visible()) return;                                                // out of sight (another tab of the page, scrolled away): nothing is asked for until wake()
+      if (reduced) { if (needsDraw) frame(num(ts, 0)); return; }
       raf = requestAnimationFrame(tick);
-      if (ts - lastDraw >= 62 && visible()) { lastDraw = ts; frame(ts); }
+      if (ts - lastDraw >= 62) { lastDraw = ts; frame(ts); }
     }
-    function wake() { if (reduced) { needsDraw = true; if (running && !raf && !destroyed) raf = requestAnimationFrame(tick); } }
+    // a new crew, a new size, a focus change or coming back into view: draw again, and start the loop if it stopped out of sight
+    function wake() { needsDraw = true; if (running && !raf && !destroyed) raf = requestAnimationFrame(tick); }
     function start() { if (destroyed) return; running = true; needsDraw = true; if (raf) cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); }
     function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
     const onVis = () => { if (running && !destroyed && !(typeof document !== 'undefined' && document.hidden) && !raf) { needsDraw = true; raf = requestAnimationFrame(tick); } };
