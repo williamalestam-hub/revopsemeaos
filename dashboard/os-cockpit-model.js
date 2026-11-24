@@ -4,17 +4,19 @@
 // calls. Sets window.OSCrew (module.exports under node). Its test is tools/harness/test40.js.
 (function (root) {
   const TZ = 'Europe/Stockholm';
-  // days: 1 = Monday ... 7 = Sunday. `at` is wall-clock time in TZ, so the runs follow summer time.
+  // days: 1 = Monday ... 7 = Sunday. `at` is wall-clock time in TZ, so the runs follow summer time. `also` lists runs
+  // that are announced as the next run but never waited for: they are not known to leave a new result behind.
   const ROSTER = [
     { id: 'desk', name: 'Desk', look: 'headset', hue: 'teal', days: [1, 2, 3, 4, 5], at: ['07:13', '13:13'], graceMin: 45, idleWord: 'all clear' },
     { id: 'decide', name: 'Decide', look: 'gavel', hue: 'amber', days: [1, 2, 3, 4, 5], at: ['07:43'], graceMin: 30, idleWord: 'all clear' },
-    { id: 'instinct', name: 'Instinct', look: 'antenna', hue: 'rose', days: [1, 2, 3, 4, 5], at: ['08:07'], graceMin: 30, idleWord: 'all clear' },
-    { id: 'muse', name: 'Muse', look: 'bulb', hue: 'violet', days: [1, 2, 3, 4, 5], at: ['08:07'], graceMin: 30, idleWord: 'all clear' },
+    { id: 'instinct', name: 'Instinct', look: 'antenna', hue: 'rose', days: [1, 2, 3, 4, 5], at: ['08:07'], also: ['10:07', '12:07', '14:07', '16:07'], graceMin: 60, idleWord: 'all clear' },
+    { id: 'muse', name: 'Muse', look: 'bulb', hue: 'violet', days: [1, 2, 3, 4, 5], at: ['08:07'], graceMin: 60, idleWord: 'all clear' },
     { id: 'review', name: 'Review', look: 'clipboard', hue: 'blue', days: [1], at: ['07:37'], graceMin: 45, idleWord: 'posted' },
   ];
   const MIN = 6e4, DAY = 864e5;
   const TOL = 20 * MIN;     // agents write their `at` roughly: a result stamped up to 20 minutes before a run is still that run's
   const RUN_MAX = 45 * MIN; // a "running" heartbeat older than this is a run that stopped without saying so
+  const SLACK = 2 * MIN;    // how far a heartbeat's clock may be from a result's stamp, or from the viewer's clock
   const SRC = ['ok', 'loading', 'nodb', 'error', 'missing']; // what the page can say about an agent's document
 
   // ---------- What comes from outside, made safe ----------
@@ -23,13 +25,19 @@
   const real = (ms) => typeof ms === 'number' && Math.abs(ms) <= 8.64e15;
   // the clock that was handed in, or the machine's when that is not a time
   const clock = (ms) => (real(ms) ? ms : Date.now());
-  // an ISO time as ms, or NaN. Only ISO text is read: Date.parse alone takes "run 1" for the year 2001
-  const time = (iso) => (typeof iso === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(iso) ? Date.parse(iso) : NaN);
+  // An ISO time as ms, or NaN. It has to name its zone (Z, +01:00 or +0100): without one it would be read on the
+  // viewer's own clock, so it is no time at all. Only ISO text is read (Date.parse alone takes "run 1" for the year
+  // 2001), and it is handed on in the one spelling every browser reads alike.
+  const ISO = /^(\d{4}-\d\d-\d\dT\d\d:\d\d)(?::(\d\d)(?:\.(\d+))?)?(Z|[+-]\d\d:?\d\d)$/;
+  const time = (iso) => {
+    const m = typeof iso === 'string' ? ISO.exec(iso) : null;
+    return m ? Date.parse(m[1] + ':' + (m[2] || '00') + '.' + ((m[3] || '') + '000').slice(0, 3) + m[4].replace(/^(.\d\d):?(\d\d)$/, '$1:$2')) : NaN;
+  };
   // text as one trimmed line of at most n characters, and '' for anything that is not text
   const cut = (v, n) => (typeof v === 'string' ? Array.from(v.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim()).slice(0, n).join('').trim() : '');
   // a count as a whole number from 0 to 9999, and 0 for anything that is not a number
   const count = (v) => (typeof v === 'number' && v > 0 && v < Infinity ? Math.min(9999, Math.floor(v)) : 0);
-  // what a count is made of, for the tooltip ("10 decisions, 7 for Leo"): the first four parts, empty ones left out
+  // what a count is made of ("10 decisions, 7 for Leo"): the first four parts, empty ones left out
   const breakdown = (parts) => (Array.isArray(parts) ? parts.slice(0, 4) : [])
     .filter((x) => isObj(x) && count(x.n) && cut(x.word, 16)).map((x) => count(x.n) + ' ' + cut(x.word, 16)).join(', ');
 
@@ -50,22 +58,23 @@
   };
   // The scheduled runs on either side of now, in ms: prev is the latest at or before it, next the first after it
   // (null when there is none). Today's runs first, then back a day at a time to the latest one and forward to the
-  // next one; a week each way is enough for an agent that runs once a week.
+  // next one; a week each way is enough for an agent that runs once a week. The `also` runs can be the next run,
+  // never the latest one: nothing is ever due or late because of them.
   const runsAround = (agent, nowMs) => {
     const now = clock(nowMs), out = { prev: null, next: null };
     if (!isObj(agent) || !Array.isArray(agent.days) || !Array.isArray(agent.at)) return out;
     try {
       const today = Math.floor(wall(now) / DAY) * DAY;
-      // the runs of the day k days from today on TZ's calendar, each put on its side of now
-      const look = (k) => {
+      // a list of HH:MM times as instants on the day k days from today on TZ's calendar; none when the agent is off that day
+      const on = (k, times) => {
         const day = today + k * DAY;
-        if (!agent.days.includes(((new Date(day).getUTCDay() + 6) % 7) + 1)) return;
-        for (const hm of agent.at) {
-          const m = /^(\d\d):(\d\d)$/.exec(hm);
-          if (!m) continue;
-          const t = instant(day + (m[1] * 60 + +m[2]) * MIN);
-          if (t <= now) out.prev = Math.max(out.prev ?? t, t); else out.next = Math.min(out.next ?? t, t);
-        }
+        if (!Array.isArray(times) || !agent.days.includes(((new Date(day).getUTCDay() + 6) % 7) + 1)) return [];
+        return times.map((hm) => /^(\d\d):(\d\d)$/.exec(hm)).filter(Boolean).map((m) => instant(day + (m[1] * 60 + +m[2]) * MIN));
+      };
+      // a day's runs, each put on its side of now; the `also` runs only ever on the far side
+      const look = (k) => {
+        for (const t of on(k, agent.at)) { if (t <= now) out.prev = Math.max(out.prev ?? t, t); else out.next = Math.min(out.next ?? t, t); }
+        if (k >= 0) for (const t of on(k, agent.also)) if (t > now) out.next = Math.min(out.next ?? t, t);
       };
       look(0);
       for (let k = -1; k >= -7 && out.prev === null; k--) look(k);
@@ -73,14 +82,24 @@
     } catch (e) { /* a browser without time zones: no schedule, so nothing is ever due or late */ }
     return out;
   };
+  // A scheduled run with no result: nothing stamped at all, or the last stamp is from before that run, less the
+  // tolerance. "Not at or after" rather than "before", so that a missing `at` counts too.
+  const unanswered = (prev, last) => prev !== null && !(last >= prev - TOL);
+  // The latest scheduled run of a roster agent, in ms, when it has left no result and its grace has passed (the test
+  // behind the `late` state); else null.
+  const overdue = (id, atIso, nowMs) => {
+    const agent = ROSTER.find((a) => a.id === id), now = clock(nowMs);
+    const prev = agent ? runsAround(agent, now).prev : null;
+    return unanswered(prev, time(atIso)) && now - prev > agent.graceMin * MIN ? prev : null;
+  };
 
   // ---------- The words ----------
   const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   // A time in words, on the viewer's own clock: 13:15 today, yesterday 13:15, 07:13 tomorrow, Mon 07:46 for any other
-  // day less than a week away, 16 Nov from a week away on (so a weekday never means today's own). With `brief`, for
-  // the chip, the bubble and a time inside a sentence, yesterday and tomorrow are named by their weekday too.
-  const when = (ms, nowMs, brief) => {
+  // day less than a week away, 16 Nov 07:46 from a week away on (so a weekday never means today's own). With `short`,
+  // for the chip, the bubble and a time inside a sentence, yesterday and tomorrow are named by their weekday too.
+  const when = (ms, nowMs, short) => {
     if (!real(ms)) return '';
     const d = new Date(ms), n = new Date(clock(nowMs));
     // whole calendar days from today: counted in dates, not in hours, because a day is 23 or 25 hours when the clocks change
@@ -88,69 +107,90 @@
     const days = (date(d) - date(n)) / DAY;
     const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     if (days === 0) return hm;
-    if (days === -1 && !brief) return 'yesterday ' + hm;
-    if (days === 1 && !brief) return hm + ' tomorrow';
-    return Math.abs(days) < 7 ? WEEKDAY[d.getDay()] + ' ' + hm : d.getDate() + ' ' + MONTH[d.getMonth()];
+    if (days === -1 && !short) return 'yesterday ' + hm;
+    if (days === 1 && !short) return hm + ' tomorrow';
+    return (Math.abs(days) < 7 ? WEEKDAY[d.getDay()] : d.getDate() + ' ' + MONTH[d.getMonth()]) + ' ' + hm;
   };
   // Why an agent is not in the room: its document is still loading, can't be read here, or was never written.
-  const NO_DATA = { line: 'no data', tip: "Can't read the database here", say: 'no data' };
-  const UNREAD = { loading: { line: '', tip: 'No data yet', say: 'no data yet' }, nodb: NO_DATA, error: NO_DATA, missing: { line: 'not run yet', tip: 'Has not run yet', say: 'has not run yet' } };
-  // What each state says: the chip's line, the bubble shown once when the state changes, the tooltip's sentence and
-  // the phrase read out for the picture. In w, `run` is the time of the scheduled run and `at` the time of the last
-  // result (of the failure, for an error), both already in words.
+  const NO_DATA = { brief: 'no data', tip: "Can't read the database here", say: 'no data' };
+  const UNREAD = { loading: { brief: '', tip: 'No data yet', say: 'no data yet' }, nodb: NO_DATA, error: NO_DATA, missing: { brief: 'not run yet', tip: 'Has not run yet', say: 'has not run yet' } };
+  // What each state says. A chip's line is `lead` (the time it opens with: only a line about the last result has one)
+  // and `brief` (the rest). `bubble` is shown once when the state changes, `tip` is the tooltip's sentence, `say` the
+  // phrase read out for the picture. In w, `run` is the time of the scheduled run and `at` the time of the last
+  // result (of the failure, for an error), both in words; `count` is what waits, in words.
   const WORDS = {
-    working: (w) => ({ line: 'working' + (w.step ? ' · ' + w.step : ''), bubble: w.step, tip: 'Working now' + (w.step ? ': ' + w.step : ''), say: 'working now' }),
-    due: (w) => ({ line: 'due ' + w.run, bubble: 'Run due ' + w.run, tip: 'A run was due at ' + w.run + '. No result yet', say: 'a run was due at ' + w.run }),
-    late: (w) => ({ line: 'missed ' + w.run, bubble: 'Missed ' + w.run, tip: 'Missed the ' + w.run + ' run', say: 'missed the ' + w.run + ' run' }),
-    error: (w) => ({ line: w.at ? 'failed ' + w.at : 'failed', bubble: 'Run failed', tip: 'The last run failed', say: 'the last run failed' }),
-    needs: (w) => ({ line: (w.at ? w.at + ' · ' : '') + w.n + ' for you', bubble: w.n + ' for you', tip: w.n + ' waiting on you' + (w.parts ? ': ' + w.parts : ''), say: w.n + ' waiting on you' }),
-    idle: (w) => ({ line: (w.at ? w.at + ' · ' : '') + w.idle, bubble: '', tip: 'Nothing waiting on you', say: 'nothing waiting' }),
+    working: (w) => ({ brief: 'working' + (w.step ? ' · ' + w.step : ''), bubble: w.step, tip: 'Working now' + (w.step ? ': ' + w.step : ''), say: 'working now' }),
+    due: (w) => ({ brief: 'due ' + w.run, bubble: 'Run due ' + w.run, tip: 'A run was due at ' + w.run + '. No result yet', say: 'a run was due at ' + w.run }),
+    // "no result", not "missed": all that is known is that nothing has arrived
+    late: (w) => ({ brief: 'no result ' + w.run, bubble: 'No result ' + w.run, tip: 'No result from the ' + w.run + ' run', say: 'no result from the ' + w.run + ' run' }),
+    error: (w) => ({ brief: w.at ? 'failed ' + w.at : 'failed', bubble: 'Run failed', tip: 'The last run failed', say: 'the last run failed' }),
+    // a partial result (one of its sources failed) is not an error, but it is said where the last result is shown
+    needs: (w) => ({ lead: w.at, brief: (w.partial ? 'partial · ' : '') + w.count, bubble: w.n + ' for you', tip: w.n + ' waiting on you' + (w.parts ? ': ' + w.parts : ''), say: w.n + ' waiting on you' + (w.partial ? ', last run partial' : '') }),
+    idle: (w) => ({ lead: w.at, brief: w.partial ? 'partial' : w.idle, bubble: '', tip: 'Nothing waiting on you', say: 'nothing waiting' + (w.partial ? ', last run partial' : '') }),
     unknown: (w) => ({ bubble: '', ...UNREAD[w.src] }),
   };
 
   // ---------- The crew ----------
   const derive = (facts, nowMs, names) => {
     const now = clock(nowMs), all = isObj(facts) ? facts : {}, pulse = isObj(all.pulse) ? all.pulse : {};
-    const out = { crew: [], lines: {}, tips: {}, aria: '', total: 0 }, said = [];
+    const out = { crew: [], lines: {}, lead: {}, brief: {}, tips: {}, aria: '', total: 0 }, said = [];
     for (const agent of ROSTER) {
       const f = isObj(all[agent.id]) ? all[agent.id] : {}, p = isObj(pulse[agent.id]) ? pulse[agent.id] : {};
       // no entry, or a source this does not know, is treated as still loading
       const src = SRC.includes(f.src) ? f.src : 'loading';
       const name = cut(isObj(names) ? names[agent.id] : '', 12) || agent.name;
-      const last = time(f.at), n = count(f.waiting), step = cut(p.step, 24);
+      const last = time(f.at), n = count(f.waiting), partial = f.status === 'partial';
+      // a step ends without full stops: sentences are built around it
+      const step = cut(p.step, 24).replace(/[.\u2026\s]+$/, '');
       const { prev, next } = runsAround(agent, now);
-      // its heartbeat: how long ago it started, and the time it speaks of (its end, or else its start)
-      const since = now - time(p.startedAt);
-      const pulseAt = real(time(p.finishedAt)) ? time(p.finishedAt) : time(p.startedAt);
-      // when the last run failed, if it did: the heartbeat says so and is no older than the last result, or the result says so itself
-      const failedAt = p.state === 'error' && real(pulseAt) && !(pulseAt < last - TOL) ? pulseAt : f.status === 'failed' ? last : null;
+      // its heartbeat: when it started, and the time it speaks of (its end, or else its start)
+      const started = time(p.startedAt), pulseAt = real(time(p.finishedAt)) ? time(p.finishedAt) : started;
+      // a run under way: it started within the last 45 minutes (not in the future) and no result has landed since.
+      // A result ends the run, whether or not the heartbeat was cleared
+      const running = p.state === 'running' && now - started >= 0 && now - started <= RUN_MAX && !(last >= started - SLACK);
+      // a run that died: its heartbeat says so, has a time that is not in the future, and is later than the last result,
+      // if there is one. An error from before that result is history
+      const died = p.state === 'error' && pulseAt <= now + SLACK && !(pulseAt <= last);
 
       // The rules. The first that matches wins.
       let state = 'idle';
       // 1. its document could not be read
       if (src !== 'ok') state = 'unknown';
-      // 2. a heartbeat that started within the last 45 minutes (and not in the future)
-      else if (p.state === 'running' && since >= 0 && since <= RUN_MAX) state = 'working';
-      // 3. no result for the latest scheduled run. "Not at or after" rather than "before", so that a missing `at` counts too
-      else if (prev !== null && !(last >= prev - TOL)) state = now - prev <= agent.graceMin * MIN ? 'due' : 'late';
-      // 4. the last run failed   5. something is waiting on William   6. otherwise idle
-      else if (failedAt !== null) state = 'error';
+      // 2. a run under way
+      else if (running) state = 'working';
+      // a run that died at or after the latest scheduled time is an error, not a run still awaited
+      else if (died && (prev === null || pulseAt >= prev - TOL)) state = 'error';
+      // 3. no result for the latest scheduled run: due while its grace lasts, then late
+      else if (unanswered(prev, last)) state = now - prev <= agent.graceMin * MIN ? 'due' : 'late';
+      // 4. the last result says it failed   5. something is waiting on William   6. otherwise idle
+      else if (f.status === 'failed') state = 'error';
       else if (n > 0) state = 'needs';
 
-      // times inside a line or a sentence are brief; "Last result" and "Next run" have room for yesterday and tomorrow
-      const w = WORDS[state]({ src, step, n, parts: breakdown(f.parts), idle: agent.idleWord, run: when(prev, now, true), at: when(state === 'error' ? failedAt : last, now, true) });
+      // what waits, in words: its parts when it has any, else the number
+      const parts = breakdown(f.parts), waits = n > 0 ? parts || n + ' for you' : '';
+      // times inside a line or a sentence are short; "Last result" and "Next run" have room for yesterday and tomorrow
+      const w = WORDS[state]({ src, step, n, parts, partial, count: waits, idle: agent.idleWord, run: when(prev, now, true), at: when(state === 'error' && died ? pulseAt : last, now, true) });
+      // what waits on William does not vanish while its agent is working, due, late or failed (a working chip stays short)
+      const still = n > 0 && ['working', 'due', 'late', 'error'].includes(state);
+      const lead = w.lead || '', brief = w.brief + (still && state !== 'working' ? ' · ' + waits : '');
       out.crew.push({ id: agent.id, name, look: agent.look, hue: agent.hue, state, waiting: n, step: state === 'working' ? step : '', bubble: w.bubble, fresh: last > 0 ? last : 0 });
-      out.lines[agent.id] = w.line;
-      out.tips[agent.id] = { state: w.tip, last: src === 'ok' && real(last) ? 'Last result ' + when(last, now) : '', next: next === null ? '' : 'Next run ' + when(next, now) };
-      said.push(name + ': ' + w.say + '.');
-      // only what stands at William's desk is counted
-      if (state === 'needs') out.total += n;
+      out.lines[agent.id] = (lead ? lead + ' · ' : '') + brief;
+      out.lead[agent.id] = lead;
+      out.brief[agent.id] = brief;
+      out.tips[agent.id] = {
+        state: w.tip + (still ? '. ' + n + ' still waiting on you' : ''),
+        last: src === 'ok' && real(last) ? 'Last result ' + when(last, now) + (partial ? ', partial: a source failed' : '') : '',
+        next: next === null ? '' : 'Next run ' + when(next, now),
+      };
+      said.push(name + ': ' + w.say + (still ? ', ' + n + ' still waiting on you' : '') + '.');
+      // everything that waits on William is counted, wherever its agent stands; an agent that can't be read has no count
+      if (state !== 'unknown') out.total += n;
     }
     out.aria = said.join(' ');
     return out;
   };
 
-  const api = { TZ, ROSTER, derive, runsAround, when };
+  const api = { TZ, ROSTER, derive, runsAround, when, overdue };
   root.OSCrew = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
