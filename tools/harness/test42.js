@@ -6,8 +6,9 @@
 //  3. The wiring (dashboard/os-cockpit.js) against stand-ins for dash, OS, OSCrew and OSCockpit, on the real markup:
 //     mount makes a canvas and a tooltip, update hands the scene the derived crew and resizes it, unmount destroys it;
 //     the facts come from the page's modules as the spec says; chips get their line and class; a robot click clicks its
-//     chip; the tooltip stays inside the stage and is text only; a hidden tab is left alone; a second run of the script
-//     leaves one timer, one subscription to each document and one listener of each kind; nothing uses innerHTML.
+//     chip; the tooltip stays inside the stage and is text only; a hidden tab is left alone; a burst of changes is one
+//     redraw, on settled facts; a second run of the script leaves one timer, one subscription to each document and one
+//     listener of each kind; nothing uses innerHTML. Then the same wiring with the real model in place of its stand-in.
 //  4. A child run (--real) with the real page scripts and the real model (when dashboard/os-cockpit-model.js is there):
 //     documents like the ones the agents write, on a fake database, give the crew, the chips and the words of the spec's
 //     own example, and a robot click really changes tab.
@@ -343,7 +344,7 @@ const standIns = async () => {
   ok(st.children.length === 2 && !!canvas && canvas.getAttribute('role') === 'img' && s1.canvas === canvas, 'mount puts one canvas (role="img") in the stage and gives it to the scene', st.children.map((c) => c.tagName));
   ok(!!tip && tip.hidden === true && tip.parentNode === st, 'mount puts the tooltip inside the stage too, hidden');
   ok(typeof s1.opts.now === 'function' && s1.opts.now() === NOW && Number.isFinite(s1.opts.seed) && s1.opts.reducedMotion === false && typeof s1.opts.onHover === 'function' && typeof s1.opts.onPick === 'function', 'the scene gets now(), a numeric seed, reducedMotion and the two callbacks', Object.keys(s1.opts));
-  ok(same(s1.log, ['start', 'setCrew', 'resize 600']), 'mount starts the scene; the first update hands it the crew, then its width', s1.log);
+  ok(same(s1.log, ['setCrew', 'resize 600', 'start']), 'the first call hands the scene its crew, then its width, and starts it (once it has both, as in the preview)', s1.log);
   ok(timers.size === 1 && [...timers.values()][0].every === 30000, 'mount starts one 30-second timer', [...timers.values()].map((t) => t.every));
   ok(s1.crew.length === 5 && s1.crew.every((a, i) => a === model.outs[0].crew[i]) && model.outs.length === 6, 'update hands the scene the very crew the model derived (one derive for the stage, one for each chip line)', model.outs.length);
   ok(canvas.getAttribute('aria-label') === model.last.aria && /Desk: needs\./.test(model.last.aria), 'update sets the canvas\'s aria-label to the model\'s sentence', canvas.getAttribute('aria-label'));
@@ -534,7 +535,9 @@ const standIns = async () => {
     TYPE.leave(st);
     ok(s1.destroyed === 1 && timers.size === 0, 'unmount destroys the scene and clears the timer', [s1.destroyed, timers.size]);
     bus.changed();
-    ok(scenes.length === 2 && scene() !== s1 && timers.size === 1 && same(scene().log, ['start', 'setCrew', 'resize 600']) && st.children.filter((c) => c.tagName === 'CANVAS').length === 1, 'the next call mounts afresh: one canvas, one scene, one timer', [scenes.length, timers.size]);
+    ok(scenes.length === 2 && scene() !== s1 && timers.size === 1 && same(scene().log, ['setCrew', 'resize 600', 'start']) && st.children.filter((c) => c.tagName === 'CANVAS').length === 1, 'the next call mounts afresh: one canvas, one scene (started once), one timer', [scenes.length, timers.size, scene().log]);
+    bus.changed(); [...timers.values()][0].fn();
+    ok(scene().log.filter((l) => l === 'start').length === 1, 'later updates do not start the scene again', scene().log);
     model.fail = true; bus.changed(); model.fail = false;
     ok(TYPE.thrown.length === 6 && TYPE.thrown.every((e) => /the model threw/.test(e.message)) && scene().destroyed === 1 && timers.size === 0, 'a throw in the model is not swallowed: the dashboard hears it and unmounts, which destroys the scene and clears the timer', [TYPE.thrown.length, scene().destroyed, timers.size]);
     TYPE.thrown.length = 0; bus.changed();

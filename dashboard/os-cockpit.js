@@ -131,14 +131,13 @@
     tip.className = 'ck-tip';
     tip.hidden = true;
     el.replaceChildren(canvas, tip);
-    Object.assign(m, { el, canvas, tip, width: null, dpr: null, out: {}, tipFor: null, dead: false });
+    Object.assign(m, { el, canvas, tip, width: null, dpr: null, out: {}, tipFor: null, dead: false, started: false });
     m.scene = Scene.create(canvas, {
       now: () => Date.now(), seed: Math.floor(Date.now() / 1000) % 100000, reducedMotion: reduced(),
       onHover: (id) => { if (m.dead) return; if (id) showTip(m, id); else hideTip(m); canvas.style.cursor = id && linked(id) ? 'pointer' : ''; },
       // a click on a robot is a click on its chip: the page's own handler opens the chip's tab
       onPick: (id) => { const c = chipOf(id); hideTip(m); if (c && typeof c.click === 'function') c.click(); },
     });
-    m.scene.start();
     S.live.add(m);
     clearInterval(S.timer);
     S.timer = S.dead ? null : setInterval(rerun, TICK); // one timer, however often the stage is mounted
@@ -173,6 +172,8 @@
       // under a hidden tab this is not called; when the tab comes back the width may have changed meanwhile
       const w = el.clientWidth, dpr = window.devicePixelRatio || 1;
       if (w !== m.width || dpr !== m.dpr) { m.width = w; m.dpr = dpr; m.scene.resize(w); }
+      // started in the same call that mounted it, once it has a crew and a size: the order the scene is previewed in
+      if (!m.started) { m.started = true; m.scene.start(); }
       m.canvas.setAttribute('aria-label', typeof out.aria === 'string' ? out.aria : '');
       if (m.tipFor) showTip(m, m.tipFor);
     },
