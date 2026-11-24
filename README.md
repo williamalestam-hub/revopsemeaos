@@ -103,9 +103,11 @@ The first pane of Today is a picture of the scheduled agents at work: a small pi
 agent is a robot and where it stands is its state. At its own desk: a run is under way or due; an amber lamp means the
 run has left no result yet, a red one that it failed. In the queue at your desk, holding a slip with a number: that many
 things wait on you. By the coffee: nothing needs you. An empty chair: no data (its document can't be read, or was never
-written). When a document changes while the page is open, the robots walk to their new places. The room stays empty for
-a moment after the page opens, until every document and your own reactions to it have answered (2.5 seconds at most),
-so that no robot sets off with a count that is about to drop.
+written). When a document changes while the page is open, the robots walk to their new places. They take turns and
+walk around each other and the furniture, so the picture needs a few seconds to follow a change (about ten when the
+whole crew moves); the chips under it change at once. The room stays empty for a moment after the page opens, until
+every document and your own reactions to it have answered (2.5 seconds at most), so that no robot sets off with a count
+that is about to drop.
 
 Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
 chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide
@@ -119,7 +121,9 @@ and the optional `hub/pulse`.
 - `dashboard/os-cockpit-model.js` (`OSCrew`): the agents and their schedules (`ROSTER`, Stockholm time), and the rules that
   turn a few facts into a state and a few words. `tools/harness/test40.js`.
 - `dashboard/os-cockpit-scene.js` (`OSCockpit`): the picture, drawn from scratch with canvas calls (no images, fonts or
-  network). `node tools/harness/test41.js` checks it against its contract.
+  network). `node tools/harness/test41.js` checks it against its contract. A picture that stands still would look
+  current, so if a frame ever throws the scene wipes its canvas and stops, the wiring folds the stage away, and the
+  chips carry on alone; the error is thrown on once, for the page's own check to report.
 - `dashboard/os-cockpit.js` and `os-cockpit.css`: the wiring (facts from `OS.hub`, `OS.sense`, `OS.lanes`, the chips, the
   tooltip, a redraw every 30 seconds and whenever a document changes) and the styles. The agents' names, their role
   sentences and the legend are in `index.html`. `tools/harness/test42.js`.

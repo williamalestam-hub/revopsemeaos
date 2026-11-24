@@ -68,19 +68,26 @@
     const W = Math.max(150, Math.floor(num(Wf, 150)));
     const wide = W >= 360;
     const wallH = wide ? 36 : 32;
-    const Lw = wide ? clamp(Math.round(W * 0.3), 128, 200) : 0, lx0 = W - Lw;
+    const Lw = wide ? clamp(Math.round(W * 0.3), 128, 250) : 0, lx0 = W - Lw;
     const wd = { x: wide ? 14 : 8, w: wide ? 54 : 50, by: wallH + (wide ? 18 : 15) };
     wd.seat = wd.x + 30; wd.base = wd.by + 21; wd.tray = { x: wd.x + wd.w - 15, y: wd.by + 5 };
-    const q = { x0: wd.x + wd.w + 13, y: wd.by + 22, pitch: Math.max(wide ? 30 : 26, Math.ceil(52 / (sc || 2))), max: wide ? lx0 - 16 : W - 16 };
+    const q = { x0: wd.x + wd.w + 13, y: wd.by + 22, pitch: Math.max(wide ? clamp(Math.round(30 + (W - 480) / 40), 30, 38) : 26, Math.ceil(52 / (sc || 2))), max: wide ? lx0 - 16 : W - 16 };
     // bullpen
     const roomy = W >= 200;                                            // from 400 css px a narrow room has a lane down the left side too
     const ax = wide ? 10 : roomy ? 24 : 6, aw = Math.max(40, (wide ? lx0 - 12 : W - 24) - ax);
-    const maxCols = Math.max(1, Math.floor(aw / (wide ? 34 : 30)));
+    const maxCols = Math.max(1, Math.floor(aw / (wide ? 34 : 29.5)));   // five desks side by side in the narrowest room too (178 px)
     const rows = clamp(Math.ceil(n / maxCols), 1, 2), cols = Math.max(1, Math.ceil(n / rows));
-    const pitch = Math.min(wide ? 76 : 46, aw / cols), dw = pitch >= 33 ? 30 : clamp(Math.floor(pitch) - 2, 22, 28);
-    const gx = ax + (aw - pitch * cols) / 2;
+    // The desks spread out with the room, up to a point. What a long row has left beside them is a games corner next to
+    // the lounge: a table-tennis table, then two beanbags.
+    const pitch = Math.min(wide ? 92 : 60, aw / cols), dw = pitch >= 33 ? 30 : clamp(Math.floor(pitch) - 2, 22, 28);
+    const spare = aw - pitch * cols, isle = [];
+    if (wide && rows === 1 && n) { if (spare >= 68) isle.push({ kind: 'pong', w: 56 }); if (spare >= 122) isle.push({ kind: 'bags', w: 40 }); }
+    const slack = spare - isle.reduce((t, e) => t + e.w, 0), gapB = Math.min(44, slack / (isle.length + 2));
+    const gx = ax + (slack - gapB * isle.length) / 2;                  // the row and its corner stand in the middle together
     const tight = !wide && rows > 1 && n < 8;
     const dy0 = q.y + (tight ? 24 : 36), rowP = tight ? 34 : 36;
+    q.rug = q.y + 8;
+    if (tight) q.y -= 5;                                               // the lane between the queue and the desks is one robot wide: the queue keeps to the wall side of it
     const desks = [];
     for (let i = 0; i < n; i++) {
       const r = Math.min(rows - 1, Math.floor(i / cols)), c = i - r * cols;
@@ -88,7 +95,10 @@
       desks.push({ i, cx, x0, w: dw, dy, sx: x0 + dw - 10, sy: dy - 2, base: dy + 16, scr: { x: x0 + 2, y: dy - 10 }, lx: x0 + dw - 5 });
     }
     const lastDy = dy0 + (rows - 1) * rowP;
-    const L = { W, wide, wallH, n, wd, q, desks, lx0, Lw, dy0, lastDy, plants: [], rugs: [], obst: [] };
+    const L = { W, wide, tight, wallH, n, wd, q, desks, lx0, Lw, dy0, lastDy, plants: [], rugs: [], obst: [], extras: [], sides: [] };
+    { let ex = gx + pitch * cols + gapB; isle.forEach((e) => { L.extras.push({ kind: e.kind, x: Math.round(ex), y: e.kind === 'pong' ? dy0 - 13 : dy0 + 2 }); ex += e.w + gapB; }); }
+    // with room between the desks, each has a low cabinet beside it
+    if (wide && pitch - dw >= 34) desks.forEach((d) => L.sides.push({ x: d.x0 + d.w + 5, dy: d.dy, v: d.i % 3 }));
     // wall: bookshelf, windows, clock, a framed print
     const shelf = L.shelf = wide ? { x: 9, w: 30, top: 6, bottom: wallH + 7 } : { x: 5, w: 26, top: 5, bottom: wallH + 6 };
     const xs = shelf.x + shelf.w + (wide ? 9 : 5), span = W - (wide ? 8 : 6) - xs;
@@ -104,7 +114,7 @@
       H = lastDy + 16 + 14 + 3;
       sofa = { x: lx0 + (Lw >= 150 ? 26 : 6), y: wallH - 5 };
       cart = { x: W - 36 - (Lw >= 170 ? 8 : 0), y: wallH + 7 };
-      table = { x: sofa.x + 17, y: sofa.y + 38 };
+      table = { x: sofa.x + 17, y: sofa.y + 41 };                      // far enough from the sofa to walk past whoever sits on it
       L.lamp = { x: sofa.x + 61, y: wallH - 19 };
       if (Lw >= 150) L.plants.push({ x: lx0 + 6, y: wallH - 15 });
       L.plants.push({ x: W - 20, y: H - 29 });
@@ -113,13 +123,26 @@
       if (gi >= 4) L.cabinet = { x: Math.round(xs + slot * 3) - 11, y: wallH - 17 };          // a long wall gets a printer on a cabinet
       if (gi >= 6) L.plants.push({ x: Math.round(xs + slot * 5) - 7, y: wallH - 15 });
       if (gx - ax >= 26) L.plants.push({ x: ax + 2, y: H - 29 });
+      // where the idle stand: every place can be reached and left while all the others are taken
       spots = [
-        { x: cart.x - 9, y: cart.y + 19, coffee: true }, { x: sofa.x + 16, y: sofa.y + 27, sofa: true }, { x: table.x + 34, y: table.y + 17 },
-        { x: sofa.x + 43, y: sofa.y + 27, sofa: true }, { x: table.x - 10, y: table.y + 17 }, { x: table.x + 12, y: table.y + 28 },
-        { x: cart.x + 14, y: cart.y + 38 }, { x: table.x + 56, y: table.y + 32 },
+        { x: cart.x - 9, y: cart.y + 19, coffee: true }, { x: sofa.x + 16, y: sofa.y + 27, sofa: true }, { x: sofa.x + 43, y: sofa.y + 27, sofa: true },
+        { x: table.x - 4, y: table.y + 20 }, { x: table.x + 28, y: table.y + 20 }, { x: cart.x + 16, y: cart.y + 22 },
+        { x: table.x - 20, y: table.y + 34 }, { x: table.x + 44, y: table.y + 34 },
       ];
-      L.rugs.push({ kind: 'you', x: 8, y: wd.by - 13, w: Math.min(lx0 - 8, q.x0 + 4 * q.pitch + 14) - 8, h: q.y + 8 - (wd.by - 13) });
-      L.rugs.push({ kind: 'lounge', x: sofa.x - 2, y: sofa.y + 21, w: Math.min(W - 8 - (sofa.x - 2), 62 + Math.max(0, Lw - 128)), h: Math.min(50, H - 8 - (sofa.y + 21)) });
+      L.rugs.push({ kind: 'you', x: 8, y: wd.by - 13, w: Math.min(lx0 - 8, q.x0 + 4 * q.pitch + 14) - 8, h: q.rug - (wd.by - 13) });
+      // Between your corner and the lounge, as far as there is room: a meeting table, a planning board, a foosball table
+      // (which stands in the lounge itself once that is big enough), a plant at each end of a long stretch.
+      { const t0 = Math.min(lx0 - 8, q.x0 + 4 * q.pitch + 14) + 10, t1 = lx0 - 10, span = t1 - t0, top = [];
+        if (span >= 100) top.push({ kind: 'meet', w: 80, y: wallH + 10 });
+        if (span >= 172 && Lw < 220) top.push({ kind: 'foos', w: 44, y: wallH + 20 });
+        if (span >= (Lw < 220 ? 232 : 160)) top.unshift({ kind: 'board', w: 30, y: wallH + 12 });
+        const free = span - top.reduce((t, e) => t + e.w, 0), gapT = Math.min(52, free / (top.length + 1)), edge = (free - gapT * (top.length - 1)) / 2;
+        let ex = t0 + edge;
+        top.forEach((e) => { const x = Math.round(ex); L.extras.push({ kind: e.kind, x, y: e.y }); if (e.kind === 'meet') L.rugs.push({ kind: 'meet', x, y: e.y, w: 80, h: 40 }); ex += e.w + gapT; });
+        if (top.length) q.max = Math.min(q.max, Math.round(t0 + edge) - 16);
+        if (top.length && edge >= 64) L.plants.push({ x: Math.round(t0 + edge / 2) - 7, y: wallH + 26 }, { x: Math.round(t1 - edge / 2) - 7, y: wallH + 26 });
+        if (Lw >= 220) L.extras.push({ kind: 'foos', x: sofa.x + 84, y: sofa.y + 46 }); }
+      L.rugs.push({ kind: 'lounge', x: sofa.x - 2, y: sofa.y + 21, w: Math.min(W - 8 - (sofa.x - 2), 62 + Math.max(0, Lw - 128)), h: Math.min(56, H - 8 - (sofa.y + 21)) });
       L.lights = [[L.lamp.x + 4, L.lamp.y + 24, 56, 34, 0.95], [cart.x + 12, cart.y + 4, 30, 22, 0.6]];
     } else {
       const y0 = lastDy + 21;
@@ -128,28 +151,35 @@
       table = { x: sofa.x + 64, y: y0 + 13 };
       cart = { x: W - 56, y: y0 + 10 };
       L.plants.push({ x: W - 19, y: wallH - 13 });
-      const fy = y0 + 31, st = cart.x - (roomy ? 17 : 20);
+      // where the idle stand: on the sofa, in the gap by the coffee machine, or close up against the furniture, so that
+      // the strip along the bottom wall stays free for whoever walks past (the lanes come down at both ends of it)
+      const yt = y0 + 28, gap = cart.x - (table.x + 24);
+      const foos = gap >= 104 ? Math.round(table.x + 24 + (gap - 44) / 2) : 0;     // a long band has a foosball table between the sofa and the coffee
+      if (foos) L.extras.push({ kind: 'foos', x: foos, y: y0 + 2 });
       spots = [
-        { x: cart.x + 36, y: fy, coffee: true }, { x: sofa.x + 16, y: sofa.y + 27, sofa: true }, { x: st, y: fy },
-        { x: sofa.x + 43, y: sofa.y + 27, sofa: true }, roomy ? { x: sofa.x - 11, y: fy } : { x: table.x + 12, y: fy + 3 }, { x: roomy ? table.x + 12 : st - 12, y: fy + (roomy ? 3 : 6) },
-        { x: cart.x + 14, y: fy + 5 }, { x: sofa.x + 29, y: fy + 6 },
+        { x: gap >= 60 ? cart.x - 13 : Math.round(table.x + 24 + gap / 2), y: gap >= 28 ? y0 + 24 : yt, coffee: true },
+        { x: sofa.x + 16, y: sofa.y + 27, sofa: true }, { x: sofa.x + 43, y: sofa.y + 27, sofa: true },
+        { x: table.x + 12, y: yt }, { x: cart.x + 15, y: yt }, { x: sofa.x + 58, y: yt }, { x: sofa.x + 30, y: yt }, { x: sofa.x + 2, y: yt },
       ];
-      L.rugs.push({ kind: 'you', x: 4, y: wd.by - 12, w: W - 9, h: q.y + 8 - (wd.by - 12) });
-      L.rugs.push({ kind: 'lounge', x: sofa.x - 3, y: y0 + 17, w: table.x + 30 - (sofa.x - 3), h: 22 });
+      L.rugs.push({ kind: 'you', x: 4, y: wd.by - 12, w: W - 9, h: q.rug - (wd.by - 12) });
+      L.rugs.push({ kind: 'lounge', x: sofa.x - 3, y: y0 + 17, w: (foos ? foos + 50 : table.x + 30) - (sofa.x - 3), h: 22 });
       L.lights = [[table.x - 10, y0 + 20, 66, 27, 0.8], [cart.x + 12, cart.y + 8, 34, 24, 0.7]];
     }
     if (desks.length) {
       const a = desks[0], b = desks[Math.min(cols, n) - 1];
-      L.rugs.push({ kind: 'pen', x: a.x0 - 6, y: dy0 - 13, w: b.x0 + b.w + 6 - (a.x0 - 6), h: lastDy + 19 - (dy0 - 13) });
+      L.rugs.push({ kind: 'pen', x: a.x0 - 6, y: dy0 - 13, w: b.x0 + b.w + 6 - (a.x0 - 6) + (L.sides.length ? 14 : 0), h: lastDy + 19 - (dy0 - 13) });
     }
     spots.forEach((p) => { p.x = clamp(p.x, 11, W - 12); p.y = clamp(p.y, wallH + 8, H - 6); });
     Object.assign(L, { H, sofa, table, cart, spots });
-    // what a robot has to walk around (floor footprints, with the tall parts behind them)
-    L.obst.push({ x: wd.x, y: wd.by - 15, w: wd.w, h: 36 });
+    // what a robot has to walk around (floor footprints, with the tall parts behind them); the floor right in front of
+    // your desk is kept clear as well, so that nobody walks across the plate with your name
+    L.obst.push({ x: wd.x, y: wd.by - 15, w: wd.w, h: 36 + clamp(dy0 - 21 - (wd.by + 21), 0, 16) });
     desks.forEach((d) => L.obst.push({ x: d.x0, y: d.dy - 11, w: d.w, h: 27 }));
     L.obst.push({ x: sofa.x, y: sofa.y, w: 58, h: 24 }, { x: table.x, y: table.y, w: 24, h: 12 }, { x: cart.x, y: cart.y - 14, w: 28, h: 32 });
     L.obst.push({ x: shelf.x, y: wallH, w: shelf.w, h: shelf.bottom - wallH });
     L.plants.forEach((p) => L.obst.push({ x: p.x + 2, y: p.y + 8, w: 10, h: 14 }));
+    L.sides.forEach((u) => L.obst.push({ x: u.x, y: u.dy + 3, w: 12, h: 13 }));
+    L.extras.forEach((e) => L.obst.push(e.kind === 'meet' ? { x: e.x + 14, y: e.y + 5, w: 52, h: 31 } : e.kind === 'board' ? { x: e.x, y: e.y + 27, w: 30, h: 6 } : e.kind === 'foos' ? { x: e.x, y: e.y + 5, w: 44, h: 22 } : e.kind === 'pong' ? { x: e.x, y: e.y + 4, w: 56, h: 26 } : { x: e.x, y: e.y + 2, w: 40, h: 12 }));
     if (L.lamp) L.obst.push({ x: L.lamp.x, y: L.lamp.y + 27, w: 8, h: 4 });
     if (L.cooler) L.obst.push({ x: L.cooler.x, y: wallH, w: 10, h: 8 });
     if (L.cabinet) L.obst.push({ x: L.cabinet.x, y: wallH, w: 22, h: 9 });
@@ -177,11 +207,12 @@
     let L = makeLayout(240, 0, 2), nav = null;
     let bg = null, bgx = null, lc = null, lcx = null, bgKey = '', full = true;
     let crew = [], byId = new Map(), queue = [], spotOf = new Map(), hadCrew = false;
-    let simT = 0, lastT = null, framed = false, drew = false;
+    let simT = 0, lastT = null, framed = false, drew = false, goSeq = 0, catchUp = -1e9;
     let lt = lightAt(num(nowFn(), 0)), tints = new Map(), tintKey = '';
     let flights = [], trayPop = -1e9, trayShown = 0, focusId = null, hoverId = null;
     let running = false, raf = 0, lastDraw = -1e9, needsDraw = true, destroyed = false, onscreen = true, io = null;
     let fontTag = '', fontNum = '', tw = new Map();
+    const ratio = () => clamp(num(root.devicePixelRatio, 1), 0.5, 4);
 
     // ── pen: every rectangle lands on whole device pixels ──
     let G = g, CL = null, inkOf = null, ink = '';                       // inkOf/ink: the context and colour of the last rectangle
@@ -221,7 +252,7 @@
       // rugs mark the zones
       L.rugs.forEach((r) => {
         if (r.w < 12 || r.h < 8) return;
-        const c = r.kind === 'you' ? ['#2f6b5a', '#3c8069', '#e3bb62', '#245243'] : r.kind === 'pen' ? ['#3b5080', '#4a639b', '#d9cba6', '#2f4069'] : ['#8c3f55', '#a5536d', '#e8cc92', '#6f3044'];
+        const c = r.kind === 'you' ? ['#2f6b5a', '#3c8069', '#e3bb62', '#245243'] : r.kind === 'pen' ? ['#3b5080', '#4a639b', '#d9cba6', '#2f4069'] : r.kind === 'meet' ? ['#a8742c', '#c08d42', '#f1dfa8', '#845a1e'] : ['#8c3f55', '#a5536d', '#e8cc92', '#6f3044'];
         R(r.x + 1, r.y + r.h, r.w - 1, 1, SHADOW);
         R(r.x + 1, r.y, r.w - 2, r.h, c[2]); R(r.x, r.y + 1, r.w, r.h - 2, c[2]);
         R(r.x + 2, r.y + 2, r.w - 4, r.h - 4, c[0]);
@@ -288,7 +319,9 @@
       L.plants.forEach((p) => items.push({ y: p.y + 22, f: () => paintPlant(p) }));
       if (L.lamp) items.push({ y: L.lamp.y + 31, f: paintLamp });
       if (L.cooler) items.push({ y: L.cooler.y + 27, f: paintCooler });
-      if (L.cabinet) items.push({ y: L.cabinet.y + 26, f: paintCabinet });
+      if (L.cabinet) items.push({ y: L.cabinet.y + 26, f: () => paintCabinet(L.cabinet) });
+      L.sides.forEach((u) => items.push({ y: u.dy + 16, f: () => paintSide(u) }));
+      L.extras.forEach((e) => items.push({ y: e.y + (e.kind === 'meet' ? 36 : e.kind === 'board' ? 33 : e.kind === 'pong' ? 31 : e.kind === 'bags' ? 14 : 27), f: () => paintExtra(e) }));
       items.sort((a, b) => a.y - b.y).forEach((it) => it.f());
       // the hour: the room's light (the day through the windows, or lamps in the dark) is multiplied over the room,
       // then the sky goes into the windows
@@ -319,6 +352,10 @@
         paintGlass(w);
         G.restore(); inkOf = null;
       });
+      // the plate with your name is part of the desk: whoever walks in front of it covers it, as it covers the desk
+      { const u = dpr, w = Math.round(textW('You', false) + 10 * u), h = Math.round(14 * u), cut = Math.max(1, Math.round(k)), X = Math.round((wd.x + wd.w / 2) * k - w / 2), Y = Math.round((wd.by + 13) * k);
+        plate(G, X, Y, w, h, cut, '#f3c552');
+        G.font = fontTag; G.textAlign = 'left'; G.textBaseline = 'alphabetic'; G.fillStyle = INK; G.fillText('You', X + Math.round(5 * u), Y + Math.round(10.5 * u)); inkOf = null; }
     }
 
     function paintGlass(w) {
@@ -444,13 +481,73 @@
       box(x, y + 11, 10, 16, '#eef1f6'); R(x + 1, y + 12, 8, 1, '#ffffff'); R(x + 7, y + 13, 2, 13, '#cfd5e0'); R(x + 3, y + 15, 2, 2, '#3f8ff5'); R(x + 6, y + 15, 2, 2, '#f0608f'); R(x + 2, y + 19, 6, 3, '#b9c0cf');
     }
 
-    function paintCabinet() {
-      const x = L.cabinet.x, y = L.cabinet.y;
+    function paintCabinet(c) {
+      const x = c.x, y = c.y;
       R(x + 1, y + 25, 22, 2, SHADOW);
       R(x + 6, y - 3, 10, 4, INK); R(x + 7, y - 2, 8, 3, PAPER); R(x + 8, y - 1, 5, 1, '#b7b0a0');
       box(x + 3, y, 16, 9, '#e9edf3'); R(x + 4, y + 1, 14, 1, '#ffffff'); R(x + 5, y + 4, 12, 2, '#2a2238'); R(x + 6, y + 5, 10, 1, PAPER); R(x + 16, y + 2, 1, 1, '#63e56f'); R(x + 4, y + 7, 14, 1, '#c3cad8');
       R(x, y + 8, 22, 18, INK); R(x + 1, y + 9, 20, 16, '#b9a27d'); R(x + 1, y + 9, 20, 1, '#d6c19c');
       R(x + 2, y + 11, 18, 6, '#a58e6a'); R(x + 2, y + 18, 18, 6, '#a58e6a'); R(x + 9, y + 13, 4, 1, INK); R(x + 9, y + 20, 4, 1, INK);
+    }
+    // a low cabinet beside a desk, with a plant, a few books or a box on it
+    function paintSide(u) {
+      const x = u.x, y = u.dy;
+      R(x + 1, y + 16, 12, 2, SHADOW);
+      R(x, y + 3, 12, 13, INK); R(x + 1, y + 4, 10, 11, '#c9bda8'); R(x + 1, y + 4, 10, 1, '#e3d8c4'); R(x + 1, y + 9, 10, 1, '#978b78'); R(x + 1, y + 14, 10, 1, '#b0a48e'); R(x + 5, y + 6, 2, 1, INK); R(x + 5, y + 11, 2, 1, INK);
+      if (u.v === 0) { R(x + 3, y, 6, 4, INK); R(x + 4, y + 1, 4, 2, '#c96a45'); box(x + 1, y - 5, 6, 6, '#3f9a5a'); box(x + 5, y - 7, 6, 7, '#58b56a'); R(x + 6, y - 6, 2, 1, '#8ad894'); R(x + 2, y - 4, 2, 1, '#6fc47d'); }
+      else if (u.v === 1) { R(x + 2, y + 1, 9, 3, INK); R(x + 3, y + 2, 7, 1, '#d9534f'); R(x + 1, y - 2, 8, 3, INK); R(x + 2, y - 1, 6, 1, '#5bc0de'); R(x + 3, y - 4, 7, 2, INK); R(x + 4, y - 4, 5, 1, '#f0ad4e'); }
+      else { R(x + 2, y - 3, 9, 7, INK); R(x + 3, y - 2, 7, 5, '#c9a26a'); R(x + 3, y - 2, 7, 1, '#e0bd86'); R(x + 6, y - 2, 1, 5, '#a8824e'); }
+    }
+    // what a wide room has room for: a meeting table, a planning board, a foosball table, a table-tennis table, beanbags
+    function paintExtra(e) {
+      const x = e.x, y = e.y;
+      if (e.kind === 'meet') {                                           // on its own rug, which is painted with the rugs
+        const tx = x + 18, ty = y + 14;
+        const seat = (cx, top, front) => { R(cx - 4, top, 8, 10, INK); R(cx - 5, top + 1, 10, 9, INK); R(cx - 4, top + 1, 8, 9, '#5f6f86'); R(cx - 3, top + 2, 6, 7, '#8fa0b8'); R(cx - 3, top + 2, 6, 1, '#b5c3d6'); if (front) { R(cx - 4, top + 10, 2, 2, INK); R(cx + 2, top + 10, 2, 2, INK); } };
+        seat(tx + 11, ty - 9, false); seat(tx + 33, ty - 9, false);
+        R(tx + 1, ty + 18, 44, 2, SHADOW);
+        R(tx + 2, ty + 14, 3, 4, INK); R(tx + 39, ty + 14, 3, 4, INK);
+        R(tx, ty, 44, 15, INK); R(tx + 1, ty + 1, 42, 10, '#d9b27c'); R(tx + 1, ty + 1, 42, 1, '#ecc995'); R(tx + 1, ty + 11, 42, 3, '#9a6d3c'); R(tx + 1, ty + 11, 42, 1, '#b5864e');
+        R(tx + 17, ty + 2, 9, 6, INK); R(tx + 18, ty + 3, 7, 4, '#4f6f8a'); R(tx + 18, ty + 3, 7, 1, '#6c8fad'); R(tx + 16, ty + 8, 11, 2, '#c9ccd9');
+        R(tx + 4, ty + 3, 7, 6, PAPER_D); R(tx + 4, ty + 3, 6, 5, PAPER); R(tx + 5, ty + 4, 4, 1, '#b7b0a0'); R(tx + 5, ty + 6, 3, 1, '#b7b0a0');
+        R(tx + 32, ty + 4, 6, 5, PAPER); R(tx + 33, ty + 5, 4, 1, '#b7b0a0'); R(tx + 33, ty + 7, 3, 1, '#b7b0a0');
+        R(tx + 12, ty + 3, 4, 4, INK); R(tx + 13, ty + 4, 2, 2, '#f4efe2'); R(tx + 28, ty + 6, 4, 4, INK); R(tx + 29, ty + 7, 2, 2, '#f0608f');
+        seat(tx + 11, ty + 9, true); seat(tx + 33, ty + 9, true);
+      } else if (e.kind === 'board') {                                   // columns of coloured notes: who does what, in no words
+        R(x + 2, y + 32, 28, 2, SHADOW);
+        R(x + 3, y + 18, 2, 14, INK); R(x + 25, y + 18, 2, 14, INK); R(x + 1, y + 31, 6, 2, INK); R(x + 23, y + 31, 6, 2, INK);
+        R(x, y, 30, 20, INK); R(x + 1, y + 1, 28, 18, '#f7f4ea'); R(x + 1, y + 1, 28, 1, '#ffffff'); R(x + 1, y + 18, 28, 1, '#d9d3c2');
+        R(x + 10, y + 2, 1, 16, '#d9d3c2'); R(x + 19, y + 2, 1, 16, '#d9d3c2'); R(x + 2, y + 5, 26, 1, '#d9d3c2');
+        R(x + 3, y + 3, 5, 1, '#8d90a6'); R(x + 12, y + 3, 5, 1, '#8d90a6'); R(x + 21, y + 3, 5, 1, '#8d90a6');
+        [[3, 7, '#f7ae2e'], [6, 11, '#f0608f'], [3, 14, '#2ec4b6'], [12, 7, '#9273f2'], [15, 11, '#63c655'], [12, 14, '#f7ae2e'], [21, 7, '#f0608f'], [24, 12, '#3f8ff5']].forEach((p) => R(x + p[0], y + p[1], 3, 3, p[2]));
+        R(x + 4, y + 20, 22, 2, INK); R(x + 5, y + 20, 20, 1, '#8d90a6'); R(x + 8, y + 19, 4, 1, '#e2504a'); R(x + 14, y + 19, 4, 1, '#3f8ff5');
+      } else if (e.kind === 'foos') {
+        R(x + 2, y + 27, 42, 2, SHADOW);
+        R(x + 3, y + 22, 3, 6, INK); R(x + 38, y + 22, 3, 6, INK);
+        R(x, y + 5, 44, 13, INK); R(x + 1, y + 6, 42, 11, '#8a5636'); R(x + 1, y + 6, 42, 1, '#a66c45'); R(x + 3, y + 8, 38, 8, '#2f8a50'); R(x + 3, y + 8, 38, 1, '#3fae62'); R(x + 21, y + 8, 2, 8, '#bfe6c8');
+        R(x, y + 17, 44, 6, INK); R(x + 1, y + 18, 42, 4, '#a66c45'); R(x + 1, y + 18, 42, 1, '#c98a5c'); R(x + 20, y + 19, 4, 2, INK);
+        for (let i = 0; i < 4; i++) { const rx = x + 7 + i * 10, col = i % 2 ? '#3f8ff5' : '#e2504a'; R(rx, y + 3, 1, 15, '#c9ccd9'); R(rx - 1, y, 3, 4, INK); R(rx, y + 1, 1, 2, col); R(rx - 1, y + 9 + (i % 2) * 3, 3, 3, INK); R(rx - 1, y + 9 + (i % 2) * 3, 3, 2, col); }
+        R(x + 25, y + 12, 1, 1, '#ffffff');
+      } else if (e.kind === 'pong') {
+        R(x + 2, y + 30, 54, 2, SHADOW);
+        R(x + 4, y + 24, 3, 7, INK); R(x + 49, y + 24, 3, 7, INK); R(x + 26, y + 24, 3, 6, INK);
+        R(x, y + 4, 56, 18, INK); R(x + 1, y + 5, 54, 16, '#2f6fb5'); R(x + 1, y + 5, 54, 1, '#4d8fd6');
+        R(x + 2, y + 6, 52, 1, '#e8f1fb'); R(x + 2, y + 19, 52, 1, '#e8f1fb'); R(x + 2, y + 6, 1, 14, '#e8f1fb'); R(x + 53, y + 6, 1, 14, '#e8f1fb'); R(x + 3, y + 12, 50, 1, '#7fb0e6');
+        R(x, y + 21, 56, 4, INK); R(x + 1, y + 22, 54, 2, '#1f4f86');
+        R(x + 26, y + 1, 4, 2, INK); R(x + 27, y + 2, 2, 20, INK); R(x + 27, y + 3, 2, 18, '#f4efe2'); R(x + 26, y + 21, 4, 2, INK);
+        disc(x + 13, y + 11, 3, INK); disc(x + 13, y + 11, 2, '#e2504a'); R(x + 16, y + 12, 4, 2, INK); R(x + 16, y + 12, 3, 1, '#c98a5c');
+        R(x + 40, y + 9, 2, 2, '#ffffff'); R(x + 40, y + 11, 2, 1, 'rgba(38,24,44,0.3)');
+      } else {                                                           // two beanbags and a little table between them
+        const bag = (bx, by, c0, c1, c2) => {
+          R(bx + 1, by + 11, 13, 2, SHADOW);
+          R(bx + 3, by, 8, 1, INK); R(bx + 1, by + 1, 12, 2, INK); R(bx, by + 3, 14, 7, INK); R(bx + 1, by + 10, 12, 2, INK);
+          R(bx + 3, by + 1, 8, 2, c1); R(bx + 1, by + 3, 12, 7, c0); R(bx + 2, by + 2, 10, 1, c1); R(bx + 1, by + 8, 12, 2, c2); R(bx + 2, by + 10, 10, 1, c2); R(bx + 4, by + 5, 6, 1, c2); R(bx + 5, by + 4, 4, 1, c1);
+        };
+        bag(x, y + 1, '#3a9a92', '#6cc7be', '#27706a'); bag(x + 26, y + 1, '#e08a3c', '#f5b56e', '#b0621f');
+        R(x + 17, y + 12, 7, 2, SHADOW); R(x + 19, y + 7, 2, 6, INK); R(x + 17, y + 12, 6, 1, INK);
+        R(x + 15, y + 4, 10, 4, INK); R(x + 16, y + 5, 8, 2, '#d5a06a'); R(x + 16, y + 5, 8, 1, '#ecc995');
+        R(x + 18, y + 1, 4, 4, INK); R(x + 19, y + 2, 2, 2, '#f4efe2');
+      }
     }
 
     function rebuildRoom() {
@@ -460,31 +557,52 @@
       inkOf = null; G = bgx || g; paintRoom(); G = g; inkOf = null; full = true;
     }
 
-    // ───────── ways around the furniture ─────────
+    // ───────── ways around the furniture, and around each other ─────────
     function buildNav() {
       const cs = 2, nc = Math.ceil(L.W / cs) + 1, nr = Math.ceil(L.H / cs) + 1, blk = new Uint8Array(nc * nr);
-      const x0 = 9, x1 = L.W - 9, y0 = L.wallH + 4, y1 = L.H - 5;
+      const x0 = 9, x1 = L.W - 9, y0 = L.wallH + 4, y1 = L.H - (L.tight ? 1 : 5);   // (the tight room has no height to spare: past those who stand in its lounge the way is along the very edge)
       const fill = (x, y, w, h, v) => { for (let r = Math.max(0, Math.floor(y / cs)); r < nr && r * cs + 1 <= y + h; r++) for (let c = Math.max(0, Math.floor(x / cs)); c < nc && c * cs + 1 <= x + w; c++) if (c * cs + 1 >= x && r * cs + 1 >= y) blk[r * nc + c] = v; };
       for (let r = 0; r < nr; r++) for (let c = 0; c < nc; c++) { const x = c * cs + 1, y = r * cs + 1; if (x < x0 || x > x1 || y < y0 || y > y1) blk[r * nc + c] = 1; }
       L.obst.forEach((o) => fill(o.x - 6, o.y - 2, o.w + 12, o.h + 4, 1));
       L.desks.forEach((d) => fill(d.sx - 3, d.dy - 15, 6, 14, 0));          // the way into the chair
       nav = { cs, nc, nr, blk, prev: new Int32Array(nc * nr), qu: new Int32Array(nc * nr) };
     }
-    // A way from a to b around the furniture, and around the others who stand in the open when that is not a long detour.
-    function findPath(ax, ay, bx, by, self) {
+    // What a robot that stands still covers, for the others to walk around: its whole figure, not just its feet. In a
+    // narrow room the idle stand close up against the furniture and are passed along the bottom wall, a little nearer.
+    const reach = (f) => (!L.wide && f.y >= L.lastDy + 40 ? (L.tight ? 12 : 13) : L.tight && f.y <= L.q.y + 2 ? 14.5 : 16);   // f: where it stands (its feet)
+    const inChair = (o) => o.sitKind === 'desk' && o.seated;                 // in its chair behind its own desk (until its first step): nobody walks there
+    const afoot = (o) => !!o.path && o.moved && o.waitFor === null;          // really on its way: not at rest, not still on its place, not waiting for its place
+    // where one who is not walking stands (its feet): one who has just reached the sofa counts as sitting on it already
+    const stand = (o) => { const f = feet(o); if (o.sitKind === 'sofa' && o.seated) f.y = Math.round((o.y - 6) * k) / k; return f; };
+    const wayLen = (x, y, pts) => { let d = 0; for (let i = 0; i < pts.length; i++) { d += Math.hypot(pts[i].x - x, pts[i].y - y); x = pts[i].x; y = pts[i].y; } return d; };
+    // A way from a to b around the furniture and around everybody who stands in the open: { way, push }. It keeps
+    // clear of the places the others are on their way to as well, where that is possible, so nobody has to turn back
+    // when they get there. Where there is no way around those who stand, or only a very long one, it is the plain
+    // way and the walker squeezes past (push).
+    function findPath(ax, ay, bx, by, self, shun) {
       if (!nav) buildNav();
       const { cs, nc, nr, blk } = nav, held = [];
+      // (the strip right in front of where the way starts and ends stays open, so it leaves and arrives from the front
+      // and not sideways through whatever stands next to it)
+      const front = (x, y, px, py) => Math.abs(x - px) <= 3 && y >= py - 1 && y <= py + 20;
+      const keepOff = (fx, fy, rx, ry) => { for (let r = Math.max(0, Math.floor((fy - ry) / cs)); r < nr && r * cs + 1 <= fy + ry; r++) for (let c = Math.max(0, Math.floor((fx - rx) / cs)); c < nc && c * cs + 1 <= fx + rx; c++) { const i = r * nc + c, x = c * cs + 1, y = r * cs + 1; if (!blk[i] && Math.abs(x - fx) <= rx && Math.abs(y - fy) <= ry && !front(x, y, ax, ay) && !front(x, y, bx, by)) { blk[i] = 1; held.push(i); } } };
       crew.forEach((o) => {
-        if (o === self || !present(o) || o.path || !o.goal || o.sitKind) return;
-        if (Math.hypot(o.x - ax, o.y - ay) < 10 || Math.hypot(o.x - bx, o.y - by) < 10) return;
-        for (let r = Math.floor((o.y - 3) / cs); r <= Math.floor((o.y + 3) / cs); r++) for (let c = Math.floor((o.x - 6) / cs); c <= Math.floor((o.x + 6) / cs); c++) { const i = r * nc + c; if (r >= 0 && c >= 0 && r < nr && c < nc && !blk[i]) { blk[i] = 1; held.push(i); } }
+        if (o === self || !present(o) || afoot(o) || inChair(o)) return;    // those on their way give way to each other in step()
+        const f = stand(o); keepOff(f.x, f.y, 11.5, reach(f));
       });
-      const len = (pts) => { let d = 0, x = ax, y = ay; pts.forEach((q2) => { d += Math.hypot(q2.x - x, q2.y - y); x = q2.x; y = q2.y; }); return d; };
-      const polite = held.length ? route(ax, ay, bx, by) : null;
+      if (shun && shun.sweep) { keepOff(shun.x, shun.y, 13, 17); for (let j = 0; j < shun.sweep.length; j += 2) keepOff(shun.sweep[j], shun.sweep[j + 1], 13, 17); }   // and the stretch ahead of one who is coming
+      const around = route(ax, ay, bx, by), n0 = held.length;
+      if (!n0) return { way: around || [{ x: bx, y: by }], push: false };
+      crew.forEach((o) => {                                               // where the others will stand
+        if (o === self || !present(o) || !o.goal || o.goal.kind === 'desk' || !(o.pending || o.path)) return;
+        const f = { x: o.goal.x, y: o.goal.sofa ? o.goal.y - 6 : o.goal.y }; keepOff(f.x, f.y, 11.5, reach(f));
+      });
+      const clear = held.length > n0 ? route(ax, ay, bx, by) : null;
       held.forEach((i) => { blk[i] = 0; });
-      const direct = route(ax, ay, bx, by);
-      if (polite && (!direct || len(polite) <= len(direct) * 1.5 + 24)) return polite;
-      return direct || [{ x: bx, y: by }];
+      const direct = route(ax, ay, bx, by), most = direct ? wayLen(ax, ay, direct) * 2.2 + 60 : 1e9;
+      if (clear && wayLen(ax, ay, clear) <= most) return { way: clear, push: false };
+      if (around && wayLen(ax, ay, around) <= most) return { way: around, push: false };
+      return { way: direct || [{ x: bx, y: by }], push: true };
     }
     function route(ax, ay, bx, by) {
       const { cs, nc, nr, blk, prev, qu } = nav;
@@ -511,11 +629,13 @@
     }
 
     // ───────── the crew ─────────
-    // the queue: evenly spaced, wide enough for neighbours' name tags to stand side by side when there is room for that
+    // the queue: evenly spaced, wide enough for the two longest names of the whole crew to stand side by side when there
+    // is room for that, so that those who stand in it do not shuffle when another joins
     let qPitch = 26;
     const spaceQueue = () => {
-      let need = L.q.pitch;
-      for (let i = 0; i + 1 < queue.length; i++) { const a = byId.get(queue[i]), b = byId.get(queue[i + 1]); if (a && b) need = Math.max(need, Math.ceil(((textW(a.name, false) + textW(b.name, false)) / 2 + 14 * dpr) / k)); }
+      let w1 = 0, w2 = 0;
+      crew.forEach((a) => { const w = a.name ? textW(a.name, false) : 0; if (w > w1) { w2 = w1; w1 = w; } else if (w > w2) w2 = w; });
+      const need = Math.max(L.q.pitch, Math.ceil(((w1 + w2) / 2 + 14 * dpr) / k));
       qPitch = Math.max(8, Math.min(need, 40, queue.length > 1 ? (L.q.max - L.q.x0) / (queue.length - 1) : 40));
     };
     const slotX = (j) => L.q.x0 + j * qPitch;
@@ -525,60 +645,86 @@
       const d = L.desks[a.desk]; return d ? { kind: 'desk', x: d.sx, y: d.sy } : { kind: 'desk', x: 20, y: L.wallH + 20 };
     };
     const seatOf = (goal) => (goal.kind === 'desk' ? 'desk' : goal.sofa ? 'sofa' : '');
-    const toDesk = (a) => { const d = L.desks[a.desk]; a.x = d ? d.sx : 20; a.y = d ? d.sy : L.wallH + 20; a.path = null; a.pending = false; a.goal = { kind: 'desk', x: a.x, y: a.y }; a.sitKind = 'desk'; a.sit = 1; a.face = 0; a.dx = 0; };
-    const snapTo = (a, goal) => { a.goal = goal; a.x = goal.x; a.y = goal.y; a.path = null; a.pending = false; a.sitKind = seatOf(goal); a.sit = a.sitKind ? 1 : 0; a.face = 0; a.dx = 0; };
-
-    // mode: 'first' = start at the desks and walk, 'snap' = stand in place at once, '' = walk from where they are
-    function retarget(mode) {
+    // How deep in the lounge a place lies: the way to it from the middle of the desks, around the furniture alone.
+    const deepOf = (g) => {
+      if (!L.deep) L.deep = new Map();
+      const key = g.x + ',' + g.y; let d = L.deep.get(key);
+      if (d === undefined) {
+        if (!nav) buildNav();
+        const xs = L.desks.map((v) => v.cx), ox = xs.length ? (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2 : L.W / 2, oy = L.dy0 - 14, w = route(ox, oy, g.x, g.y);
+        d = w ? wayLen(ox, oy, w) : 0; L.deep.set(key, d);
+      }
+      return d;
+    };
+    // put down at a place, at rest
+    const rest = (a, goal) => { a.goal = goal; a.x = goal.x; a.y = goal.y; a.path = null; a.pending = false; a.go = 0; a.held = 0; a.sat = 0; a.stuck = 0; a.push = false; a.barge = null; a.waitFor = null; a.waitOn = null; a.hold = null; a.sweep = null; a.sitKind = seatOf(goal); a.seated = !!a.sitKind; a.sit = a.sitKind ? 1 : 0; a.face = 0; a.dx = 0; };
+    const toDesk = (a) => { const d = L.desks[a.desk]; rest(a, { kind: 'desk', x: d ? d.sx : 20, y: d ? d.sy : L.wallH + 20 }); };
+    const turn = (a) => { const p = findPath(a.x, a.y, a.goal.x, a.goal.y, a); a.path = p.way; a.push = p.push; a.replan = simT; };   // a way to its goal from where it is now
+    // who stands where: the queue in the order they came, a place in the lounge for each idle one
+    const lineUp = () => {
       queue = queue.filter((id) => { const a = byId.get(id); return a && a.state === 'needs'; });
       crew.forEach((a) => { if (a.state === 'needs' && queue.indexOf(a.id) < 0) queue.push(a.id); });
       spaceQueue();
       Array.from(spotOf.keys()).forEach((id) => { const a = byId.get(id); if (!a || a.state !== 'idle') spotOf.delete(id); });
       crew.forEach((a) => { if (a.state === 'idle' && !spotOf.has(a.id)) { const used = new Set(spotOf.values()); let j = 0; while (used.has(j)) j++; spotOf.set(a.id, j); } });
+    };
+
+    // mode: 'first' = start at the desks and walk, 'snap' = stand in place at once, '' = walk from where they are
+    function retarget(mode) {
+      lineUp();
       const movers = [];
       crew.forEach((a) => {
-        if (mode === 'first' || !a.placed) { toDesk(a); a.placed = true; if (mode === 'first') a.alpha = 1; }
+        if (mode === 'first' || !a.placed) { toDesk(a); a.placed = true; if (mode === 'first') a.alpha = !present(a) || (framed && !reduced) ? 0 : 1; }   // into a room already on screen they fade in
         const goal = goalOf(a);
-        if (reduced || mode === 'snap' || a.state === 'unknown') { snapTo(a, goal); return; }
+        if (reduced || mode === 'snap' || a.state === 'unknown') { rest(a, goal); return; }
         const cur = a.goal;
-        if (cur && cur.kind === goal.kind && Math.abs(cur.x - goal.x) < 0.5 && Math.abs(cur.y - goal.y) < 0.5) return;
+        if (cur && cur.kind === goal.kind && Math.abs(cur.x - goal.x) < 0.5 && Math.abs(cur.y - goal.y) < 0.5) return;   // the same place as before: nothing starts again
         a.leaves = !!cur && cur.kind === 'queue' && goal.kind !== 'queue';
-        a.goal = goal; a.path = null; a.pending = true;
-        movers.push(a);
+        a.goal = goal;
+        if (a.path) { turn(a); return; }                                  // on its way already: it turns where it is
+        if (Math.abs(a.x - goal.x) < 0.5 && Math.abs(a.y - goal.y) < 0.5) { a.pending = false; a.sitKind = seatOf(goal); a.seated = !!a.sitKind; return; }   // called back before it left
+        a.pending = true; a.hold = null; movers.push(a);
       });
       // they set off one after the other so nobody walks on another's heels: first those who leave the queue, then
-      // the queue closes up and fills from the front, then everybody else, shortest way first
-      const rank = (a) => (a.leaves ? -2e6 : 0) + (a.goal.kind === 'queue' ? a.goal.x - 1e6 : Math.hypot(a.goal.x - a.x, a.goal.y - a.y));
+      // the queue closes up and fills from the front, then those who go back to their desks (shortest way first),
+      // then those who go to the lounge (the deepest place first)
+      movers.forEach((a) => { a.far = wayLen(a.x, a.y, findPath(a.x, a.y, a.goal.x, a.goal.y, a).way); });
+      const rank = (a) => (a.leaves ? -2e6 : 0) + (a.goal.kind === 'queue' ? a.goal.x - 1e6 : a.goal.kind === 'lounge' ? 5e5 - deepOf(a.goal) : a.far);
       movers.sort((a, b) => (rank(a) - rank(b)) || (a.desk - b.desk));
-      movers.forEach((a, i) => { a.delay = (mode === 'first' ? 400 : 150) + i * 26000 / pace(); });
+      movers.forEach((a, i) => { a.delay = (mode === 'first' ? 400 : 150) + i * 26000 / pace(); a.waited = 0; });
+      // The lounge fills from its far end: nobody takes a place there before those who have to pass that place are past
+      // it. (early() sees to it again when they set off, as some are held up on the way.)
+      const due = (a) => a.delay + a.far / pace() * 1000; let last = -1e9;
+      movers.filter((a) => a.goal.kind === 'lounge').sort((a, b) => (deepOf(b.goal) - deepOf(a.goal)) || (a.desk - b.desk)).forEach((a) => { if (due(a) < last + 350) a.delay += last + 350 - due(a); last = due(a); });
     }
 
     function setCrew(list) {
       const arr = Array.isArray(list) ? list : [], seen = new Set(), next = [], first = !hadCrew;
-      for (let i = 0; i < arr.length && next.length < 12; i++) {
+      const quiet = lastT != null && lastT < catchUp;                       // just back from a long while out of sight: what changed meanwhile is not played back
+      for (let i = 0; i < arr.length && next.length < 8; i++) {            // eight desks at most: the rest of a longer list is not shown
         const raw = arr[i]; if (!raw || typeof raw !== 'object') continue;
         const id = String(raw.id == null ? 'agent' + i : raw.id); if (seen.has(id)) continue; seen.add(id);
         let a = byId.get(id); const isNew = !a;
-        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', path: null, pending: false, delay: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
+        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', seated: true, path: null, pending: false, delay: 0, go: 0, held: 0, sat: 0, stuck: 0, waited: 0, far: 0, hold: null, why: 0, moved: false, waitFor: null, waitOn: null, sweep: null, push: false, barge: null, replan: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, tagAt: 0, bubAt: 0, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
         const state = own(STATES, raw.state) ? raw.state : 'unknown', was = a.state;
         const name = String(raw.name == null ? '' : raw.name);
         a.name = name.length > 14 ? name.slice(0, 13) + '…' : name;
         a.look = own(LOOKS, raw.look) ? raw.look : 'plain';
         a.hue = own(HUES, raw.hue) ? raw.hue : 'teal';
         const waiting = Math.max(0, num(raw.waiting, 0));
-        if (!isNew && waiting !== a.waiting) a.popAt = simT;
+        if (!isNew && !quiet && waiting !== a.waiting) a.popAt = simT;
         a.waiting = waiting;
         a.step = String(raw.step == null ? '' : raw.step).slice(0, 28);
         const bubble = String(raw.bubble == null ? '' : raw.bubble).slice(0, 32);
         const fresh = num(raw.fresh, 0);
         // a slip flies for a new result from an agent already in the room, not when its document first loads
-        if (!isNew && !first && was && was !== 'unknown' && fresh > a.fresh && !reduced) launchSlip(a, next.length);
+        if (!isNew && !first && !quiet && was && was !== 'unknown' && fresh > a.fresh && !reduced) launchSlip(a, next.length);
         a.fresh = fresh;
         if (state !== was) {
           const appearing = isNew || was === 'unknown' || was === '';
-          if (appearing) { a.placed = false; a.alpha = reduced ? 1 : 0; }   // the fade-in runs in step(), which reduced motion never calls
+          if (appearing) { a.placed = false; a.alpha = reduced || quiet ? 1 : 0; }   // the fade-in runs in step(), which reduced motion never calls
           const loud = state === 'due' || state === 'late' || state === 'error';   // on arrival only trouble speaks; later every change does
-          if (bubble && !reduced && state !== 'unknown' && (!appearing || loud)) { a.bubbleText = bubble; a.bubbleUntil = simT + 4200 + (appearing ? 600 : 0); } else a.bubbleUntil = -1;
+          if (bubble && !reduced && !quiet && state !== 'unknown' && (!appearing || loud)) { a.bubbleText = bubble; a.bubbleUntil = simT + 4200 + (appearing ? 600 : 0); } else a.bubbleUntil = -1;
         }
         a.state = state; a.desk = next.length;
         next.push(a);
@@ -588,7 +734,7 @@
       crew = next; byId = new Map(next.map((a) => [a.id, a]));
       if (next.length) hadCrew = true;
       if (changedRoom) { relayout(); retarget(first || !framed ? 'first' : 'snap'); }
-      else retarget(framed ? '' : 'first');
+      else retarget(!framed ? 'first' : quiet ? 'snap' : '');
       wake();
     }
 
@@ -616,43 +762,212 @@
     function applySize() {
       ch = Math.max(1, Math.round(L.H * k)); cssH = ch / dpr;
       canvas.width = cw; canvas.height = ch;
-      canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
+      canvas.style.width = cw / dpr + 'px'; canvas.style.height = cssH + 'px';   // the box is the backing store over the ratio, so one canvas pixel is one device pixel at any zoom
       g.imageSmoothingEnabled = false;
       fontTag = '600 ' + 11 * dpr + 'px ' + FONT_STACK; fontNum = '700 ' + 11 * dpr + 'px ' + FONT_STACK; tw = new Map();
       bgKey = ''; full = true; dirty = []; dirtyPrev = []; inkOf = null;
     }
     function resize(w) {
       w = clamp(num(w, 0), 0, 4096);
-      const d = clamp(num(root.devicePixelRatio, 1), 0.5, 4);
+      const d = ratio();
       if (sized && w === cssW && d === dpr && canvas.width === cw && canvas.height === ch) { wake(); return cssH; }   // nothing changed: nobody is moved
+      const W0 = L.W, H0 = L.H, had = sized;
       dpr = d; cssW = w; cw = Math.round(w * dpr); sized = true;
       fit(); applySize();
-      retarget(framed ? 'snap' : 'first');
+      if (!had || !framed) retarget('first');
+      else if (L.W !== W0 || L.H !== H0) reflow(W0, H0);                  // the same room in other pixels (a zoom, another screen) moves nobody
       if (drew) draw();
       wake();
       return cssH;
     }
+    // The room changed size under them: those at rest stand in their new places at once; those on their way keep
+    // walking from where the same spot of the old room now is.
+    function reflow(W0, H0) {
+      spaceQueue();
+      crew.forEach((a) => {
+        const goal = goalOf(a), d = L.desks[a.desk];
+        if (reduced || !present(a) || (!a.path && !a.pending)) { rest(a, goal); return; }
+        if (inChair(a) && d) { a.x = d.sx; a.y = d.sy; }                   // still in its chair, about to leave
+        else { a.x = clamp(a.x * L.W / W0, 9, L.W - 9); a.y = clamp(a.y * L.H / H0, L.wallH + 4, L.H - 5); if (!a.path) a.seated = false; }
+        a.goal = goal;
+        if (a.path) turn(a);
+      });
+    }
 
     // ───────── simulation ─────────
     const pace = () => 40 + clamp((L.W - 300) / 500, 0, 1) * 22;          // logical px a second; a wider room is crossed a little faster
-    function step(dt) {
-      crew.forEach((a) => {
-        if (a.state === 'unknown') { a.alpha = 0; return; }
-        a.alpha = Math.min(1, a.alpha + dt / 260);
-        if (a.pending) { a.delay -= dt; if (a.delay <= 0) { a.pending = false; a.path = findPath(a.x, a.y, a.goal.x, a.goal.y, a); } }
-        if (a.path) {
-          let left = pace() * dt / 1000;
-          while (left > 0 && a.path.length) {
-            const p = a.path[0], dx = p.x - a.x, dy = p.y - a.y, d = Math.hypot(dx, dy);
-            if (d <= left) { a.x = p.x; a.y = p.y; a.path.shift(); left -= d; a.dist += d; }
-            else { a.x += dx / d * left; a.y += dy / d * left; a.dist += left; if (Math.abs(dx) > Math.abs(dy) * 0.7) { a.face = 0; a.dx = dx > 0 ? 1 : -1; } else { a.dx = 0; a.face = dy < 0 ? 1 : 0; } left = 0; }
+    // Is somebody where this step would take a? 1 = another one is walking there, or is about to: wait until it has
+    // gone by; 2 = one stands there: look for a way around; 3 = the one who had a's own place has not left it yet: wait
+    // for that. Of two that walk into each other, or are about to, the one that set off first goes on. One that is
+    // simply ahead is waited for, whoever set off first. Getting away from somebody already close is always allowed.
+    function ahead(a, nx, ny) {
+      const sx = nx - a.x, sy = ny - a.y;
+      let res = 0;
+      for (let i = 0; i < crew.length; i++) {
+        const o = crew[i];
+        if (o === a || !present(o) || inChair(o)) continue;
+        if (o.waitFor === a.id || o.waitOn === a.id) continue;             // that one is waiting for a
+        const moving = afoot(o), f = moving ? o : stand(o);
+        const mine = !moving && Math.abs(a.goal.x - f.x) < 10.5 && Math.abs(a.goal.y - f.y) < reach(f) - 1;   // that one stands where a is going
+        if (mine && !o.pending && !o.path) continue;                       // it lives there: a's own place is simply that close to its neighbour's
+        if (!moving && !mine && a.push) continue;                          // with no way around, a squeezes past those who stand
+        const bx = moving || mine ? 12 : 10.5, by = moving || mine ? 16 : reach(f) - 1;
+        if (Math.abs(nx - f.x) < bx && Math.abs(ny - f.y) < by && sx * (f.x - a.x) + sy * (f.y - a.y) > 0) {   // on that one after this step, and not getting away from it
+          if (mine) { a.waitFor = o.id; return 3; }
+          if (!moving) { res = 2; continue; }
+          const p = o.path[0], ux = p ? p.x - o.x : 0, uy = p ? p.y - o.y : 0, ul = Math.hypot(ux, uy);
+          if (ul > 0.01 && ux * (a.x - o.x) + uy * (a.y - o.y) > 0) {      // that one is coming a's way
+            if (Math.abs(a.x - f.x) < 7 && Math.abs(a.y - f.y) < 10) continue;   // and they are well on each other already: going on ends that soonest
+            if (o.go > a.go && Math.abs(o.x + ux / ul * 2 - nx) < bx && Math.abs(o.y + uy / ul * 2 - ny) < by) continue;   // it set off later: it is the one to wait
           }
-          if (!a.path.length) { a.path = null; a.face = 0; a.dx = 0; a.sitKind = seatOf(a.goal); }
+          a.waitOn = o.id; return 1;
         }
-        const want = !a.path && a.sitKind ? 1 : 0;                        // it keeps its seat until it sets off
+        if (moving && o.go < a.go && o.sweep && a.sweep) {                 // will they be in the same place a moment from now? the later one stops here
+          const w = o.sweep, v = a.sweep; let meet = false, inWay = false;
+          for (let j = 0; j < w.length && !meet; j += 2) meet = Math.abs(v[j] - w[j]) < 12 && Math.abs(v[j + 1] - w[j + 1]) < 16;
+          for (let j = 0; j < w.length && !inWay; j += 2) inWay = Math.abs(a.x - w[j]) < 12 && Math.abs(a.y - w[j + 1]) < 16;   // unless here is in that one's way: then it had better move on
+          if (meet && !inWay) { a.waitOn = o.id; return 1; }
+        }
+      }
+      return res;
+    }
+    // Does a wait in a ring: for one who waits for one who ... waits for a? Only such a wait never ends by itself (one
+    // who waits behind another who is merely held up goes on when that one does).
+    const knot = (a) => { let o = byId.get(a.waitOn); for (let n = 0; o && n < 8; n++) { if (o === a) return true; if (!o.path || !(o.held > 0)) return false; o = byId.get(o.waitOn || o.waitFor); } return false; };
+    // where one who is on its way will be over the next two seconds or so: eight points 10 px apart along its way
+    function foresee(a) {
+      a.sweep = null; if (!present(a) || !a.path) return;
+      const w = a.sweep = []; let x = a.x, y = a.y, i = 0, need = 10;
+      while (w.length < 16) { if (i >= a.path.length) { w.push(x, y); continue; } const p = a.path[i], d = Math.hypot(p.x - x, p.y - y); if (d < need) { need -= d; x = p.x; y = p.y; i++; } else { x += (p.x - x) / d * need; y += (p.y - y) / d * need; w.push(x, y); need = 10; } }
+    }
+    // the point so far along a way (its end, when the way is shorter)
+    const along = (x, y, path, dist) => { for (let i = 0; i < path.length; i++) { const p = path[i], d = Math.hypot(p.x - x, p.y - y); if (d >= dist && d > 0) return [x + (p.x - x) / d * dist, y + (p.y - y) / d * dist]; dist -= d; x = p.x; y = p.y; } return [x, y]; };
+    // does o wait for a, itself or through others who wait?
+    const waitsOn = (o, a) => { for (let n = 0; o && n < 8; n++) { const id = o.waitOn || o.waitFor; if (id === a.id) return true; o = id ? byId.get(id) : null; } return false; };
+    // on its way, or about to be and before a in turn (it has its way and has not taken its first step)
+    const bound = (o, a) => !!o.path && (afoot(o) || (!o.moved && o.go > 0 && (!a.go || o.go < a.go)));
+    // Would a, setting off now along its way, meet somebody coming the other way? Then: that one. (everybody walked on at the same pace)
+    function meets(a) {
+      const v = pace() * 0.1, on = along;
+      for (let i = 0; i < crew.length; i++) {
+        const o = crew[i]; if (o === a || !present(o) || !bound(o, a) || !o.path.length || (o.moved && o.held > 0)) continue;
+        if (Math.abs(o.goal.x - a.x) < 12 && Math.abs(o.goal.y - a.y) < 16) continue;   // that one comes for a's place: a had better be gone
+        let pa = [a.x, a.y], po = [o.x, o.y];
+        for (let st = 1; st <= 60; st++) {                                 // six seconds ahead
+          const na = on(a.x, a.y, a.path, v * st), no = on(o.x, o.y, o.path, v * st);
+          const ax = na[0] - pa[0], ay = na[1] - pa[1], ox = no[0] - po[0], oy = no[1] - po[1];
+          if (Math.abs(na[0] - no[0]) < 12 && Math.abs(na[1] - no[1]) < 16 && ax * ox + ay * oy < -0.3 * Math.hypot(ax, ay) * Math.hypot(ox, oy)) return o;
+          pa = na; po = no;
+        }
+      }
+      return null;
+    }
+    // Is the place a is going to still taken by somebody who has yet to leave it? Then: that one.
+    function taken(a) {
+      const g = a.goal;
+      for (let i = 0; i < crew.length; i++) { const o = crew[i]; if (o !== a && present(o) && (o.pending || (!!o.path && !o.moved)) && !inChair(o) && Math.abs(o.x - g.x) < 10.5 && Math.abs(o.y - g.y) < 16) return o; }
+      return null;
+    }
+    // Would a, setting off now for the lounge, be at its place before somebody whose place lies deeper in? Then: that one.
+    function early(a) {
+      if (a.goal.kind !== 'lounge') return null;
+      const v = pace() / 1000, mine = wayLen(a.x, a.y, a.path) / v, da = deepOf(a.goal);
+      for (let i = 0; i < crew.length; i++) {
+        const o = crew[i];
+        if (o === a || !present(o) || !o.goal || o.goal.kind !== 'lounge' || !(o.pending || o.path)) continue;
+        const d = deepOf(o.goal);
+        if (d < da || (d === da && o.desk > a.desk)) continue;
+        if (mine < (o.pending ? Math.max(0, o.delay) : 0) + (o.path ? wayLen(o.x, o.y, o.path) : o.far || 0) / v + 350) return o;
+      }
+      return null;
+    }
+    // Do they stay put in a ring: a for b, b for the next, ... the last for a? Then one of them has to go: one who
+    // only waits for its turn in the lounge (why: 3), or else the one at the lowest desk.
+    function inRing(a, b, why) {
+      let low = a.desk, turn3 = why === 3, o = b;
+      for (let n = 0; o && n < 8; n++) {
+        if (o === a) return why === 3 || (!turn3 && a.desk === low);
+        if (!o.pending || !o.hold) return false;
+        low = Math.min(low, o.desk); if (o.why === 3) turn3 = true;
+        o = byId.get(o.hold);
+      }
+      return false;
+    }
+    // Before its first step a robot looks down the first stretch of its way (out of its chair, off the sofa, out of the
+    // queue): if somebody is walking there, or about to, it lets them go by first.
+    function wayOutBusy(a) {
+      const way = a.path;
+      for (let i = 0; i < crew.length; i++) {                              // would it run into somebody over the next few seconds? then it does not start: better seated than stopped a few steps on
+        const o = crew[i];
+        if (o === a || !present(o) || !bound(o, a) || waitsOn(o, a)) continue;
+        if (Math.abs(o.goal.x - a.x) < 12 && Math.abs(o.goal.y - a.y) < 16) continue;   // that one comes for a's place: a had better be gone
+        for (let st = 1; st <= 16; st++) { const p = along(a.x, a.y, way, st * 10), q2 = along(o.x, o.y, o.path, st * 10); if (Math.abs(p[0] - q2[0]) < 16 && Math.abs(p[1] - q2[1]) < 20) return true; }   // (with a margin: a near miss now is a stop three steps on)
+      }
+      for (let st = 1; st <= 3; st++) {
+        let x = a.x, y = a.y, dist = st * 6;
+        for (let i = 0; i < way.length && dist > 0; i++) { const p = way[i], d = Math.hypot(p.x - x, p.y - y); if (d > dist) { x += (p.x - x) / d * dist; y += (p.y - y) / d * dist; dist = 0; } else { dist -= d; x = p.x; y = p.y; } }
+        for (let i = 0; i < crew.length; i++) {
+          const o = crew[i];
+          if (o === a || !present(o) || !afoot(o) || o.held > 0) continue;
+          if (Math.abs(o.x - x) < 12 && Math.abs(o.y - y) < 16) return true;
+          const p = o.path[0];
+          if (p && Math.abs(o.x - x) < 30 && Math.abs(o.y - y) < 16 && (p.x - o.x) * (x - o.x) + (p.y - o.y) * (y - o.y) > 0) return true;   // on its way here
+        }
+      }
+      return false;
+    }
+    function step(dt) {
+      crew.forEach((a) => { if (!present(a)) a.alpha = 0; });
+      const stride = pace() * dt / 1000; let came = false;
+      crew.forEach(foresee);
+      const order = crew.filter(present).sort((p, q2) => ((p.go || 1e9) - (q2.go || 1e9)) || (p.desk - q2.desk));   // those who set off first move first
+      order.forEach((a) => {
+        a.alpha = Math.min(1, a.alpha + dt / 260);
+        const awaited = (a.pending || (a.path && !a.moved)) && crew.some((o) => o.waitFor === a.id);   // somebody stands waiting for the place a is about to leave
+        if (a.pending) {
+          a.delay -= dt;
+          if (a.delay <= 0 || awaited) {
+            turn(a);
+            let b = null, why = 0;                                         // its place is not free yet (1), somebody is coming the other way (2), or somebody has to get past its place first (3): it waits where it is, not for ever
+            if (!awaited) { if (a.waited < 12000 && (b = taken(a))) why = 1; else if (a.waited < 8000 && (b = meets(a))) why = 2; else if (a.waited < 8000 && (b = early(a))) why = 3; }
+            if (b && inRing(a, b, why)) b = null;
+            a.hold = b ? b.id : null; a.why = why;
+            if (b) { a.path = null; a.delay = 300; a.waited += 300; }
+            else { a.pending = false; a.go = ++goSeq; a.held = 0; a.sat = 0; a.stuck = 0; a.moved = false; a.waitFor = null; a.waitOn = null; foresee(a); }
+          }
+        }
+        if (a.path && !a.moved && (a.held > 0 || a.sat > 0) && simT - a.replan >= 400) { turn(a); foresee(a); }   // not off yet: the way may change while it waits
+        if (a.path && a.moved && a.push === true && simT - a.replan >= 500) {   // squeezing past somebody: has a proper way opened meanwhile?
+          const p = findPath(a.x, a.y, a.goal.x, a.goal.y, a); a.replan = simT;
+          if (!p.push) { a.path = p.way; a.push = false; foresee(a); }
+        }
+        if (a.path && !a.moved && a.sat < 8000 && wayOutBusy(a)) a.sat += dt;
+        else if (a.path) {
+          let left = stride, nx = a.x, ny = a.y, n = 0;                    // where this step would take it
+          while (left > 0 && n < a.path.length) { const p = a.path[n], dx = p.x - nx, dy = p.y - ny, d = Math.hypot(dx, dy); if (d <= left) { nx = p.x; ny = p.y; n++; left -= d; } else { nx += dx / d * left; ny += dy / d * left; left = 0; } }
+          a.waitFor = null; a.waitOn = null;
+          let way = ahead(a, nx, ny);
+          if (way === 1 && (a.barge === a.waitOn || (a.held > 2600 && knot(a)) || a.held > 9000)) { a.barge = a.waitOn; way = 0; } else a.barge = null;   // nobody waits for ever
+          if (way) {
+            a.held += dt;
+            if (way === 2) { a.stuck += dt; if (a.stuck > 1400) a.push = 2; else if (simT - a.replan >= 400) turn(a); }   // (2: it goes through, and does not look for another way again)
+            else if (way === 1 && a.moved && simT - a.replan >= 500) {       // somebody is coming: is there a way past, a little to one side?
+              const o = byId.get(a.waitOn), p = o && o.path && o.path[0];
+              a.replan = simT;
+              if (p && (p.x - o.x) * (a.x - o.x) + (p.y - o.y) * (a.y - o.y) > 0) { const alt = findPath(a.x, a.y, a.goal.x, a.goal.y, a, o); if (!alt.push && wayLen(a.x, a.y, alt.way) <= wayLen(a.x, a.y, a.path) + 50) { a.path = alt.way; foresee(a); } }
+            }
+          } else {
+            const dx = nx - a.x, dy = ny - a.y, d = Math.hypot(dx, dy);
+            if (d > 0.01) { a.seated = false; a.moved = true; if (Math.abs(dx) > Math.abs(dy) * 0.7) { a.face = 0; a.dx = dx > 0 ? 1 : -1; } else { a.dx = 0; a.face = dy < 0 ? 1 : 0; } }
+            a.x = nx; a.y = ny; a.dist += d; a.path.splice(0, n); a.held = 0; a.stuck = 0;
+            if (!a.path.length) { a.path = null; a.go = 0; a.push = false; a.barge = null; a.waitFor = null; a.waitOn = null; a.face = 0; a.dx = 0; a.sitKind = seatOf(a.goal); a.seated = !!a.sitKind; came = true; }
+          }
+        }
+        const want = a.sitKind && a.seated ? 1 : 0;                       // it sits only on its seat, and keeps it until its first step
         a.sit = clamp(a.sit + clamp(want - a.sit, -dt / 170, dt / 170), 0, 1);
-        if (a.path && a.sit <= 0) a.sitKind = '';
+        if (a.sit <= 0 && !a.seated) a.sitKind = '';
       });
+      if (came) crew.forEach((a) => { if (present(a) && a.path && !a.push) turn(a); });   // somebody has just come to stand somewhere: the others' ways go around it
       flights = flights.filter((f) => { if (simT >= f.t0 + f.dur) { trayPop = simT; return false; } return true; });
     }
 
@@ -689,13 +1004,6 @@
       } else if (st !== 'unknown' && a) {
         R(x, y, 9, 6, css(mix(rgb(hue[2]), [35, 29, 51], 0.62)));         // asleep, in the agent's colour: it is away, not gone
         const p = Math.floor(t / 700 + d.i * 3) % 12, bx = p < 6 ? p : 12 - p, byy = Math.floor(t / 900 + d.i) % 6; R(x + 1 + bx, y + (byy < 4 ? byy : 6 - byy), 2, 2, hue[1]);
-      }
-      if (st === 'unknown') {
-        const yy = d.dy, up = reduced ? 0 : (Math.floor(t / 700 + d.i) & 1), qx = d.sx - 3, qy = yy - 22 - up;
-        mark(d.sx - 5, yy - 24, 10, 25);
-        R(d.sx - 4, yy - 9, 8, 9, '#55506a'); R(d.sx - 3, yy - 8, 6, 7, '#7a7590'); R(d.sx - 3, yy - 8, 6, 1, '#918ca6');
-        R(qx, qy, 6, 9, INK); R(qx - 1, qy + 1, 8, 7, INK);
-        R(qx + 1, qy + 1, 3, 1, '#d9d3ea'); R(qx, qy + 2, 1, 1, '#d9d3ea'); R(qx + 4, qy + 2, 1, 2, '#d9d3ea'); R(qx + 3, qy + 4, 1, 1, '#d9d3ea'); R(qx + 2, qy + 5, 1, 1, '#d9d3ea'); R(qx + 2, qy + 7, 1, 1, '#d9d3ea');
       }
       // the lamp on the desk
       let col = null, on = true;
@@ -853,7 +1161,7 @@
       const seated = a.sitKind === 'desk' && a.sit > 0 && !!d, onDesk = seated ? d.dy : null;
       if (seated) v.clip = d.dy;
       v.lit = a.look === 'antenna' ? ((t + r3 * 1500) % 1500) < 260 : a.look === 'bulb' ? ((t + r3 * 5000) % 5200) > 900 : false;
-      if (a.path) {                                                   // walking: the cycle follows the ground covered
+      if (a.path && a.moved && !a.held) {                             // walking: the cycle follows the ground covered
         const ph = Math.floor(a.dist / (pace() * 0.085)) % 4, side = a.dx;      // four steps of the cycle to about a third of a second
         if (side) { v.vx = side; v.hx = 0; if (ph === 0) { v.legA = [side * 1, 0]; v.legB = [-side * 1, 0]; } else if (ph === 2) { v.legA = [-side * 1, 0]; v.legB = [side * 1, 0]; } else { v.bob = 1; if (ph === 1) v.legA = [0, 1]; else v.legB = [0, 1]; } v.swL = ph === 0 ? -1 : ph === 2 ? 1 : 0; v.swR = -v.swL; }
         else { if (ph === 0) v.legA = [0, 1]; else if (ph === 2) v.legB = [0, 1]; else v.bob = 1; v.swL = ph === 0 ? -1 : ph === 2 ? 1 : 0; v.swR = -v.swL; }
@@ -867,7 +1175,7 @@
         else { v.hands = 'rest'; v.eye = blink ? 1 : 0; }
       } else {                                                         // standing, or on the sofa
         if (seated) v.legs = false;
-        const doze = a.state === 'idle' && lt.late && !a.pending;
+        const doze = a.state === 'idle' && lt.late && !a.pending && !a.path;
         const br = ((t + r1 * 1700) % (1500 + r2 * 500)) < 620 ? 1 : 0;
         v.bob = br;
         if (a.state === 'needs') {
@@ -883,7 +1191,7 @@
           if (a.look === 'gavel') v.bang = ((t + r1 * 5000) % 6900) < 170;
         } else if (doze) { v.eye = 1; v.hy = 1; v.bob = ((t + r1 * 2000) % 3400) < 1700 ? 0 : -1; v.fx = 'zzz'; v.lit = false; }
         else if (a.state === 'idle') {
-          const settled = !a.pending && a.goal.kind === 'lounge';
+          const settled = !a.pending && !a.path && a.goal.kind === 'lounge';
           v.mug = settled; const u = (t + r2 * 7000) % (6800 + r3 * 2400); v.sip = settled && u < 900;
           const e = (t + r1 * 5000) % 5600; v.ex = e < 1500 ? -1 : e < 3000 ? 1 : 0; v.eye = blink || v.sip ? 1 : 0;
           if (v.mug) v.armL = 2;
@@ -936,62 +1244,161 @@
       if (w === undefined) { g.font = bold ? fontNum : fontTag; w = num(g.measureText(str).width, str.length * 6 * dpr); tw.set(key, w); }
       return w;
     }
-    const plate = (X, Y, w, h, cut, fill) => { g.fillStyle = fill; g.fillRect(X + cut, Y, w - 2 * cut, h); g.fillRect(X, Y + cut, w, h - 2 * cut); };
-    function drawWords(list, t) {
-      const u = dpr, cut = Math.max(1, Math.round(k)), H = Math.round(14 * u), placed = [];
-      let nSlips = 0;
-      const clash = (X, Y, w, h, from) => { for (let i = from || 0; i < placed.length; i += 4) if (X < placed[i] + placed[i + 2] + u * 2 && X + w + u * 2 > placed[i] && Y < placed[i + 1] + placed[i + 3] + u && Y + h + u > placed[i + 1]) return true; return false; };
-      const put = (X, Y, w, h) => { placed.push(X, Y, w, h); markD(X - 1, Y - 1, w + 2, h + 2); };
-      g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-      // slip numbers sit on their paper
-      list.forEach((v) => {
-        if (!v.slip || !v.num) return;
-        const w = textW(v.num, true), X = Math.round(v.slip.x * k + (v.slip.w * k - w) / 2 - 0.5 * u), Y = Math.round(v.slip.y * k);
-        g.font = fontNum; g.fillStyle = INK; g.fillText(v.num, X, Y + Math.round(11 * u));
-        put(Math.round(v.slip.x * k), Y, Math.round(v.slip.w * k), Math.round(7 * k));
+    const plate = (c, X, Y, w, h, cut, fill) => { c.fillStyle = fill; c.fillRect(X + cut, Y, w - 2 * cut, h); c.fillRect(X, Y + cut, w, h - 2 * cut); };
+    let words = [];                                                      // what the words of this frame cover: x, y, w, h in device pixels
+    const wordAt = (X, Y, w, h) => { words.push(X, Y, w, h); markD(X - 1, Y - 1, w + 2, h + 2); };
+    // how much of the box X, Y, w, h lies on the box at r[i..i+3], grown by px and py
+    const lap = (X, Y, w, h, r, i, px, py) => { const ox = Math.min(X + w, r[i] + r[i + 2]) - Math.max(X, r[i]) + px, oy = Math.min(Y + h, r[i + 1] + r[i + 3]) - Math.max(Y, r[i + 1]) + py; return ox > 0 && oy > 0 ? ox * oy : 0; };
+    const TOPS = { bulb: 26, antenna: 28, gavel: 22 };                  // how far above its feet each look reaches
+
+    // Name tags are labels on the floor and on the desk fronts: they are painted before the robots, so whoever stands or
+    // walks in front of one covers it, never the other way round. A robot on its way has its tag at its feet. Those at
+    // rest are given places where they cover neither each other nor anybody standing there, and keep them until
+    // somebody at rest moves.
+    let tagSig = 0, tagPos = new Map(), tagRects = [];
+    function drawTags(list) {
+      const u = dpr, cut = Math.max(1, Math.round(k)), H = Math.round(14 * u), rowH = H + 2 * u, lo = 2 * u, yMax = ch - H - lo;
+      const poseOfA = new Map(); list.forEach((v) => poseOfA.set(v.a, v));
+      const walk = [], still = [], bodies = [];
+      crew.forEach((a) => {
+        const v = poseOfA.get(a), d = L.desks[a.desk];
+        const going = !!a.path && a.moved;                               // (one that has its way but still looks out before its first step is at rest)
+        if (v && !going) { const top = TOPS[a.look] || 21; bodies.push(Math.round((v.x - 7) * k), Math.round((v.y - top) * k), Math.round(14 * k), Math.round((v.clip !== null ? top - (v.y - v.clip) : top) * k)); }
+        else if (!v && d) bodies.push(Math.round((d.sx - 5) * k), Math.round((d.dy - 24) * k), Math.round(10 * k), Math.round(24 * k));
+        if (!a.name) return;
+        const w = Math.round(textW(a.name, false) + 10 * u);
+        if (!v) { if (d) still.push({ a, w, ghost: true, desk: true, cx: d.cx * k, top: (d.dy + 9) * k }); }
+        else if (a.sitKind === 'desk' && a.sit > 0.5 && d) still.push({ a, w, desk: true, cx: d.cx * k, top: (d.dy + 9) * k });
+        else (going ? walk : still).push({ a, w, cx: v.x * k, top: (Math.max(v.y, a.y) + 2) * k, up: (v.y - (TOPS[a.look] || 21)) * k });
       });
-      // name tags: a plate on the desk front for whoever sits there (those stay put, like yours), under the feet for the rest
-      nSlips = placed.length;
-      const tags = [];
-      { const d = L.wd; tags.push({ text: 'You', cx: (d.x + d.w / 2) * k, top: (d.by + 13) * k, you: true, fixed: true }); }
-      list.forEach((v) => { const a = v.a, d = L.desks[a.desk]; if (a.name && a.sitKind === 'desk' && a.sit > 0.5 && d) tags.push({ text: a.name, cx: d.cx * k, top: (d.dy + 9) * k, id: a.id, fixed: true }); });
-      crew.forEach((a) => { const d = L.desks[a.desk]; if (!present(a) && a.name && d) tags.push({ text: a.name, cx: d.cx * k, top: (d.dy + 9) * k, ghost: true, fixed: true }); });
-      list.forEach((v) => { const a = v.a; if (a.name && !(a.sitKind === 'desk' && a.sit > 0.5 && L.desks[a.desk])) tags.push({ text: a.name, cx: v.x * k, top: (Math.max(v.y, a.y) + 2) * k, id: a.id }); });
-      tags.forEach((tg) => {
-        g.font = fontTag;
-        const w = Math.round(textW(tg.text, false) + 10 * u);
-        let X = Math.round(clamp(tg.cx - w / 2, 2 * u, cw - w - 2 * u)), Y = Math.round(clamp(tg.top, 2 * u, ch - H - 2 * u));
-        if (tg.you) { /* your plate is part of the desk */ } else if (tg.fixed ? clash(X, Y, w, H, nSlips) : clash(X, Y, w, H)) { const tries = [H + 2 * u, 2 * (H + 2 * u), -(H + 2 * u)]; for (let i = 0; i < tries.length; i++) { const y2 = Math.round(clamp(tg.top + tries[i], 2 * u, ch - H - 2 * u)); if (!clash(X, y2, w, H)) { Y = y2; break; } } }
-        const hot = tg.id != null && (tg.id === focusId || tg.id === hoverId);
-        plate(X, Y, w, H, cut, tg.you ? '#f3c552' : hot ? '#fffdf2' : tg.ghost ? 'rgba(35,28,50,0.42)' : 'rgba(35,28,50,0.92)');
-        g.fillStyle = tg.you || hot ? INK : tg.ghost ? 'rgba(255,255,255,0.62)' : '#ffffff'; g.fillText(tg.text, X + Math.round(5 * u), Y + Math.round(10.5 * u));
-        put(X, Y, w, H);
-      });
-      // bubbles: the step while working, a few words on a change
+      tagRects = [];
+      g.font = fontTag;
+      const paint = (tg, X, Y) => {
+        const a = tg.a, hot = a.id === focusId || (!tg.ghost && a.id === hoverId);
+        plate(g, X, Y, tg.w, H, cut, hot ? '#fffdf2' : tg.ghost ? 'rgba(35,28,50,0.42)' : 'rgba(35,28,50,0.92)');
+        g.fillStyle = hot ? INK : tg.ghost ? 'rgba(255,255,255,0.62)' : '#ffffff'; g.fillText(a.name, X + Math.round(5 * u), Y + Math.round(10.5 * u));
+        wordAt(X, Y, tg.w, H);
+        if (!tg.ghost) tagRects.push({ id: a.id, x0: X / u, y0: Y / u, x1: (X + tg.w) / u, y1: (Y + H) / u });
+      };
+      // on their way: at the feet, wherever that is
+      walk.forEach((tg) => paint(tg, Math.round(clamp(tg.cx - tg.w / 2, lo, cw - tg.w - lo)), Math.round(clamp(tg.top, lo, yMax))));
+      // at rest: has anything moved since the places were given out?
+      let sig = (cw * 4099 + ch + still.length) | 0;
+      const mixIn = (n) => { sig = (Math.imul(sig, 16777619) ^ (n | 0)) | 0; };
+      still.forEach((tg) => { mixIn(tg.cx); mixIn(tg.top); mixIn(tg.w); mixIn(tg.a.desk); });
+      for (let i = 0; i < bodies.length; i++) mixIn(bodies[i]);
+      if (sig !== tagSig || tagPos.size !== still.length) {
+        tagSig = sig; tagPos = new Map();
+        const put = [];
+        still.forEach((tg) => {
+          const w = tg.w, unit = w * H, cand = [];                         // each: x, y, the price of being that far from its robot
+          const rows = [];
+          for (let r = 0, last = -1; r < (tg.desk ? 3 : 4); r++) { const Y = clamp(tg.top + r * rowH, lo, yMax); if (Y === last) break; last = Y; rows.push([Y, 0.05 * r]); }
+          if (!tg.desk) for (let j = 0; j < 2; j++) { const Y = tg.up - H - 2 * u - j * rowH; if (Y >= lo) rows.push([Y, 0.5 + 0.1 * j]); }
+          rows.forEach((rw) => { for (let sh = 0; sh < 5; sh++) { const dx = (sh === 0 ? 0 : sh === 1 ? -1 : sh === 2 ? 1 : sh === 3 ? -2 : 2) * w / 4; cand.push([clamp(tg.cx - w / 2 + dx, lo, cw - w - lo), rw[0], unit * (rw[1] + 0.2 * Math.abs(dx) / (w / 4))]); } });
+          let best = 0, bc = Infinity;
+          cand.forEach((c, i) => {
+            let cost = c[2] - (i === tg.a.tagAt ? 0.04 * unit : 0);          // it stays where it was unless another place is clearly better
+            for (let j = 0; j < put.length && cost < bc; j += 4) cost += 4 * lap(c[0], c[1], w, H, put, j, 2 * u, u);
+            for (let j = 0; j < bodies.length && cost < bc; j += 4) cost += 3 * lap(c[0], c[1], w, H, bodies, j, 0, 0);
+            if (cost < bc) { bc = cost; best = i; }
+          });
+          tg.a.tagAt = best;
+          const X = Math.round(cand[best][0]), Y = Math.round(cand[best][1]);
+          put.push(X, Y, w, H); tagPos.set(tg.a.id, [X, Y]);
+        });
+      }
+      still.forEach((tg) => { const p = tagPos.get(tg.a.id); if (p) paint(tg, p[0], p[1]); });
+      inkOf = null;
+    }
+
+    // the number on a slip: painted with its robot, so one who stands in front covers it
+    function slipWord(v) {
+      const u = dpr, w = textW(v.num, true), X = Math.round(v.slip.x * k + (v.slip.w * k - w) / 2 - 0.5 * u), Y = Math.round(v.slip.y * k);
+      g.font = fontNum; g.fillStyle = INK; g.fillText(v.num, X, Y + Math.round(11 * u)); inkOf = null;
+      wordAt(Math.round(v.slip.x * k), Y, Math.round(v.slip.w * k), Math.round(7 * k));
+    }
+
+    // bubbles: the step while working, a few words on a change. Over everything, close to their owner.
+    function drawBubbles(list) {
+      const u = dpr, cut = Math.max(1, Math.round(k)), heads = [];
+      list.forEach((v) => heads.push(Math.round((v.x + v.hx - 6) * k), Math.round((v.y - 19 + v.hy) * k), Math.round(12 * k), Math.round(9 * k)));
+      g.font = fontTag;
       list.forEach((v) => {
         const a = v.a; let text = '';
         if (a.state === 'working' && a.step && a.sitKind === 'desk' && a.sit >= 1) text = a.step;
         else if (a.bubbleUntil > simT && a.bubbleText) text = a.bubbleText;
         if (!text) return;
-        g.font = fontTag;
         const w = Math.round(textW(text, false) + 12 * u), h = Math.round(16 * u), tail = Math.round(3 * k);
-        // above the head and what sticks up from it; where that is taken, beside it or higher: the spot that covers least
-        const tops = { bulb: 26, antenna: 28, gavel: 22 };
-        const headTop = (v.y - 20 + v.hy) * k, hx = v.x * k, b0 = (v.y - (tops[a.look] || 20) + v.hy) * k - h - tail, b1 = headTop - h - tail, up = h + 3 * u, side = w * 0.4;
-        const leanX = a.look === 'antenna' ? hx - 2 * k - w : a.look === 'gavel' ? hx + 5 * k - w : hx - w / 2;
-        const cand = [[hx - w / 2, b0], [leanX, b1], [hx - w / 2 - side, b0], [hx - w / 2 + side, b0], [hx - w / 2, b0 - up], [hx - w / 2 - side, b0 - up], [hx - w / 2 + side, b0 - up], [hx - w / 2, b0 - 2 * up]];
-        const cover = (X2, Y2) => { let c2 = 0; for (let i = 0; i < placed.length; i += 4) { const ox = Math.min(X2 + w, placed[i] + placed[i + 2]) - Math.max(X2, placed[i]) + 2 * u, oy = Math.min(Y2 + h, placed[i + 1] + placed[i + 3]) - Math.max(Y2, placed[i + 1]) + u; if (ox > 0 && oy > 0) c2 += ox * oy; } return c2; };
-        let X = 0, Y = 0, bestC = Infinity;
-        for (let i = 0; i < cand.length && bestC > 0; i++) { const x2 = Math.round(clamp(cand[i][0], 2 * u, cw - w - 2 * u)), y2 = Math.round(clamp(cand[i][1], 2 * u, ch - h - 2 * u)), c2 = cover(x2, y2) + i; if (c2 - i <= 0) { X = x2; Y = y2; bestC = 0; } else if (c2 < bestC) { X = x2; Y = y2; bestC = c2; } }
-        plate(X, Y, w, h, cut, INK); plate(X + cut, Y + cut, w - 2 * cut, h - 2 * cut, cut, '#fffdf2');
-        if (Y + h <= headTop) { const tx = Math.round(clamp(hx, X + 3 * cut, X + w - 4 * cut)); g.fillStyle = INK; g.fillRect(tx - cut, Y + h - cut, 3 * cut, 2 * cut); g.fillRect(tx, Y + h + cut, cut, cut); g.fillStyle = '#fffdf2'; g.fillRect(tx, Y + h - cut, cut, 2 * cut); markD(tx - cut - 1, Y + h - cut, 3 * cut + 2, 3 * cut + 1); }
+        // Right above the head (beside an antenna, so the bubble stays close and the antenna in sight); where that is
+        // taken, a little to one side or one row up: the place that covers least of the other words and of everybody's
+        // head. Never further from its owner than that.
+        const headTop = (v.y - 20 + v.hy) * k, hx = v.x * k, up = h + 3 * u, side = w * 0.4, b1 = headTop - h - tail;
+        const b0 = (v.y - (a.look === 'antenna' ? 28 : a.look === 'bulb' || a.look === 'gavel' ? 22 : 20) + v.hy) * k - h - tail;
+        const cand = a.look === 'antenna' ? [[hx - 2 * k - w, b1], [hx + 3 * k, b1], [hx - w / 2, b0]] : a.look === 'gavel' ? [[hx - w / 2, b0], [hx + 5 * k - w, b1]] : [[hx - w / 2, b0]];
+        cand.push([hx - w / 2 - side, b0], [hx - w / 2 + side, b0], [hx - w / 2, b0 - up], [hx - w / 2 - side, b0 - up], [hx - w / 2 + side, b0 - up]);
+        const cover = (i) => {
+          const x2 = Math.round(clamp(cand[i][0], 2 * u, cw - w - 2 * u)), y2 = Math.round(clamp(cand[i][1], 2 * u, ch - h - 2 * u)); let c2 = 0;
+          for (let j = 0; j < words.length; j += 4) c2 += lap(x2, y2, w, h, words, j, 2 * u, u) + 8 * lap(x2, y2, w, h, words, j, 0, 0);   // too close is poor, on top is worse
+          for (let j = 0; j < heads.length; j += 4) c2 += lap(x2, y2, w, h, heads, j, u, u) + 8 * lap(x2, y2, w, h, heads, j, 0, 0);
+          return c2;
+        };
+        let at = 0, bestC = cover(0);
+        for (let i = 1; i < cand.length && bestC > 0; i++) { const c2 = cover(i) + i; if (c2 < bestC) { at = i; bestC = c2; } }
+        if (at !== a.bubAt && bestC > 0 && a.bubAt < cand.length && cover(a.bubAt) <= bestC + 0.03 * w * h) at = a.bubAt;   // it does not hop about for a little
+        a.bubAt = at;
+        const X = Math.round(clamp(cand[at][0], 2 * u, cw - w - 2 * u)), Y = Math.round(clamp(cand[at][1], 2 * u, ch - h - 2 * u));
+        plate(g, X, Y, w, h, cut, INK); plate(g, X + cut, Y + cut, w - 2 * cut, h - 2 * cut, cut, '#fffdf2');
+        // the tail points at its owner, so it is drawn only when the bubble is less than a row above that head and over it
+        const tx = Math.round(clamp(hx, X + 3 * cut, X + w - 4 * cut));
+        if (Y + h <= headTop && headTop - (Y + h) < up && Math.abs(tx - hx) <= 6.5 * k) { g.fillStyle = INK; g.fillRect(tx - cut, Y + h - cut, 3 * cut, 2 * cut); g.fillRect(tx, Y + h + cut, cut, cut); g.fillStyle = '#fffdf2'; g.fillRect(tx, Y + h - cut, cut, 2 * cut); markD(tx - cut - 1, Y + h - cut, 3 * cut + 2, 3 * cut + 1); }
         g.fillStyle = INK; g.fillText(text, X + Math.round(6 * u), Y + Math.round(11.5 * u));
-        put(X, Y, w, h);
+        wordAt(X, Y, w, h);
       });
       inkOf = null;
     }
 
     // ───────── one frame ─────────
+    // the corners of a highlight around what is pointed at or has the focus
+    function ring(l, r, top, bottom) {
+      const c2 = '#ffe27a';
+      R(l, top, 4, 1, c2); R(l, top, 1, 4, c2); R(r - 3, top, 4, 1, c2); R(r, top, 1, 4, c2); R(l, bottom, 4, 1, c2); R(l, bottom - 3, 1, 4, c2); R(r - 3, bottom, 4, 1, c2); R(r, bottom - 3, 1, 4, c2);
+    }
+    function drawRobot(v, t) {
+      const a = v.a, hot = a.id === focusId || a.id === hoverId;
+      { let x0 = -11, x1 = 12, y0 = -24, y1 = 4;                          // what this one can cover in this frame, to put back in the next
+        if (a.look === 'antenna' || a.look === 'bulb') y0 = -29; else if (a.look === 'gavel') { x1 = v.bang ? 22 : 17; y0 = -23; } else if (a.look === 'clipboard') x1 = 14;
+        if (v.mug) x0 = -12;
+        if (v.hands) { x0 = -12; x1 = Math.max(x1, 12); }
+        if (v.deskY !== null) y1 = 12;
+        if (hot) { x0 = Math.min(x0, -13); x1 = Math.max(x1, 13); y0 = Math.min(y0, -27); y1 = Math.max(y1, 6); }
+        if (v.fx === 'zzz') { x1 = Math.max(x1, 21); y0 = -38; } else if (v.fx === 'err') { x0 = -15; x1 = Math.max(x1, 16); y0 = -38; }
+        mark(v.x + x0, v.y + y0, x1 - x0, y1 - y0); }
+      if (a.alpha < 1) g.globalAlpha = clamp(a.alpha, 0, 1);
+      if (!(a.sitKind === 'desk' && a.sit > 0)) { R(v.x - 5, v.y - 1, 10, 2, SHADOW); R(v.x - 4, v.y + 1, 8, 1, SHADOW); }
+      if (hot) { const pz = reduced ? 0 : (Math.floor(t / 320) & 1); ring(v.x - 10 - pz, v.x + 9 + pz, v.y - 24 - pz, (a.sitKind === 'desk' && a.sit > 0 ? L.desks[a.desk].dy - 3 : v.y) + pz); }
+      if ((a.look === 'bulb' && v.lit) && !reduced) glow(Math.round(v.x + v.hx), Math.round(v.y - 17 + v.hy - v.bob), 9, [255, 236, 130], lt.day < 0.5 ? 0.16 : 0.09);
+      drawBot(v);
+      if (v.hands) drawHands(v, L.desks[a.desk], v.hands, t);
+      if (!reduced) {
+        if (v.fx === 'zzz') zees(v.x, v.y + v.hy, t, a.seed);
+        if (v.fx === 'err') { sparks(v.x, v.y, t, a.seed); }
+        if (v.mug && !v.sip) steam(v.x - 7, v.y - 9, t, a.seed);
+      } else if (v.fx === 'zzz') zees(v.x, v.y + v.hy, 700, 1);
+      if (v.fx === 'err') alarm(v.x, v.y, t);
+      if (v.slip && v.num) slipWord(v);
+      g.globalAlpha = 1;
+    }
+    // an agent that is not in the room: its chair stands empty with a question mark over it (in front of the name plates)
+    function drawAbsent(d, a, t) {
+      const yy = d.dy, up = reduced ? 0 : (Math.floor(t / 700 + d.i) & 1), qx = d.sx - 3, qy = yy - 22 - up;
+      mark(d.sx - 5, yy - 24, 10, 25);
+      R(d.sx - 4, yy - 9, 8, 9, '#55506a'); R(d.sx - 3, yy - 8, 6, 7, '#7a7590'); R(d.sx - 3, yy - 8, 6, 1, '#918ca6');
+      R(qx, qy, 6, 9, INK); R(qx - 1, qy + 1, 8, 7, INK);
+      R(qx + 1, qy + 1, 3, 1, '#d9d3ea'); R(qx, qy + 2, 1, 1, '#d9d3ea'); R(qx + 4, qy + 2, 1, 2, '#d9d3ea'); R(qx + 3, qy + 4, 1, 1, '#d9d3ea'); R(qx + 2, qy + 5, 1, 1, '#d9d3ea'); R(qx + 2, qy + 7, 1, 1, '#d9d3ea');
+      if (a.id === focusId) { const pz = reduced ? 0 : (Math.floor(t / 320) & 1); mark(d.sx - 12, yy - 29, 24, 31); ring(d.sx - 9 - pz, d.sx + 8 + pz, yy - 26 - pz, yy - 1 + pz); }   // the focus is on somebody who is away: its chair says where
+    }
+
     function draw() {
       if (cw < 2 || ch < 2) return;
       const nowMs = num(nowFn(), 0), t = reduced ? 0 : simT;
@@ -1003,7 +1410,8 @@
       G = g; CL = null; inkOf = null; g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
       if (full || !bg) { if (bg) g.drawImage(bg, 0, 0); full = false; }
       else for (let i = 0; i < dirtyPrev.length; i += 4) g.drawImage(bg, dirtyPrev[i], dirtyPrev[i + 1], dirtyPrev[i + 2], dirtyPrev[i + 3], dirtyPrev[i], dirtyPrev[i + 1], dirtyPrev[i + 2], dirtyPrev[i + 3]);
-      dirty = [];
+      dirty = []; words = [];
+      g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       // the clock on the wall
       { const c = L.clock, dd = new Date(nowMs), hh = num(dd.getHours(), 0), mm = num(dd.getMinutes(), 0), ss = num(dd.getSeconds(), 0);
         mark(c.x - 7, c.y - 7, 15, 15);
@@ -1023,41 +1431,18 @@
       // the coffee machine
       { const c = L.cart; mark(c.x + 4, c.y - 14, 13, 5); R(c.x + 4, c.y - 13, 1, 1, (Math.floor(t / 900) & 1) ? '#fff6c2' : '#ffd23c');
         if (!reduced) for (let i = 0; i < 2; i++) { const p = ((t / 1700) + i * 0.5) % 1; R(c.x + 9 + i * 2 + ((Math.floor(t / 400) + i) & 1), c.y - 10 - Math.floor(p * 3), 1, 1, cssA([255, 255, 255], 0.7 * (1 - p))); } }
-      // everybody, back to front
+      // the names, under everybody
       const poses = [];
       crew.forEach((a) => { if (present(a)) poses.push(poseOf(a, t)); });
-      const order = poses.slice().sort((p, q2) => (p.a.y - q2.a.y) || (p.a.desk - q2.a.desk));
-      let youDone = false;
-      const you = () => { if (!youDone) { youDone = true; drawYou(t); } };
-      order.forEach((v) => {
-        const a = v.a;
-        if (a.y > L.wd.by) you();
-        const hot = a.id === focusId || a.id === hoverId;
-        { let x0 = -11, x1 = 12, y0 = -24, y1 = 4;                        // what this one can cover in this frame, to put back in the next
-          if (a.look === 'antenna' || a.look === 'bulb') y0 = -29; else if (a.look === 'gavel') { x1 = v.bang ? 22 : 17; y0 = -23; } else if (a.look === 'clipboard') x1 = 14;
-          if (v.mug) x0 = -12;
-          if (v.hands) { x0 = -12; x1 = Math.max(x1, 12); }
-          if (v.deskY !== null) y1 = 12;
-          if (hot) { x0 = Math.min(x0, -13); x1 = Math.max(x1, 13); y0 = Math.min(y0, -27); y1 = Math.max(y1, 6); }
-          if (v.fx === 'zzz') { x1 = Math.max(x1, 21); y0 = -38; } else if (v.fx === 'err') { x0 = -15; x1 = Math.max(x1, 16); y0 = -38; }
-          mark(v.x + x0, v.y + y0, x1 - x0, y1 - y0); }
-        if (a.alpha < 1) g.globalAlpha = clamp(a.alpha, 0, 1);
-        if (!(a.sitKind === 'desk' && a.sit > 0)) { R(v.x - 5, v.y - 1, 10, 2, SHADOW); R(v.x - 4, v.y + 1, 8, 1, SHADOW); }
-        if (hot) { const pz = reduced ? 0 : (Math.floor(t / 320) & 1), c2 = '#ffe27a', yb = a.sitKind === 'desk' && a.sit > 0 ? L.desks[a.desk].dy - 3 : v.y, top = v.y - 24 - pz, l = v.x - 10 - pz, r = v.x + 9 + pz;
-          R(l, top, 4, 1, c2); R(l, top, 1, 4, c2); R(r - 3, top, 4, 1, c2); R(r, top, 1, 4, c2); R(l, yb + pz, 4, 1, c2); R(l, yb - 3 + pz, 1, 4, c2); R(r - 3, yb + pz, 4, 1, c2); R(r, yb - 3 + pz, 1, 4, c2); }
-        if ((a.look === 'bulb' && v.lit) && !reduced) glow(Math.round(v.x + v.hx), Math.round(v.y - 17 + v.hy - v.bob), 9, [255, 236, 130], lt.day < 0.5 ? 0.16 : 0.09);
-        drawBot(v);
-        if (v.hands) drawHands(v, L.desks[a.desk], v.hands, t);
-        if (!reduced) {
-          if (v.fx === 'zzz') zees(v.x, v.y + v.hy, t, a.seed);
-          if (v.fx === 'err') { sparks(v.x, v.y, t, a.seed); }
-          if (v.mug && !v.sip) steam(v.x - 7, v.y - 9, t, a.seed);
-        } else if (v.fx === 'zzz') zees(v.x, v.y + v.hy, 700, 1);
-        if (v.fx === 'err') alarm(v.x, v.y, t);
-        g.globalAlpha = 1;
-      });
-      you();
-      drawWords(poses, t);
+      drawTags(poses);
+      // everybody, back to front: you, the robots (one on the sofa sits further back than where it stepped up), the
+      // chairs of those who are away
+      const items = [{ y: L.wd.by + 0.001, o: -1, you: true }];
+      poses.forEach((v) => items.push({ y: v.a.sitKind === 'desk' ? v.a.y : v.y, o: v.a.desk, v }));
+      crew.forEach((a) => { const d = L.desks[a.desk]; if (!present(a) && d) items.push({ y: d.sy, o: a.desk, d, a }); });
+      items.sort((p, q2) => (p.y - q2.y) || (p.o - q2.o));
+      items.forEach((it) => { if (it.you) drawYou(t); else if (it.d) drawAbsent(it.d, it.a, t); else drawRobot(it.v, t); });
+      drawBubbles(poses);
       // a new result: a sheet flies from the agent's desk to your tray, over everything
       flights.forEach((fl) => {
         const p = (simT - fl.t0) / fl.dur; if (p < 0 || p > 1) return;
@@ -1072,15 +1457,22 @@
       dirtyPrev = dirty; drew = true;
     }
 
+    // back after a long while out of sight: everybody is where they belong, and nothing that happened meanwhile plays now
+    function settle() {
+      crew.forEach((a) => { if (present(a)) { rest(a, goalOf(a)); a.alpha = 1; } a.bubbleUntil = -1; a.popAt = -1e9; });
+      flights = []; trayPop = -1e9;
+    }
     function frame(tMs) {
       if (destroyed) return;
       tMs = num(tMs, lastT == null ? 0 : lastT);
-      let dt = lastT == null ? 0 : tMs - lastT; if (!(dt > 0)) dt = 0; if (dt > 250) dt = 250;
+      const gap = lastT == null ? 0 : tMs - lastT, dt = gap > 0 ? Math.min(gap, 250) : 0;
       lastT = tMs;
       if (!sized) return;                                                // no size yet: the first real frame starts the walk from the desks
-      if (clamp(num(root.devicePixelRatio, 1), 0.5, 4) !== dpr) resize(cssW);   // the window moved to another screen, or the page was zoomed
+      if (ratio() !== dpr) resize(cssW);                                 // the window moved to another screen, or the page was zoomed
       if (cw < 2 || ch < 2) return;
-      if (!reduced) { simT += dt; step(dt); }
+      if (gap > 60000 && framed) { catchUp = tMs + 1500; settle(); }     // a crew set in the next moments belongs to the catching up as well
+      if (!reduced && dt > 0) { simT += dt; step(dt); }                  // the same moment drawn twice is the same picture
+      repoint();                                                         // who is under the pointer now that everybody has moved
       framed = true; needsDraw = false;
       draw();
     }
@@ -1091,8 +1483,8 @@
       raf = 0; if (!running || destroyed) return;
       if (typeof document !== 'undefined' && document.hidden) return;        // the visibilitychange listener starts it again
       if (!visible()) return;                                                // out of sight (another tab of the page, scrolled away): nothing is asked for until wake()
-      if (reduced) { if (needsDraw) frame(num(ts, 0)); return; }
       raf = requestAnimationFrame(tick);
+      if (reduced) { if (needsDraw || ratio() !== dpr) frame(num(ts, 0)); return; }   // nothing moves: a frame only for a change (a crew, a size, the focus, a zoom of the page)
       if (ts - lastDraw >= 62) { lastDraw = ts; frame(ts); }
     }
     // a new crew, a new size, a focus change or coming back into view: draw again, and start the loop if it stopped out of sight
@@ -1104,29 +1496,43 @@
     // ───────── pointing ─────────
     function boxOf(a) {
       const f = feet(a), half = Math.max(14, 8 * s), d = L.desks[a.desk];
-      if (a.sitKind === 'desk' && a.sit > 0.5 && d) return { x0: Math.min(f.x * s - half, d.x0 * s), x1: Math.max(f.x * s + half, (d.x0 + d.w) * s), y0: (f.y - 26) * s, y1: (d.dy + 17) * s };
-      return { x0: f.x * s - half, x1: f.x * s + half, y0: (f.y - 27) * s, y1: (Math.max(f.y, a.y) + 10) * s };
+      if (a.sitKind === 'desk' && a.sit > 0.5 && d) return { x0: Math.min(f.x * s - half, d.x0 * s), x1: Math.max(f.x * s + half, (d.x0 + d.w) * s), y0: (f.y - 26) * s, y1: (d.dy + 17) * s, low: d.dy * s };
+      return { x0: f.x * s - half, x1: f.x * s + half, y0: (f.y - 27) * s, y1: (Math.max(f.y, a.y) + 10) * s, low: f.y * s };
     }
     function anchor(id) {
       const a = byId.get(id); if (!a || !present(a) || !sized) return null;
       const f = feet(a);   // a thousandth of a pixel apart per agent, so two that cross on the same spot still have their own point
-      return { x: clamp(f.x * s + a.desk * 0.001, 1, Math.max(1, cssW - 1)), y: clamp((f.y - (a.look === 'bulb' ? 16 : 15)) * s, 1, Math.max(1, cssH - 1)) };
+      return { x: clamp(f.x * s + a.desk * 0.001, 1, Math.max(1, cw / dpr - 1)), y: clamp((f.y - (a.look === 'bulb' ? 16 : 15)) * s, 1, Math.max(1, cssH - 1)) };
     }
+    // Who is under the point: the robot whose figure it is on; else the robot whose name tag it is on, wherever that tag
+    // had to go; else the nearest robot whose (generous) box holds it.
     function hit(x, y) {
-      x = num(x, -1e6); y = num(y, -1e6); let best = null, bd = 1e12;
+      x = num(x, -1e6); y = num(y, -1e6); let best = null, bd = 1e12, on = null, od = 1e12;
       crew.forEach((a) => {
         if (!present(a)) return; const b = boxOf(a);
         if (x < b.x0 || x > b.x1 || y < b.y0 || y > b.y1) return;
         const p = anchor(a.id); if (!p) return; const dd = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
         if (dd < bd) { bd = dd; best = a.id; }
+        if (dd < od && Math.abs(x - p.x) <= 7 * s && y <= b.low) { od = dd; on = a.id; }
       });
+      if (on !== null) return on;
+      for (let i = tagRects.length - 1; i >= 0; i--) { const r = tagRects[i], a = byId.get(r.id); if (a && present(a) && x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return r.id; }
       return best;
     }
-    const where = (e) => { const r = canvas.getBoundingClientRect(), fx = r && r.width ? cssW / r.width : 1, fy = r && r.height ? cssH / r.height : 1; return hit((num(e.clientX, 0) - (r ? r.left : 0)) * fx, (num(e.clientY, 0) - (r ? r.top : 0)) * fy); };
+    let ptr = null;                                                          // where the pointer was last seen, in css px of the canvas
+    const spot = (e) => { const r = canvas.getBoundingClientRect(), fx = r && r.width ? cw / dpr / r.width : 1, fy = r && r.height ? cssH / r.height : 1; return { x: (num(e.clientX, 0) - (r ? r.left : 0)) * fx, y: (num(e.clientY, 0) - (r ? r.top : 0)) * fy }; };
     const setHover = (id) => { if (id === hoverId) return; hoverId = id; canvas.style.cursor = id ? 'pointer' : ''; wake(); onHover(id); };
-    const onMove = (e) => setHover(where(e));
-    const onLeave = () => setHover(null);
-    const onClick = (e) => { const id = where(e); if (id) onPick(id); };
+    const onMove = (e) => { const p = spot(e), id = hit(p.x, p.y), touch = e.pointerType === 'touch'; ptr = touch && !id ? null : { x: p.x, y: p.y, touch }; setHover(id); };
+    // a finger that lifts fires pointerleave at once: what it touched stays pointed at until it walks off or another place is touched
+    const onLeave = (e) => { if (e && e.type === 'pointerleave' && e.pointerType === 'touch') return; ptr = null; setHover(null); };
+    const onClick = (e) => { const p = spot(e), id = hit(p.x, p.y); if (id) onPick(id); };
+    // The robots move under a pointer that does not: once everybody has stepped, look again who is under it. A touch does
+    // not pick up whoever walks by afterwards.
+    function repoint() {
+      if (!ptr) return;
+      const id = hit(ptr.x, ptr.y);
+      if (!ptr.touch) setHover(id); else if (id !== hoverId) { ptr = null; setHover(null); }
+    }
     canvas.addEventListener('pointermove', onMove); canvas.addEventListener('pointerdown', onMove);
     canvas.addEventListener('pointerleave', onLeave); canvas.addEventListener('pointercancel', onLeave);
     canvas.addEventListener('click', onClick);
