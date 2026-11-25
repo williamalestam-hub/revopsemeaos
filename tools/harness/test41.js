@@ -609,11 +609,13 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
     const track = (runs, keep, c) => keep.forEach((text) => { const on = c.ctx.textAt.some((e) => e[0] === text), r2 = runs[text] || (runs[text] = []); if (!r2.length || r2[r2.length - 1][0] !== on) r2.push([on, 0]); r2[r2.length - 1][1]++; });
     // somebody walks past one at work (the five in place, then one change): a step that goes out stays out for
     // 0.6 s (nine frames) or more, whether it comes back in a free place or is handed the floor
-    for (const [w, before, after] of [[366, 'wwnwn', 'iwnwn'], [366, 'iiiwi', 'niiwi'], [366, 'wwwni', 'nwwni'], [400, 'wwwni', 'wnwni'], [888, 'wwwni', 'nwwni']]) {
+    // (the last four with letters as wide as a browser's: there a step beside the one that leads goes out as the
+    // walker comes by and would find its place free again a few frames later)
+    for (const [w, before, after, browser] of [[366, 'wwnwn', 'iwnwn'], [366, 'iiiwi', 'niiwi'], [366, 'wwwni', 'nwwni'], [400, 'wwwni', 'wnwni'], [888, 'wwwni', 'nwwni'], [366, 'wnnww', 'wnwww', 1], [366, 'wiwnw', 'wiinw', 1], [366, 'iwwwn', 'inwwn', 1], [366, 'wiiwi', 'wdiwi', 1]]) {
       const keep = STEPS5.filter((x, i) => before[i] === 'w' && after[i] === 'w'), runs = {};
-      const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, keep, c); }, { wideText: true });
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, keep, c); }, browser ? { browserText: true } : { wideText: true });
       r.scene.destroy();
-      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9)), `one walks past those at work @${w} (${before} > ${after}): a step that goes out stays out for 0.6 s or more`, say(runs));
+      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9)), `one walks past those at work @${w} (${before} > ${after}${browser ? ', letters of a browser' : ''}): a step that goes out stays out for 0.6 s or more`, say(runs));
     }
     // One more sits down to work beside those at work: a neighbour's step does not come on for a moment only, in the
     // frames in which the newcomer takes its seat (its head and its name are still on their way to their places
@@ -648,6 +650,14 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       const r = play(w, [[-1, five(before)], [20000, five(after)]], 32000, (t, s, c) => { if (t < 20000) return; Object.keys(texts).forEach((text) => { const n = c.ctx.textAt.filter((e) => e[0] === text).length; if (n === texts[text]) { full[text] = (full[text] || 0) + 1; if (first[text] === undefined) first[text] = Math.round(t - 20000); } }); }, { wideText: true, letter: 10.5 });
       r.scene.destroy();
       ok(Object.keys(texts).every((text) => first[text] !== undefined && first[text] <= (within || 1000) && full[text] >= 38), `several change at once @${w} (${before} > ${after}): the words of each are on show within ${within ? 'two seconds (the third of three that leave the lounge together speaks once the first two are past it)' : 'a second'}, together, for 2.5 s or more`, [first, full]);
+    }
+    // (Two that stand in the queue and leave it together: the one that sets off second is still standing, and where
+    // it will be is read from the way it was given. Letters as wide as a browser's.)
+    for (const [w, before, after] of [[888, 'nnnnn', 'nnddn'], [888, 'ninnn', 'niddn'], [1280, 'nnnnn', 'nnddn']]) {
+      let first = null, full = 0;
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 30000, (t, s, c) => { if (t < 20000) return; if (c.ctx.textAt.filter((e) => e[0] === 'Run due 08:07').length === 2) { full++; if (first === null) first = Math.round(t - 20000); } }, { browserText: true });
+      r.scene.destroy();
+      ok(first !== null && first <= 1000 && full >= 38, `two leave the queue together @${w} (${before} > ${after}): the words of both are on show within a second, together, for 2.5 s or more`, [first, full]);
     }
     // ... and on a phone, where they walk past each other and past the others, none of them comes on for a moment only
     for (const [w, before, after] of [[366, 'nniin', 'nnnnn'], [366, 'nniin', 'nnddn'], [400, 'iiiii', 'inndi'], [366, 'niiii', 'nnnnn']]) {
@@ -717,6 +727,16 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
     ok(Object.values(said).every((text) => (seen[text] || 0) >= 15) && onTop === 0, `four change at once @${w}: each one's words are shown for a second or more within thirteen, none on top of another`, [seen, onTop]);
     ok(!r.canvas.ctx.textAt.some((e) => Object.values(said).includes(e[0])), `four change at once @${w}: and the words are gone again afterwards`, r.canvas.ctx.textAt.map((e) => e[0]));
     r.scene.destroy();
+  }
+  // six to eight change at once on a phone: those who have to wait for the floor wait up to four turns for their
+  // first say, and still get 2.5 s of it
+  for (const [w, n, kind] of [[400, 8, 'due'], [366, 7, 'needs'], [400, 8, 'mixed']]) {
+    const base = FX.eight.crew.slice(0, n).map((a) => Object.assign({}, a, { state: 'idle', waiting: 0, step: '', bubble: '' }));
+    const after = base.map((a, i) => { const st = kind === 'mixed' ? ['needs', 'due', 'late'][i % 3] : kind; return Object.assign({}, a, st === 'needs' ? { state: 'needs', waiting: i + 1, bubble: a.name + ' has ' + (i + 1) } : st === 'due' ? { state: 'due', bubble: a.name + ' is due' } : { state: 'late', bubble: a.name + ' is late' }); });
+    const seen = {};
+    const r = play(w, [[-1, base], [20000, after]], 56000, (t, s, c) => { if (t >= 20000) after.forEach((a) => { if (c.ctx.textAt.some((e) => e[0] === a.bubble)) seen[a.bubble] = (seen[a.bubble] || 0) + 1; }); }, { browserText: true });
+    r.scene.destroy();
+    ok(after.every((a) => (seen[a.bubble] || 0) >= 38), `${n} change at once @${w} (${kind}): the words of each are on show for 2.5 s or more`, seen);
   }
   // all five change at once on a phone: they walk, so each speaks when the floor is its own, one after the other, and
   // the last of them is not lost for having waited four turns
