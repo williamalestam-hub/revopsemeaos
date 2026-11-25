@@ -850,6 +850,7 @@
         a.goal = goal;
         if (a.path) turn(a);
       });
+      crew.forEach((a) => { if (present(a) && a.pending && !a.path) a.plan = findPath(a.x, a.y, a.goal.x, a.goal.y, a).way; });   // (the way kept for one that has yet to set off is a way of this room)
     }
 
     // ───────── simulation ─────────
@@ -1427,12 +1428,14 @@
       // that time: where it is until then, then along the way it was given. One that sits and is about to get up,
       // or is just taking or leaving a seat, or reaches its seat within that time: not known (moveOf: null), because
       // head and name change places as it does; nobody starts anywhere around it (soon: x, y, w, h, whose), nor
-      // does it start itself. Everybody else stays where they are.
+      // does it start itself. Everybody else stays where they are, and so does one that has its way but has not
+      // taken its first step: it waits for its way out to be free, and until it goes it is where it is.
       const reach = pace() * 0.6, far = reach * k, moveOf = new Map(), soon = [], comes = [];
       const unknown = (a, x, y) => { moveOf.set(a, null); soon.push(Math.round((x - 7 - reach) * k), Math.round((y - 28 - reach) * k), Math.round((14 + 2 * reach) * k), Math.round((45 + 2 * reach) * k), a.desk); };
       list.forEach((v) => {
         const a = v.a, off = a.pending && a.delay < 600, way = a.path || (off ? a.plan : null);
         if (a.sitKind && (off || a.sit < 1)) { unknown(a, v.x, v.y); return; }
+        if (a.path && !a.moved) return;                                      // it has its way but waits for its way out to be free: it stays where it is for now
         if (!way) { if (off) unknown(a, v.x, v.y); return; }
         const mv = []; let nx = a.x, ny = a.y, n = 0, gone = off ? -Math.max(0, a.delay) / 1000 * pace() : 0;   // (gone: how far it has walked; below nought while it has yet to set off)
         for (let q9 = 0; q9 < 9; q9++) {
@@ -1514,7 +1517,7 @@
       const others = (lead, first, pick) => {
         const placed = [first], out = [];
         says.filter((s2) => s2 !== lead).sort((p, q2) => (p === pick ? -1 : q2 === pick ? 1 : p.a.shown === q2.a.shown ? (p.a.shown ? (fresh(q2) - fresh(p)) || byDesk(p, q2) : byWait(p, q2)) : p.a.shown ? -1 : 1)).forEach((s2) => {
-          if (!s2.a.shown && ((s2.a.quiet > 0 && s2.a.quiet < 600) || (closing && lead === holder))) return;
+          if (!s2.a.shown && ((s2.a.quiet > 0 && s2.a.quiet < 600) || (closing && lead === holder && lead !== hot))) return;
           const ok = (c) => c.clean && (!c.astir || (s2.a.shown && c.i === s2.a.stood)) && !placed.some((p) => hits(c, p));   // (astir: only the place it stands in)
           let best = null;
           s2.opts.forEach((c) => { if (ok(c) && (!best || c.price < best.price)) best = c; });
@@ -1545,7 +1548,8 @@
       const news = says.filter((s2) => s2 !== holder && s2.change && !s2.a.led).sort(byDesk);
       // closing: the floor is about to pass to somebody who waits (within half a second). Nobody starts to speak
       // beside the others then, to be put out by the next one's place a moment later; and if the one with the floor
-      // has new words just then, the floor passes first.
+      // has new words just then, the floor passes first. (Not while the one with the floor is pointed at: it keeps
+      // its place then, and the floor passes to the first that finds a place beside it.)
       const closing = !!holder && simT - floorSince >= 2300 && (waiting.length > 0 || news.length > 0);
       const due = !holder || (closing && (simT - floorSince >= 2800 || !holder.a.shown));
       // Who may lead, in this order: the first that has anywhere to stand does. The words of a change that have not

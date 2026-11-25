@@ -143,7 +143,7 @@ and the optional `hub/pulse`.
   once, those about to set off keep the place they stand on (their seat, their place in the queue's row, so the place
   somebody has just stepped out of stays open for the one walking to it), and those on their way walk on from where
   they are, or from the nearest open floor. Two that meet on their way while a new change arrives can walk on each
-  other for about half a second.
+  other for about half a second; two that a turn of the phone puts side by side on their way, for up to a second.
 - `dashboard/os-cockpit.js` and `os-cockpit.css`: the wiring (facts from `OS.hub`, `OS.sense`, `OS.lanes`, the chips, the
   tooltip, a redraw every 30 seconds and whenever a document changes) and the styles. The agents' names, their role
   sentences and the legend are in `index.html`. A click on a robot is a click on its chip, and the wiring answers the
