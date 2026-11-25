@@ -617,6 +617,14 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !runs[text].slice(0, -1).some((x) => x[0] && x[1] < 8)), `a page opens @${w} with ${st}: no step is on show for less than half a second before it goes out again`, say(runs));
     }
+    // The words of a change come before the steps that wait: with four at work taking turns on a phone, what has
+    // just happened is said within three seconds, not after everybody else has had a turn.
+    for (const [w, before, after, text] of [[366, 'wwwwi', 'wwwwn', '1 for you'], [400, 'wwwwi', 'wwwwn', '1 for you'], [366, 'wwwiw', 'wwwnw', '2 for you']]) {
+      let first = null, frames = 0;
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 32000, (t, s, c) => { if (t < 20000) return; if (c.ctx.textAt.some((e) => e[0] === text)) { frames++; if (first === null) first = t - 20000; } }, { wideText: true, letter: 10.5 });
+      r.scene.destroy();
+      ok(first !== null && first <= 3000 && frames >= 38, `four at work @${w} and one change (${before} > ${after}): its words are said within three seconds, for 2.5 s or more`, [first, frames]);
+    }
     // While one is pointed at, or has the focus, it speaks in every frame from one place, and the others go on
     // taking turns in the room that is left: nobody who took turns before is silent for as long as that lasts.
     for (const [w, st, hot] of [[366, 'wwwww', 'desk'], [366, 'wwwww', 'muse']]) {

@@ -1383,8 +1383,8 @@
     // name, a slip or a head, they take turns. One of them has the floor: it stands in the best place there is,
     // whatever is under it, and moves aside where that lets more of the others speak; the others speak only from a
     // free place at their owner, and do not start to speak where somebody is about to walk. The floor is kept for
-    // 2.8 s and for as long as nobody waits; then it goes to the one that has waited longest, or to the words of a
-    // change that have not had it yet. One that has just gone out stays out for a moment, with the floor as without,
+    // 2.8 s and for as long as nobody waits; then it goes to the words of a change that have not had it yet, or to
+    // the one that has waited longest. One that has just gone out stays out for a moment, with the floor as without,
     // so nothing comes and goes within the blink of an eye. Whoever is pointed at, or has the focus, speaks first
     // meanwhile, and the others go on taking turns in the room that is left. Nobody's bubble covers what says how
     // another one is (the sign over one that has failed, the question mark over an empty chair): beside it, the one
@@ -1493,10 +1493,13 @@
       const waiting = says.filter((s2) => s2 !== holder && s2.a.quiet > 0).sort(byWait);
       const news = says.filter((s2) => s2 !== holder && s2.change && !s2.a.led).sort(byDesk);
       const due = !holder || (simT - floorSince >= 2800 && (waiting.length > 0 || news.length > 0));
-      const line = [];                                                   // who may lead, in this order: the first that has anywhere to stand does
+      // Who may lead, in this order: the first that has anywhere to stand does. The words of a change that have not
+      // had the floor come before the steps that wait: a step is there for as long as its owner works, what has just
+      // happened is said now or not at all.
+      const line = [];
       const queueUp = (s2) => { if (s2 && line.indexOf(s2) < 0) line.push(s2); };
       queueUp(hot); if (!due) queueUp(holder);
-      waiting.forEach(queueUp); news.forEach(queueUp); queueUp(holder); says.slice().sort(byDesk).forEach(queueUp);
+      news.forEach(queueUp); waiting.forEach(queueUp); queueUp(holder); says.slice().sort(byDesk).forEach(queueUp);
       let lead = null, plan = null;
       // One that went out a moment ago is not handed the floor yet either: it stays out for as long as it would
       // without the floor. (Not the one pointed at, which speaks at once; nor the one that has the floor and was
