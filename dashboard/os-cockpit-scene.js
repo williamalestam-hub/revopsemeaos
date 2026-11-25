@@ -158,8 +158,10 @@
       // where the idle stand: on the sofa, in the gap by the coffee machine, or close up against the furniture, so that
       // the strip along the bottom wall stays free for whoever walks past (the lanes come down at both ends of it)
       const yt = y0 + 28, gap = cart.x - (table.x + 24);
-      const foos = gap >= 104 ? Math.round(table.x + 24 + (gap - 44) / 2) : 0;     // a long band has a foosball table between the sofa and the coffee
-      if (foos) L.extras.push({ kind: 'foos', x: foos, y: y0 + 2 });
+      // A long band has two beanbags between the sofa and the coffee. (They are low: the way along the desks above
+      // them and the way along the wall below them both stay open, which a table standing there would not allow.)
+      const foos = gap >= 104 ? Math.round(table.x + 24 + (gap - 44) / 2) : 0;
+      if (foos) L.extras.push({ kind: 'bags', x: foos + 2, y: y0 + 13 });
       spots = [
         { x: gap >= 60 ? cart.x - 13 : Math.round(table.x + 24 + gap / 2), y: gap >= 28 ? y0 + 24 : yt, coffee: true },
         { x: sofa.x + 16, y: sofa.y + 27, sofa: true }, { x: sofa.x + 43, y: sofa.y + 27, sofa: true },
@@ -186,7 +188,7 @@
     L.obst.push({ x: shelf.x, y: wallH, w: shelf.w, h: shelf.bottom - wallH });
     L.plants.forEach((p) => L.obst.push(tall(p.x + 2, p.y, 10, p.y + 22)));
     L.sides.forEach((u) => L.obst.push({ x: u.x, y: u.dy + 3, w: 12, h: 13 }));
-    L.extras.forEach((e) => L.obst.push(e.kind === 'meet' ? tall(e.x + 14, e.y + 5, 52, e.y + 36) : e.kind === 'board' ? tall(e.x, e.y, 30, e.y + 33) : e.kind === 'foos' ? tall(e.x, e.y, 44, e.y + 27) : e.kind === 'pong' ? tall(e.x, e.y + 1, 56, e.y + 30) : { x: e.x, y: e.y + 2, w: 40, h: 12 }));
+    L.extras.forEach((e) => L.obst.push(e.kind === 'meet' ? tall(e.x + 14, e.y + 5, 52, e.y + 36) : e.kind === 'board' ? tall(e.x, e.y, 30, e.y + 33) : e.kind === 'foos' ? tall(e.x, e.y, 44, e.y + 27) : e.kind === 'pong' ? tall(e.x, e.y + 1, 56, e.y + 30) : tall(e.x, e.y + 1, 40, e.y + 14)));
     if (L.lamp) L.obst.push({ x: L.lamp.x, y: L.lamp.y + 27, w: 8, h: 4 });
     if (L.cooler) L.obst.push({ x: L.cooler.x, y: wallH, w: 10, h: 8 });
     if (L.cabinet) L.obst.push({ x: L.cabinet.x, y: wallH, w: 22, h: 9 });
@@ -727,7 +729,7 @@
         const raw = arr[i]; if (!raw || typeof raw !== 'object') continue;
         const id = String(raw.id == null ? 'agent' + i : raw.id); if (seen.has(id)) continue; seen.add(id);
         let a = byId.get(id); const isNew = !a;
-        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', seated: true, path: null, pending: false, delay: 0, go: 0, held: 0, sat: 0, stuck: 0, waited: 0, far: 0, hold: null, why: 0, moved: false, waitFor: null, waitOn: null, sweep: null, push: false, barge: null, replan: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, tagAt: 0, bubAt: 0, bubWas: 0, sayText: '', spoke: 0, quiet: 0, told: 0, bubLate: 0, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
+        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', seated: true, path: null, pending: false, delay: 0, go: 0, held: 0, sat: 0, stuck: 0, waited: 0, far: 0, hold: null, why: 0, moved: false, waitFor: null, waitOn: null, sweep: null, push: false, barge: null, replan: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, tagAt: 0, bubAt: -1, bubWas: 0, shown: false, led: false, sayText: '', quiet: 0, told: 0, bubLate: 0, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
         const state = own(STATES, raw.state) ? raw.state : 'unknown', was = a.state;
         const name = String(raw.name == null ? '' : raw.name);
         a.name = name.length > 14 ? name.slice(0, 13) + '…' : name;
@@ -793,11 +795,11 @@
       w = clamp(num(w, 0), 0, 4096);
       const d = ratio();
       if (sized && w === cssW && d === dpr && canvas.width === cw && canvas.height === ch) { wake(); return cssH; }   // nothing changed: nobody is moved
-      const L0 = L, pitch0 = qPitch, s0 = s, had = sized;
+      const L0 = L, s0 = s, had = sized;
       dpr = d; cssW = w; cw = Math.round(w * dpr); sized = true;
       fit(); applySize();
       if (!had || !framed) retarget('first');
-      else if (L.W !== L0.W || L.H !== L0.H || s !== s0) reflow(L0, pitch0);   // the same room in other pixels (another screen, a zoom that keeps the size of a pixel) moves nobody
+      else if (L.W !== L0.W || L.H !== L0.H || s !== s0) reflow(L0);       // the same room in other pixels (another screen, a zoom that keeps the size of a pixel) moves nobody
       if (drew) draw();
       wake();
       return cssH;
@@ -806,15 +808,19 @@
     // step stands on the place it is about to leave, where that place is in the new room. One on its way keeps
     // walking from where the same spot of the old room now is, or from the nearest open floor when something stands
     // there now.
-    function reflow(L0, pitch0) {
+    function reflow(L0) {
+      // Who stands in the queue's row of the old room, from the front: a robot there keeps its rank in the row of the
+      // new room. (Their spacing is not to be trusted: it may be that of a queue that has just got shorter or longer.)
+      const inRow = (o) => Math.abs(o.y - L0.q.y) < 1 && o.x >= L0.q.x0 - 1;
+      const row = crew.filter((o) => present(o) && !(o.path && o.moved) && inRow(o)).map((o) => o.x).sort((p, q2) => p - q2);
+      spaceQueue();
+      const rowPitch = Math.min(qPitch, row.length > 1 ? Math.max(0, L.q.max - L.q.x0) / (row.length - 1) : qPitch);   // close enough together for the whole row to fit
       // the place of the old room that a stands on, in the new room: a place in the lounge, a place in the queue
       const placeOf = (a) => {
         for (let i = 0; i < L0.spots.length; i++) { const sp = L0.spots[i]; if (Math.abs(a.x - sp.x) < 1 && Math.abs(a.y - sp.y) < 1) return L.spots[i % L.spots.length]; }
-        const j = Math.round((a.x - L0.q.x0) / pitch0);
-        if (j >= 0 && Math.abs(a.y - L0.q.y) < 1 && Math.abs(a.x - (L0.q.x0 + j * pitch0)) < 1) return { x: Math.min(slotX(j), Math.max(L.q.x0, L.q.max)), y: L.q.y };
+        if (inRow(a)) return { x: L.q.x0 + row.filter((x) => x < a.x - 0.5).length * rowPitch, y: L.q.y };
         return null;
       };
-      spaceQueue();
       crew.forEach((a) => {
         const goal = goalOf(a), d = L.desks[a.desk];
         if (reduced || !present(a) || (!a.path && !a.pending)) { rest(a, goal); return; }
@@ -1358,24 +1364,27 @@
 
     // Bubbles: the step while working, a few words on a change. Over everything, and always right at their owner with
     // a tail to it, because a bubble anywhere else reads as somebody else's. Where one would lie on another, on a
-    // name, a slip, a head or the question mark over an empty chair, they take turns, a few seconds each: whoever is
-    // speaking keeps the floor for that long, then the one that has waited longest goes first and takes the best place
-    // there is, and the others speak only if a free place is left. Nobody's bubble covers the sign over another one
-    // that has failed. (Under reduced motion nothing takes turns: the lowest desk speaks, and whoever is pointed at
-    // or has the focus.)
-    let bubT = 0;
+    // name, a slip, a head or the question mark over an empty chair, they take turns. One of them has the floor: it
+    // stands in the best place there is, whatever is under it, and moves aside where that lets more of the others
+    // speak; the others speak only from a free place at their owner. The floor is kept for 2.8 s and for as long as
+    // nobody waits; then it goes to the one that has waited longest, or to the words of a change that have not had it
+    // yet. Whoever is pointed at, or has the focus, speaks first meanwhile. Nobody's bubble covers the sign over
+    // another one that has failed: beside it, the one with the floor says as much as fits. (Under reduced motion time
+    // stands still and nothing takes turns: the lowest desk has the floor.)
+    let bubT = 0, floorId = null, floorSince = 0;
     function drawBubbles(list) {
-      const u = dpr, cut = Math.max(1, Math.round(k)), keep = [], signs = [], says = [], put = [];
+      const u = dpr, cut = Math.max(1, Math.round(k)), keep = [], signs = [], says = [];
       const h = Math.round(16 * u), tail = Math.round(3 * k), up = h + 3 * u, since = clamp(simT - bubT, 0, 250);
       bubT = simT;
-      // What the last picture showed counts for the time since then: who spoke has spoken that much longer, who had
-      // to wait has waited that much longer. A change that waits for its first turn is not lost meanwhile, within
-      // reason; one that has had its say and lost the floor is over. Nothing is counted while time stands still, so
+      // What the last picture showed counts for the time since then: who spoke has been on show that much longer, who
+      // had to wait has waited that much longer. A change that waits for its first turn is not lost meanwhile, within
+      // reason; one that has had its say and lost its place is over. Nothing is counted while time stands still, so
       // the same moment drawn twice is the same picture.
       if (since > 0) crew.forEach((a) => {
-        if (a.bubWas === 1) { a.spoke += since; a.told += since; a.quiet = 0; }
+        a.shown = a.bubWas === 1;
+        if (a.bubWas === 1) { a.told += since; a.quiet = 0; }
         else if (a.bubWas === 2 || a.bubWas === 3) {
-          a.spoke = 0; a.quiet += since;
+          a.quiet += since;
           if (a.bubWas === 3) { if (a.told >= 2800) a.bubbleUntil = -1; else if (a.bubLate < 5600) { a.bubLate += since; a.bubbleUntil += since; } }
         }
       });
@@ -1390,56 +1399,87 @@
         const a = v.a; let text = '', change = false;
         if (a.state === 'working' && a.step && a.sitKind === 'desk' && a.sit >= 1) text = a.step;
         else if (a.bubbleUntil > simT && a.bubbleText) { text = a.bubbleText; change = true; }
-        if (text !== a.sayText) { a.sayText = text; a.spoke = 0; a.quiet = 0; a.told = 0; a.bubAt = 0; }
-        if (text) says.push({ v, text, change });
+        if (text !== a.sayText) { a.sayText = text; a.quiet = 0; a.told = 0; a.shown = false; a.led = false; a.bubAt = -1; }
+        if (text) says.push({ v, a, text, change });
       });
-      // in turn: the one pointed at or with the focus; those who have the floor; those who wait, the longest wait first;
-      // those who have had their say
-      const turnOf = (a) => (a.id === focusId || a.id === hoverId ? 0 : a.spoke > 0 && a.spoke < 2800 ? 1 : a.spoke > 0 ? 3 : 2);
-      says.sort((p, q2) => (turnOf(p.v.a) - turnOf(q2.v.a)) || (q2.v.a.quiet - p.v.a.quiet) || (p.v.a.desk - q2.v.a.desk));
+      if (!says.length) { inkOf = null; return; }
       g.font = fontTag;
-      says.forEach((say) => {
-        const v = say.v, a = v.a, lead = !put.length;                      // lead: the first to be placed this time
-        const headTop = (v.y - 20 + v.hy) * k, hx = v.x * k, b1 = headTop - h - tail;
-        const b0 = (v.y - (a.look === 'antenna' ? 28 : a.look === 'bulb' || a.look === 'gavel' ? 22 : 20) + v.hy) * k - h - tail;
-        // Where these words can stand: right above the head (beside an antenna, so the bubble stays close and the
-        // antenna in sight), or a little to one side of that; of those the place that covers least of the other words
-        // and of what is not to be covered. null: nowhere this time.
-        const place = (text) => {
-          const w = Math.round(textW(text, false) + 12 * u), side = w * 0.4;
-          const cand = a.look === 'antenna' ? [[hx - 2 * k - w, b1], [hx + 3 * k, b1], [hx - w / 2, b0]] : a.look === 'gavel' ? [[hx - w / 2, b0], [hx + 5 * k - w, b1]] : [[hx - w / 2, b0]];
-          cand.push([hx - w / 2 - side, b0], [hx - w / 2 + side, b0]);
-          const at = cand.map((c) => [Math.round(clamp(c[0], 2 * u, cw - w - 2 * u)), Math.round(clamp(c[1], 2 * u, ch - h - 2 * u))]);
-          const tailX = (X) => Math.round(clamp(hx, X + 3 * cut, X + w - 4 * cut));
-          const near = (X, Y) => Y + h <= headTop && headTop - (Y + h) < up && Math.abs(tailX(X) - hx) <= 7 * k;   // over its owner's head, less than a row above it: where the tail reaches
-          const cover = (X, Y) => {
-            let c2 = 0;
-            for (let j = 0; j < words.length; j += 4) c2 += lap(X, Y, w, h, words, j, 2 * u, u) + 8 * lap(X, Y, w, h, words, j, 0, 0);   // too close is poor, on top is worse
-            for (let j = 0; j < keep.length; j += 4) c2 += lap(X, Y, w, h, keep, j, u, u) + 8 * lap(X, Y, w, h, keep, j, 0, 0);
-            return c2;
-          };
-          const onTop = (X, Y) => { let c2 = 0; for (let j = 0; j < put.length; j += 4) c2 += lap(X, Y, w, h, put, j, u, u); for (let j = 0; j < keep.length; j += 4) c2 += lap(X, Y, w, h, keep, j, 0, 0); for (let j = 0; j < words.length; j += 4) c2 += lap(X, Y, w, h, words, j, 0, 0); return c2; };
-          const onSign = (X, Y) => { for (let j = 0; j < signs.length; j += 5) if (signs[j + 4] !== a.desk && lap(X, Y, w, h, signs, j, 0, 0) > 0) return true; return false; };
-          // the lead speaks whatever stands there, short of another one's sign; the others only from a place at their
-          // owner that is free
-          const free = (i) => !onSign(at[i][0], at[i][1]) && (lead || (near(at[i][0], at[i][1]) && onTop(at[i][0], at[i][1]) === 0));
-          const price = (i) => cover(at[i][0], at[i][1]) + i + (near(at[i][0], at[i][1]) ? 0 : 1e9);
-          let best = -1, bestC = Infinity;
-          for (let i = 0; i < cand.length; i++) { if (!free(i)) continue; const c2 = price(i); if (c2 < bestC) { best = i; bestC = c2; } }
-          if (best < 0) return null;
-          if (best !== a.bubAt && a.bubAt < cand.length && free(a.bubAt) && (says.length > 1 || bestC > 0) && price(a.bubAt) <= bestC + 0.03 * w * h) best = a.bubAt;   // it does not hop about for a little
-          return { text, w, i: best, X: at[best][0], Y: at[best][1], tx: tailX(at[best][0]), tail: near(at[best][0], at[best][1]) };
-        };
-        let p = place(say.text);
-        // The lead has nowhere to stand only when a sign is in the way: then it says as much as fits beside the sign.
-        if (!p && lead) for (let n = say.text.length - 1; n >= 6 && !p; n--) p = place(say.text.slice(0, n).trimEnd() + '…');
-        if (!p) { a.bubWas = say.change ? 3 : 2; return; }                 // no room this time: it waits for its turn
-        a.bubAt = p.i; a.bubWas = 1;
-        const w = p.w, X = p.X, Y = p.Y, tx = p.tx;
+      // The places these words can stand in: right above the figure (beside an antenna first, so the antenna stays in
+      // sight), or a little to one side of that. Each with what it costs: how much it covers of the names and slips
+      // and of what is not to be covered. near: over its owner's head and less than a row above the figure, where the
+      // tail reaches. clean: near, and on nothing at all.
+      const placesOf = (say, text) => {
+        const v = say.v, a = say.a, w = Math.round(textW(text, false) + 12 * u), side = w * 0.4, hx = v.x * k;
+        const top = a.look === 'antenna' ? 28 : a.look === 'bulb' || a.look === 'gavel' ? 22 : 20;
+        const headTop = (v.y - 20 + v.hy) * k, figTop = (v.y - top + v.hy) * k, b1 = headTop - h - tail, b0 = figTop - h - tail;
+        const cand = a.look === 'antenna' ? [[hx - 2 * k - w, b1], [hx + 3 * k, b1], [hx - w / 2, b0]] : a.look === 'gavel' ? [[hx - w / 2, b0], [hx + 5 * k - w, b1]] : [[hx - w / 2, b0]];
+        cand.push([hx - w / 2 - side, b0], [hx - w / 2 + side, b0]);
+        return cand.map((c, i) => {
+          const X = Math.round(clamp(c[0], 2 * u, cw - w - 2 * u)), Y = Math.round(clamp(c[1], 2 * u, ch - h - 2 * u)), tx = Math.round(clamp(hx, X + 3 * cut, X + w - 4 * cut));
+          const near = Y + h <= headTop && figTop - (Y + h) < up && Math.abs(tx - hx) <= 7 * k;
+          let cost = 0, on = 0, sign = false;
+          for (let j = 0; j < words.length; j += 4) { const l = lap(X, Y, w, h, words, j, 0, 0); on += l; cost += lap(X, Y, w, h, words, j, 2 * u, u) + 8 * l; }   // too close is poor, on top is worse
+          for (let j = 0; j < keep.length; j += 4) { const l = lap(X, Y, w, h, keep, j, 0, 0); on += l; cost += lap(X, Y, w, h, keep, j, u, u) + 8 * l; }
+          for (let j = 0; j < signs.length; j += 5) if (signs[j + 4] !== a.desk && lap(X, Y, w, h, signs, j, 0, 0) > 0) sign = true;
+          return { i, text, X, Y, w, tx, near, sign, clean: near && !sign && on === 0, price: cost + i + (near ? 0 : 1e9) };
+        });
+      };
+      says.forEach((say) => { say.opts = placesOf(say, say.text); });
+      const hits = (p, q2) => Math.min(p.X + p.w, q2.X + q2.w) - Math.max(p.X, q2.X) + u > 0 && Math.min(p.Y, q2.Y) + h - Math.max(p.Y, q2.Y) + u > 0;
+      const stays = (say, best, ok) => {                                   // it does not hop about for a little
+        const prev = say.opts.find((c) => c.i === say.a.bubAt);
+        return prev && prev !== best && ok(prev) && prev.price <= best.price + 0.03 * best.w * h ? prev : best;
+      };
+      // Who of the others gets a place when the one with the floor stands at `first`: those on show keep their
+      // places before those who wait, the longest wait first. One that has just gone out stays out for a moment, so
+      // that nothing comes and goes within the blink of an eye.
+      const byDesk = (p, q2) => p.a.desk - q2.a.desk, byWait = (p, q2) => (q2.a.quiet - p.a.quiet) || byDesk(p, q2);
+      const others = (lead, first) => {
+        const placed = [first], out = [];
+        says.filter((s2) => s2 !== lead).sort((p, q2) => (p.a.shown === q2.a.shown ? (p.a.shown ? byDesk(p, q2) : byWait(p, q2)) : p.a.shown ? -1 : 1)).forEach((s2) => {
+          if (!s2.a.shown && s2.a.quiet > 0 && s2.a.quiet < 600) return;
+          const ok = (c) => c.clean && !placed.some((p) => hits(c, p));
+          let best = null;
+          s2.opts.forEach((c) => { if (ok(c) && (!best || c.price < best.price)) best = c; });
+          if (!best) return;
+          best = stays(s2, best, ok); placed.push(best); out.push({ say: s2, c: best });
+        });
+        return out;
+      };
+      // Where the one with the floor stands: anywhere short of another one's sign, there where most of the others can
+      // speak too, and of those places the cheapest. With a sign in the way it says as much as fits beside the sign.
+      const leadAt = (lead) => {
+        let opts = lead.opts.filter((c) => !c.sign);
+        for (let n = lead.text.length - 1; n >= 6 && !opts.length; n--) opts = placesOf(lead, lead.text.slice(0, n).trimEnd() + '…').filter((c) => !c.sign);
+        if (!opts.length) return null;
+        let best = null, most = -1; const scored = opts.map((c) => ({ c, rest: others(lead, c) }));
+        scored.forEach((x) => { if (x.rest.length > most || (x.rest.length === most && x.c.price < best.c.price)) { best = x; most = x.rest.length; } });
+        const keepC = stays({ opts: scored.filter((x) => x.rest.length === most).map((x) => x.c), a: lead.a }, best.c, () => true);
+        return scored.find((x) => x.c === keepC);
+      };
+      // Who has the floor now.
+      const hot = says.find((s2) => s2.a.id === hoverId) || says.find((s2) => s2.a.id === focusId) || null;
+      const holder = says.find((s2) => s2.a.id === floorId) || null;
+      const waiting = says.filter((s2) => s2 !== holder && s2.a.quiet > 0).sort(byWait);
+      const news = says.filter((s2) => s2 !== holder && s2.change && !s2.a.led).sort(byDesk);
+      const due = !holder || (simT - floorSince >= 2800 && (waiting.length > 0 || news.length > 0));
+      const line = [];                                                   // who may lead, in this order: the first that has anywhere to stand does
+      const queueUp = (s2) => { if (s2 && line.indexOf(s2) < 0) line.push(s2); };
+      queueUp(hot); if (!due) queueUp(holder);
+      waiting.forEach(queueUp); news.forEach(queueUp); queueUp(holder); says.slice().sort(byDesk).forEach(queueUp);
+      let lead = null, plan = null;
+      for (let i = 0; i < line.length && !plan; i++) { plan = leadAt(line[i]); if (plan) lead = line[i]; }
+      if (lead && lead !== hot && lead !== holder) { floorId = lead.a.id; floorSince = simT; }   // (while somebody is pointed at, the floor stays with whoever has it)
+      if (lead) lead.a.led = true;
+      const drawn = plan ? [{ say: lead, c: plan.c }].concat(plan.rest) : [];
+      says.forEach((say) => { if (!drawn.some((d) => d.say === say)) say.a.bubWas = say.change ? 3 : 2; });   // no room this time: it waits for its turn
+      drawn.forEach((d) => {
+        const c = d.c, X = c.X, Y = c.Y, w = c.w, tx = c.tx;
+        d.say.a.bubAt = c.i; d.say.a.bubWas = 1;
         plate(g, X, Y, w, h, cut, INK); plate(g, X + cut, Y + cut, w - 2 * cut, h - 2 * cut, cut, '#fffdf2');
-        if (p.tail) { g.fillStyle = INK; g.fillRect(tx - cut, Y + h - cut, 3 * cut, 2 * cut); g.fillRect(tx, Y + h + cut, cut, cut); g.fillStyle = '#fffdf2'; g.fillRect(tx, Y + h - cut, cut, 2 * cut); markD(tx - cut - 1, Y + h - cut, 3 * cut + 2, 3 * cut + 1); }
-        g.fillStyle = INK; g.fillText(p.text, X + Math.round(6 * u), Y + Math.round(11.5 * u));
-        wordAt(X, Y, w, h); put.push(X, Y, w, h);
+        if (c.near) { g.fillStyle = INK; g.fillRect(tx - cut, Y + h - cut, 3 * cut, 2 * cut); g.fillRect(tx, Y + h + cut, cut, cut); g.fillStyle = '#fffdf2'; g.fillRect(tx, Y + h - cut, cut, 2 * cut); markD(tx - cut - 1, Y + h - cut, 3 * cut + 2, 3 * cut + 1); }
+        g.fillStyle = INK; g.fillText(c.text, X + Math.round(6 * u), Y + Math.round(11.5 * u));
+        wordAt(X, Y, w, h);
       });
       inkOf = null;
     }
