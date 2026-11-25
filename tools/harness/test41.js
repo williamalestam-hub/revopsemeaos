@@ -560,7 +560,9 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
   {
     const runsOf = (w, crew, texts, from, to, opts) => {
       const runs = {};
-      const r = play(w, [[-1, []], [1000, crew]], to, (t, s, c) => { if (t < from) return; texts.forEach((text) => { const on = c.ctx.textAt.some((e) => e[0] === text), r2 = runs[text] || (runs[text] = []); if (!r2.length || r2[r2.length - 1][0] !== on) r2.push([on, 0]); r2[r2.length - 1][1]++; }); }, Object.assign({ wideText: true }, opts || {}));
+      // (on show: whole, or as much of it as fits beside a sign or a question mark, ending in an ellipsis)
+      const says = (e, text) => e[0] === text || (e[0].endsWith('…') && e[0].length > 6 && text.startsWith(e[0].slice(0, -1).trimEnd()));
+      const r = play(w, [[-1, []], [1000, crew]], to, (t, s, c) => { if (t < from) return; texts.forEach((text) => { const on = c.ctx.textAt.some((e) => says(e, text)), r2 = runs[text] || (runs[text] = []); if (!r2.length || r2[r2.length - 1][0] !== on) r2.push([on, 0]); r2[r2.length - 1][1]++; }); }, Object.assign({ wideText: true }, opts || {}));
       r.scene.destroy(); return runs;
     };
     const inner = (r2) => r2.slice(1, -1), say = (runs) => Object.fromEntries(Object.entries(runs).map(([k2, r2]) => [k2, r2.map((x) => (x[0] ? '+' : '-') + x[1]).join(' ')]));
@@ -740,6 +742,22 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
         m.s.destroy(); }
       ok(inFurn === 0, 'the page changes width while robots change places: nobody stands or walks inside a desk, the table or the coffee cart afterwards', [inFurn, notes]);
       ok(stoodUp === 0, '... and one still waiting on the sofa for its turn stays seated on the sofa of the new room', stoodUp); }
+
+    // the question mark over an empty chair is never covered by a neighbour's bubble: the neighbour stands aside, or
+    // says as much as fits beside it (letters 5.25 css px wide here, as in a browser)
+    { const out = [], LW = 10.5;
+      const cases = [[['unknown', 'working', 'needs', 'working', 'unknown'], ['', 'Checking pipeline health', '', 'Drafting a longer answer', '']], [['working', 'working', 'working', 'working', 'unknown'], ['Reading Slack', 'Sorting 17 items', 'Checking pipeline health', 'Drafting ideas', '']]];
+      for (const [states, steps] of cases) for (const w of [366, 400]) { const m = mk(); m.canvas.ctx.measureText = (str) => ({ width: String(str).length * LW });
+        const crew = crewOf(states); crew.forEach((a, i) => { a.step = steps[i]; });
+        const mine = (text) => steps.some((full) => full && (text === full || (text.endsWith('…') && text.length > 6 && full.startsWith(text.slice(0, -1).trimEnd()))));
+        m.s.setCrew([]); m.s.resize(w); m.run(1000); m.s.setCrew(crew); let covered = 0, said = 0, frames = 0;
+        for (; m.st.t <= 44000; m.st.t += STEP) { m.canvas.ctx.textAt.length = 0; m.s.frame(m.st.t); if (m.st.t < 14000) continue; frames++;
+          const d = m.s._dbg(), k2 = m.canvas.width / d.L.W, marks = d.crew.filter((a) => a.state === 'unknown').map((a) => d.L.desks[a.desk]).map((dk) => ({ x: (dk.sx - 3) * k2, y: (dk.dy - 22) * k2, w: 6 * k2, h: 9 * k2 }));
+          const bubs = m.canvas.ctx.textAt.filter((e) => mine(e[0])).map((e) => ({ x: e[1] - 12, y: e[2] - 23, w: Math.round(e[0].length * LW + 24), h: 32 }));
+          if (bubs.length) said++;
+          bubs.forEach((b) => marks.forEach((q) => { if (Math.min(b.x + b.w, q.x + q.w) > Math.max(b.x, q.x) && Math.min(b.y + b.h, q.y + q.h) > Math.max(b.y, q.y)) covered++; })); }
+        out.push([states.map((x) => x[0]).join(''), w, covered, said, frames]); m.s.destroy(); }
+      ok(out.every((x) => x[2] === 0 && x[3] === x[4]), 'at work beside empty chairs: no bubble ever lies on a question mark, and somebody speaks in every frame', out); }
 
     // the queue's row when the room changes as some leave it: each who still waits keeps a place in the row
     { global.devicePixelRatio = 3;

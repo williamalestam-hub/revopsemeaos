@@ -1374,13 +1374,13 @@
 
     // Bubbles: the step while working, a few words on a change. Over everything, and always right at their owner with
     // a tail to it, because a bubble anywhere else reads as somebody else's. Where one would lie on another, on a
-    // name, a slip, a head or the question mark over an empty chair, they take turns. One of them has the floor: it
-    // stands in the best place there is, whatever is under it, and moves aside where that lets more of the others
-    // speak; the others speak only from a free place at their owner. The floor is kept for 2.8 s and for as long as
-    // nobody waits; then it goes to the one that has waited longest, or to the words of a change that have not had it
-    // yet. Whoever is pointed at, or has the focus, speaks first meanwhile. Nobody's bubble covers the sign over
-    // another one that has failed: beside it, the one with the floor says as much as fits. (Under reduced motion time
-    // stands still and nothing takes turns: the lowest desk has the floor.)
+    // name, a slip or a head, they take turns. One of them has the floor: it stands in the best place there is,
+    // whatever is under it, and moves aside where that lets more of the others speak; the others speak only from a
+    // free place at their owner. The floor is kept for 2.8 s and for as long as nobody waits; then it goes to the one
+    // that has waited longest, or to the words of a change that have not had it yet. Whoever is pointed at, or has
+    // the focus, speaks first meanwhile. Nobody's bubble covers what says how another one is (the sign over one that
+    // has failed, the question mark over an empty chair): beside it, the one with the floor says as much as fits.
+    // (Under reduced motion time stands still and nothing takes turns: the lowest desk has the floor.)
     let bubT = 0, floorId = null, floorSince = 0;
     function drawBubbles(list) {
       const u = dpr, cut = Math.max(1, Math.round(k)), keep = [], signs = [], says = [];
@@ -1399,11 +1399,12 @@
         }
       });
       crew.forEach((a) => { a.bubWas = 0; });
-      // not to be covered: everybody's head, the question marks, the plate with your name; and never, by anybody
-      // else's bubble, the sign over one that has failed (signs: x, y, w, h, whose)
+      // not to be covered: everybody's head, the plate with your name; and never, by anybody else's bubble, what says
+      // how another one is: the sign over one that has failed, the question mark over an empty chair (signs: x, y, w,
+      // h, whose)
       list.forEach((v) => keep.push(Math.round((v.x + v.hx - 6) * k), Math.round((v.y - 19 + v.hy) * k), Math.round(12 * k), Math.round(9 * k)));
       list.forEach((v) => { if (v.fx === 'err') signs.push(Math.round((v.x - 4) * k), Math.round((v.y - 35) * k), Math.round(9 * k), Math.round(11 * k), v.a.desk); });
-      crew.forEach((a) => { const d = L.desks[a.desk]; if (!present(a) && d) keep.push(Math.round((d.sx - 4) * k), Math.round((d.dy - 24) * k), Math.round(8 * k), Math.round(11 * k)); });
+      crew.forEach((a) => { const d = L.desks[a.desk]; if (!present(a) && d) signs.push(Math.round((d.sx - 4) * k), Math.round((d.dy - 24) * k), Math.round(8 * k), Math.round(11 * k), a.desk); });
       { const wd = L.wd, w = Math.round(textW('You', false) + 10 * u); keep.push(Math.round((wd.x + wd.w / 2) * k - w / 2), Math.round((wd.by + 13) * k), w, Math.round(14 * u)); }
       list.forEach((v) => {
         const a = v.a; let text = '', change = false;
@@ -1456,8 +1457,9 @@
         });
         return out;
       };
-      // Where the one with the floor stands: anywhere short of another one's sign, there where most of the others can
-      // speak too, and of those places the cheapest. With a sign in the way it says as much as fits beside the sign.
+      // Where the one with the floor stands: anywhere short of another one's sign or question mark, there where most
+      // of the others can speak too, and of those places the cheapest. With one of those in the way it says as much
+      // as fits beside it.
       const leadAt = (lead) => {
         let opts = lead.opts.filter((c) => !c.sign);
         for (let n = lead.text.length - 1; n >= 6 && !opts.length; n--) opts = placesOf(lead, lead.text.slice(0, n).trimEnd() + '…').filter((c) => !c.sign);

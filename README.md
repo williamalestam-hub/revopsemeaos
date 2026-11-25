@@ -108,9 +108,9 @@ take turns and walk around each other and the furniture, so the picture needs a 
 ten when the whole crew moves); the chips under it change at once. A robot at work has its step in a bubble over its
 head, and a change is said in a bubble for a few seconds. A bubble always stands at its owner; where two would cover
 each other, or a name or a slip, they take turns of a few seconds, and the one you point at speaks first. No bubble
-covers the red sign over an agent that failed: beside it a neighbour says as much of its step as fits. The room stays
-empty for a moment after the page opens, until every document and your own reactions to it have answered (2.5 seconds
-at most), so that no robot sets off with a count that is about to drop.
+covers the red sign over an agent that failed or the question mark over an empty chair: beside it a neighbour says as
+much of its step as fits. The room stays empty for a moment after the page opens, until every document and your own
+reactions to it have answered (2.5 seconds at most), so that no robot sets off with a count that is about to drop.
 
 Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
 chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide
