@@ -729,7 +729,7 @@
         const raw = arr[i]; if (!raw || typeof raw !== 'object') continue;
         const id = String(raw.id == null ? 'agent' + i : raw.id); if (seen.has(id)) continue; seen.add(id);
         let a = byId.get(id); const isNew = !a;
-        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', seated: true, path: null, pending: false, delay: 0, go: 0, held: 0, sat: 0, stuck: 0, waited: 0, far: 0, hold: null, why: 0, moved: false, waitFor: null, waitOn: null, sweep: null, push: false, barge: null, replan: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, tagAt: 0, bubAt: -1, bubWas: 0, shown: false, led: false, sayText: '', quiet: 0, told: 0, bubLate: 0, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
+        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', seated: true, path: null, pending: false, delay: 0, go: 0, held: 0, sat: 0, stuck: 0, waited: 0, far: 0, hold: null, why: 0, moved: false, waitFor: null, waitOn: null, sweep: null, push: false, barge: null, replan: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, tagAt: 0, bubAt: -1, stood: -1, bubWas: 0, shown: false, led: false, sayText: '', quiet: 0, told: 0, bubLate: 0, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
         const state = own(STATES, raw.state) ? raw.state : 'unknown', was = a.state;
         const name = String(raw.name == null ? '' : raw.name);
         a.name = name.length > 14 ? name.slice(0, 13) + '…' : name;
@@ -1391,7 +1391,7 @@
       // reason; one that has had its say and lost its place is over. Nothing is counted while time stands still, so
       // the same moment drawn twice is the same picture.
       if (since > 0) crew.forEach((a) => {
-        a.shown = a.bubWas === 1;
+        a.shown = a.bubWas === 1; a.stood = a.shown ? a.bubAt : -1;         // (on show a moment ago, and where)
         if (a.bubWas === 1) { a.told += since; a.quiet = 0; }
         else if (a.bubWas === 2 || a.bubWas === 3) {
           a.quiet += since;
@@ -1410,7 +1410,7 @@
         const a = v.a; let text = '', change = false;
         if (a.state === 'working' && a.step && a.sitKind === 'desk' && a.sit >= 1) text = a.step;
         else if (a.bubbleUntil > simT && a.bubbleText) { text = a.bubbleText; change = true; }
-        if (text !== a.sayText) { a.sayText = text; a.quiet = 0; a.told = 0; a.shown = false; a.led = false; a.bubAt = -1; }
+        if (text !== a.sayText) { a.sayText = text; a.quiet = 0; a.told = 0; a.shown = false; a.stood = -1; a.led = false; a.bubAt = -1; }
         if (text) says.push({ v, a, text, change });
       });
       if (!says.length) { inkOf = null; return; }
@@ -1438,7 +1438,8 @@
       says.forEach((say) => { say.opts = placesOf(say, say.text); });
       const hits = (p, q2) => Math.min(p.X + p.w, q2.X + q2.w) - Math.max(p.X, q2.X) + u > 0 && Math.min(p.Y, q2.Y) + h - Math.max(p.Y, q2.Y) + u > 0;
       const stays = (say, best, ok) => {                                   // it does not hop about for a little
-        const prev = say.opts.find((c) => c.i === say.a.bubAt);
+        if (reduced) return best;                                          // (where nothing moves there is nothing to steady, and the picture must not depend on what was shown before)
+        const prev = say.opts.find((c) => c.i === say.a.stood);            // (where it stood a moment ago: not where another picture of this same moment put it)
         return prev && prev !== best && ok(prev) && prev.price <= best.price + 0.03 * best.w * h ? prev : best;
       };
       // Who of the others gets a place when the one with the floor stands at `first`: those on show keep their
