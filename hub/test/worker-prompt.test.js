@@ -48,6 +48,8 @@ const required = [
   ['step 1 external: no Granola lookup, no firm names in the open fields', ['skip the Granola lookup', 'keep firm and client names out of title, summary, why and the brief headline', 'Prep: external meeting']],
   // step 2 granola
   ['step 2 granola tools and window', ['list_meetings', 'search_meetings', 'get_meetings', 'last 2 days', 'William as participant']],
+  // Friday's leadership calls end after the Friday 13:13 run: Monday morning has to look back to Friday
+  ['step 2 a Monday looks back to Friday', ['minus 3 days on a Monday', "Friday afternoon's meetings", '(3 on a Monday)']],
   ['step 2 ownership rule', ['Next Steps', 'I/we will', 'Unclear owner', 'severity `low`']],
   ['step 2 item and preparation', ['gr-<meetingId>-<slug40>', 'kind `task`', 'a message →', 'a doc →', 'a bigger build']],
   ['step 2 build plan contents', ['scope, data, screens, risks, effort', 'goal, users, data, screens, risks, effort']],
@@ -156,6 +158,8 @@ const allow = new Set([
   'Stale', 'Rules', 'Also', 'Never', 'Internal', 'Keep', 'Skip', 'External', 'Unclear', 'Prepare', 'Every', 'Only', 'Any',
   'Status', 'Both', 'Tools', 'Trigger', 'Real', 'Load', 'Read', 'Write', 'Then', 'Severity', 'Recipients', 'Finish', 'Brief', 'Insights',
   'Documents', 'Ids', 'Writing', 'Drafting', 'Steps', 'Id', 'Today',
+  // weekdays (the Monday run looks back to Friday)
+  'Monday', 'Friday',
 ]);
 const properNoun = /\b([A-Z][a-z]+(?:[A-Z][a-z]+)*)\b/g;
 const unknown = new Set();
