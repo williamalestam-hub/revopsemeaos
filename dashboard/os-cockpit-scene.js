@@ -809,17 +809,27 @@
     // walking from where the same spot of the old room now is, or from the nearest open floor when something stands
     // there now.
     function reflow(L0) {
-      // Who stands in the queue's row of the old room, from the front: a robot there keeps its rank in the row of the
-      // new room. (Their spacing is not to be trusted: it may be that of a queue that has just got shorter or longer.)
-      const inRow = (o) => Math.abs(o.y - L0.q.y) < 1 && o.x >= L0.q.x0 - 1;
-      const row = crew.filter((o) => present(o) && !(o.path && o.moved) && inRow(o)).map((o) => o.x).sort((p, q2) => p - q2);
+      // The queue's row of the old room, from the front. Those at rest in it stand on their slots of the new room.
+      // Those who have yet to take their first step out of it, or up in it, stand between them in the order they
+      // stood, as close together as it takes to fit. (Where they stood is not to be read from the row's spacing: that
+      // may be the spacing of a queue that has just got shorter or longer.)
+      const inRow = (o) => Math.abs(o.y - L0.q.y) < 1 && o.x >= L0.q.x0 - 1, going = (o) => o.pending || !!o.path;
+      const row = crew.filter((o) => present(o) && inRow(o) && !(o.path && o.moved)).sort((p, q2) => (p.x - q2.x) || (p.desk - q2.desk));
       spaceQueue();
-      const rowPitch = Math.min(qPitch, row.length > 1 ? Math.max(0, L.q.max - L.q.x0) / (row.length - 1) : qPitch);   // close enough together for the whole row to fit
-      // the place of the old room that a stands on, in the new room: a place in the lounge, a place in the queue
+      const rowX = new Map();
+      for (let i = 0; i < row.length;) {
+        if (!going(row[i])) { i++; continue; }
+        let j = i; while (j < row.length && going(row[j])) j++;
+        const m = j - i, left = i > 0 ? goalOf(row[i - 1]).x : null, right = j < row.length ? goalOf(row[j]).x : null;
+        const from = left === null ? L.q.x0 : left, to = right === null ? Math.max(from, L.q.max) : right;
+        const step = Math.min(qPitch, Math.max(0, to - from) / Math.max(1, m - 1 + (left === null ? 0 : 1) + (right === null ? 0 : 1)));
+        for (let n = 0; n < m; n++) rowX.set(row[i + n], from + (n + (left === null ? 0 : 1)) * step);
+        i = j;
+      }
+      // the place of the old room that a stands on, in the new room: a place in the lounge, a place in the queue's row
       const placeOf = (a) => {
         for (let i = 0; i < L0.spots.length; i++) { const sp = L0.spots[i]; if (Math.abs(a.x - sp.x) < 1 && Math.abs(a.y - sp.y) < 1) return L.spots[i % L.spots.length]; }
-        if (inRow(a)) return { x: L.q.x0 + row.filter((x) => x < a.x - 0.5).length * rowPitch, y: L.q.y };
-        return null;
+        return rowX.has(a) ? { x: rowX.get(a), y: L.q.y } : null;
       };
       crew.forEach((a) => {
         const goal = goalOf(a), d = L.desks[a.desk];

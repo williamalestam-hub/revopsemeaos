@@ -107,10 +107,10 @@ read, or was never written). When a document changes while the page is open, the
 take turns and walk around each other and the furniture, so the picture needs a few seconds to follow a change (about
 ten when the whole crew moves); the chips under it change at once. A robot at work has its step in a bubble over its
 head, and a change is said in a bubble for a few seconds. A bubble always stands at its owner; where two would cover
-each other, or a name or a slip, they take turns, and the one you point at speaks first. No bubble covers the red sign
-over an agent that failed: beside it a neighbour says as much of its step as fits. The room stays empty for a moment
-after the page opens, until every document and your own reactions to it have answered (2.5 seconds at most), so that
-no robot sets off with a count that is about to drop.
+each other, or a name or a slip, they take turns of a few seconds, and the one you point at speaks first. No bubble
+covers the red sign over an agent that failed: beside it a neighbour says as much of its step as fits. The room stays
+empty for a moment after the page opens, until every document and your own reactions to it have answered (2.5 seconds
+at most), so that no robot sets off with a count that is about to drop.
 
 Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
 chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide
@@ -129,7 +129,8 @@ and the optional `hub/pulse`.
   chips carry on alone; the error is thrown on once, for the page's own check to report. A robot is painted over the
   room, so nobody stands or walks behind furniture taller than its feet are high (a wide page has a meeting table, a
   planning board and plants to walk around). When the page changes width, those at rest stand in their new places at
-  once, and those on their way walk on from where they are, or from the nearest open floor.
+  once, those about to set off keep their place (their rank in the queue, their seat), and those on their way walk on
+  from where they are, or from the nearest open floor.
 - `dashboard/os-cockpit.js` and `os-cockpit.css`: the wiring (facts from `OS.hub`, `OS.sense`, `OS.lanes`, the chips, the
   tooltip, a redraw every 30 seconds and whenever a document changes) and the styles. The agents' names, their role
   sentences and the legend are in `index.html`. A click on a robot is a click on its chip, and the wiring answers the
