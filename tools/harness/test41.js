@@ -617,6 +617,23 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9)), `one walks past those at work @${w} (${before} > ${after}${browser ? ', letters of a browser' : ''}): a step that goes out stays out for 0.6 s or more`, say(runs));
     }
+    // A step that changes while a neighbour walks by with its words on show: the new step does not start where those
+    // words are about to be, to go out again a third of a second later. (Letters as wide as a browser's.)
+    for (const [w, before, after, who] of [[366, 'nniwi', 'nndwi', 3], [366, 'wniwn', 'wnnwn', 3], [366, 'nnniw', 'nnnnw', 4], [366, 'wwiwi', 'wwdwi', 3]]) {
+      const c2 = five(after).map((x, j) => (j === who ? Object.assign({}, x, { step: 'Posting the note', bubble: 'Posting the note' }) : x)), runs = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)], [22000, c2]], 29000, (t, s, c) => { if (t >= 22000) track(runs, ['Posting the note'], c); }, { browserText: true });
+      r.scene.destroy();
+      const v = runs['Posting the note'] || [];
+      ok(v.some((x) => x[0]) && !v.slice(0, -1).some((x) => x[0] && x[1] < 8), `a step that changes as a neighbour walks by with its words @${w} (${before} > ${after}, a new step two seconds later): it is not on show for less than half a second before it goes out again`, say(runs));
+    }
+    // One that failed comes to its desk beside those at work: the sign over it lights when it sits, and no
+    // neighbour's step comes on a moment before that only to be put out by it (nor is one put out early for it).
+    for (const [w, before, after, opts] of [[400, 'wwwin', 'wwwen', { wideText: true, letter: 10.5 }], [400, 'iwwwi', 'iwwwe', { wideText: true, letter: 10.5 }], [400, 'iwwwi', 'iwwwe', { browserText: true }]]) {
+      const keep = STEPS5.filter((x, i) => before[i] === 'w'), runs = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, keep, c); }, opts);
+      r.scene.destroy();
+      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => x[0] && x[1] < 8)), `one that failed comes to its desk @${w} (${before} > ${after}${opts.browserText ? ', letters of a browser' : ''}): no neighbour's step is on show for less than half a second between two stretches out`, say(runs));
+    }
     // One more sits down to work beside those at work: a neighbour's step does not come on for a moment only, in the
     // frames in which the newcomer takes its seat (its head and its name are still on their way to their places
     // then) or just before the floor passes to the newcomer. (Letters as wide as a browser's.)
@@ -629,11 +646,15 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
     // A page that opens on a phone with some at work while the others set off: no step comes on for a moment only to
     // be walked out of its place by a neighbour that gets up. What comes on stays on for half a second or more.
     // (Letters 5.25 css px wide, as in a browser.)
-    for (const [w, st] of [[366, 'wwnwn'], [366, 'iiwwn'], [400, 'wwwni'], [400, 'wwnwn'], [366, 'wwwwn'], [400, 'wwwnn'], [366, 'wwwni'], [400, 'wwwwn']]) {
+    // (The last seven: one that has only just come on is not pushed out by a neighbour's bubble that has to move
+    // (wiwwi); nobody starts beside one on its way while another is about to arrive, for the first one's way is made
+    // again then (wwnwn, iwnwn at 390); and the one with the floor does not swap one that has just come on for one
+    // that waits (iiwww). Those marked 12 with letters 6 css px wide.)
+    for (const [w, st, letter] of [[366, 'wwnwn'], [366, 'iiwwn'], [400, 'wwwni'], [400, 'wwnwn'], [366, 'wwwwn'], [400, 'wwwnn'], [366, 'wwwni'], [400, 'wwwwn'], [366, 'wiwwi'], [390, 'wiwwi'], [366, 'wiwwi', 12], [390, 'wwnwn'], [390, 'iwnwn'], [366, 'iiwww', 12], [390, 'iiwww', 12]]) {
       const keep = STEPS5.filter((x, i) => st[i] === 'w'), runs = {};
-      const r = play(w, [[-1, []], [1000, five(st)]], 16000, (t, s, c) => { if (t >= 1000) track(runs, keep, c); }, { wideText: true, letter: 10.5 });
+      const r = play(w, [[-1, []], [1000, five(st)]], 16000, (t, s, c) => { if (t >= 1000) track(runs, keep, c); }, { wideText: true, letter: letter || 10.5 });
       r.scene.destroy();
-      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !runs[text].slice(0, -1).some((x) => x[0] && x[1] < 8)), `a page opens @${w} with ${st}: no step is on show for less than half a second before it goes out again`, say(runs));
+      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !runs[text].slice(0, -1).some((x) => x[0] && x[1] < 8)), `a page opens @${w} with ${st}${letter ? ' (letters 6 css px)' : ''}: no step is on show for less than half a second before it goes out again`, say(runs));
     }
     // The words of a change come before the steps that wait: with four at work taking turns on a phone, what has
     // just happened is said within three seconds, not after everybody else has had a turn.

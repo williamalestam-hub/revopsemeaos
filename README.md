@@ -108,17 +108,20 @@ take turns and walk around each other and the furniture, so the picture needs a 
 ten when the whole crew moves); the chips under it change at once. A robot at work has its step in a bubble over its
 head, and a change is said in a bubble for a few seconds. A bubble always stands at its owner; where two would cover
 each other, or a name or a slip, they take turns of a few seconds, the words of a change before the steps. One that
-goes out stays out for at least half a second, and none starts to speak where something will be in its way a moment
-later (the scene works out where every robot will be over the next half second), so nothing flickers when somebody
-walks past. Two that change at the same moment (Instinct and Muse are both due at 08:07) speak together where there
-is room for both, and one after the other where there is not; on a phone a step may come on a second or two after the
-page opens, once the neighbours have left. One that goes to work says its step on the way and keeps saying it once it
-sits. The one you point at speaks first, from one place, and the others go on taking turns beside it. No neighbour's
-bubble covers the red sign over an agent that failed or the question mark over an empty chair: beside it the
-neighbour says as much of its step as fits. (The failed agent's own few words stand on its own sign while they last.)
-With reduced motion nothing takes turns: the agent at the lowest desk speaks, and whoever you point at. The room
-stays empty for a moment after the page opens, until every document and your own reactions to it have answered (2.5
-seconds at most), so that no robot sets off with a count that is about to drop.
+goes out stays out for at least half a second, and none takes a place where somebody will be in its way a moment
+later: the scene works out where every robot will be over the next half second, and keeps clear of those it cannot
+tell that of (one about to get up or to sit down, and everybody on their way while another is about to arrive, since
+they choose their ways again then). So a bubble does not come on only to be walked out of its place: `test41.js` holds
+that for a page that opens and for one agent changing on a phone; in a run of changes a few seconds apart it can still
+happen now and then. Two that change at the same moment (Instinct and Muse are both due at 08:07) speak together where
+there is room for both, and one after the other where there is not; on a phone a step may come on a second or two
+after the page opens, once the neighbours have left. One that goes to work says its step on the way and keeps saying
+it once it sits. The one you point at speaks first, from one place, and the others go on taking turns beside it. No
+neighbour's bubble covers the red sign over an agent that failed or the question mark over an empty chair: beside it
+the neighbour says as much of its step as fits. (The failed agent's own few words stand on its own sign while they
+last.) With reduced motion nothing takes turns: the agent at the lowest desk speaks, and whoever you point at. The
+room stays empty for a moment after the page opens, until every document and your own reactions to it have answered
+(2.5 seconds at most), so that no robot sets off with a count that is about to drop.
 
 Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
 chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide

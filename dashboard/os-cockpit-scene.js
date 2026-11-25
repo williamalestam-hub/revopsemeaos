@@ -1380,9 +1380,10 @@
     // Bubbles: the step while working, a few words on a change. Over everything, and always right at their owner with
     // a tail to it, because a bubble anywhere else reads as somebody else's. Where one would lie on another, on a
     // name, a slip or a head, they take turns. One of them has the floor: it stands in the best place there is,
-    // whatever is under it, and moves aside where that lets more of the others speak; the others speak only from a
-    // free place at their owner, and do not start to speak where somebody is about to walk. The floor is kept for
-    // 2.8 s and for as long as nobody waits; then it goes to the words of a change that have not had it yet, or to
+    // whatever is under it, and moves aside where that lets more of the others speak (not to swap one on show for
+    // one that waits); the others speak only from a free place at their owner, and none of them takes a place where
+    // somebody is about to be in its way. One that stands in such a place stays there until it is. The floor is kept
+    // for 2.8 s and for as long as nobody waits; then it goes to the words of a change that have not had it yet, or to
     // the one that has waited longest. One that has just gone out stays out for a moment, with the floor as without,
     // so nothing comes and goes within the blink of an eye. Whoever is pointed at, or has the focus, speaks first
     // meanwhile, and the others go on taking turns in the room that is left. Nobody's bubble covers what says how
@@ -1427,7 +1428,7 @@
       // or is just taking or leaving a seat, or reaches its seat within that time: not known (moveOf: null), because
       // head and name change places as it does; nobody starts anywhere around it (soon: x, y, w, h, whose), nor
       // does it start itself. Everybody else stays where they are.
-      const reach = pace() * 0.6, far = reach * k, moveOf = new Map(), soon = [];
+      const reach = pace() * 0.6, far = reach * k, moveOf = new Map(), soon = [], comes = [];
       const unknown = (a, x, y) => { moveOf.set(a, null); soon.push(Math.round((x - 7 - reach) * k), Math.round((y - 28 - reach) * k), Math.round((14 + 2 * reach) * k), Math.round((45 + 2 * reach) * k), a.desk); };
       list.forEach((v) => {
         const a = v.a, off = a.pending && a.delay < 600, way = a.path || (off ? a.plan : null);
@@ -1439,8 +1440,13 @@
           while (n < way.length && left > 0) { const p = way[n], dx = p.x - nx, dy = p.y - ny, d = Math.hypot(dx, dy); if (d <= left) { nx = p.x; ny = p.y; left -= d; n++; } else { nx += dx / d * left; ny += dy / d * left; left = 0; } }
           mv.push((nx - a.x) * k, (ny - a.y) * k);
         }
+        if (n >= way.length && a.path) comes.push(a);
         if (n >= way.length && seatOf(a.goal)) unknown(a, nx, ny); else moveOf.set(a, mv);
       });
+      // (When somebody comes to stand somewhere, the others on their way make their ways again from where they are
+      // then: where they will be after that is not known before it has happened. comes: who arrives within this
+      // time.)
+      if (comes.length) list.forEach((v) => { const a = v.a; if (a.path && !a.push && moveOf.get(a) && (comes.length > 1 || comes[0] !== a)) unknown(a, v.x, v.y); });
       list.forEach((v) => {
         const a = v.a; let text = '', change = false;
         if (a.state === 'working' && a.step && a.sitKind === 'desk' && a.sit >= 1) text = a.step;
@@ -1499,15 +1505,17 @@
         return prev && prev !== best && ok(prev) && prev.price <= best.price + 0.03 * best.w * h ? prev : best;
       };
       // Who of the others gets a place when the one with the floor stands at `first`: those on show keep their
-      // places before those who wait, the longest wait first (pick, if any, chooses before them all). One that has
-      // just gone out stays out for a moment, so that nothing comes and goes within the blink of an eye; and one
-      // that is not on show does not start where somebody is about to walk.
+      // places before those who wait (of those on show the ones that have only just come on first), the longest wait
+      // first (pick, if any, chooses before them all). One that has just gone out stays out for a moment, so that
+      // nothing comes and goes within the blink of an eye; and one that is not on show does not start where somebody
+      // is about to walk.
       const byDesk = (p, q2) => p.a.desk - q2.a.desk, byWait = (p, q2) => (q2.a.quiet - p.a.quiet) || byDesk(p, q2);
+      const fresh = (s2) => (s2.a.told < 600 ? 1 : 0);                     // (it has only just come on: one that has to move does not push it out again)
       const others = (lead, first, pick) => {
         const placed = [first], out = [];
-        says.filter((s2) => s2 !== lead).sort((p, q2) => (p === pick ? -1 : q2 === pick ? 1 : p.a.shown === q2.a.shown ? (p.a.shown ? byDesk(p, q2) : byWait(p, q2)) : p.a.shown ? -1 : 1)).forEach((s2) => {
+        says.filter((s2) => s2 !== lead).sort((p, q2) => (p === pick ? -1 : q2 === pick ? 1 : p.a.shown === q2.a.shown ? (p.a.shown ? (fresh(q2) - fresh(p)) || byDesk(p, q2) : byWait(p, q2)) : p.a.shown ? -1 : 1)).forEach((s2) => {
           if (!s2.a.shown && ((s2.a.quiet > 0 && s2.a.quiet < 600) || (closing && lead === holder))) return;
-          const ok = (c) => c.clean && (s2.a.shown || !c.astir) && !placed.some((p) => hits(c, p));
+          const ok = (c) => c.clean && (!c.astir || (s2.a.shown && c.i === s2.a.stood)) && !placed.some((p) => hits(c, p));   // (astir: only the place it stands in)
           let best = null;
           s2.opts.forEach((c) => { if (ok(c) && (!best || c.price < best.price)) best = c; });
           if (!best) return;
@@ -1516,16 +1524,18 @@
         return out;
       };
       // Where the one with the floor stands: anywhere short of another one's sign or question mark, there where most
-      // of the others can speak too, and of those places the cheapest. With one of those in the way it says as much
-      // as fits beside it.
+      // of the others can speak too; of those places where most of those on show stay on (it does not swap one of
+      // them for one that waits), and of those the cheapest. With a sign or a question mark in the way it says as
+      // much as fits beside it.
       const leadAt = (lead, pick) => {
         let opts = lead.opts.filter((c) => !c.sign);
         for (let n = lead.text.length - 1; n >= 6 && !opts.length; n--) opts = placesOf(lead, lead.text.slice(0, n).trimEnd() + '…').filter((c) => !c.sign);
         if (!opts.length) return null;
         if (lead === hot && !reduced) { const prev = opts.find((c) => c.i === lead.a.stood); if (prev) opts = [prev]; }   // the one pointed at keeps the place it speaks from
-        let best = null, most = -1; const scored = opts.map((c) => ({ c, rest: others(lead, c, pick) }));
-        scored.forEach((x) => { if (x.rest.length > most || (x.rest.length === most && x.c.price < best.c.price)) { best = x; most = x.rest.length; } });
-        const keepC = stays({ opts: scored.filter((x) => x.rest.length === most).map((x) => x.c), a: lead.a }, best.c, () => true);
+        let best = null; const scored = opts.map((c) => { const rest = others(lead, c, pick); return { c, rest, on: reduced ? 0 : rest.filter((r) => r.say.a.shown).length }; });
+        const same = (x, y) => x.rest.length === y.rest.length && x.on === y.on;
+        scored.forEach((x) => { if (!best || x.rest.length > best.rest.length || (x.rest.length === best.rest.length && (x.on > best.on || (x.on === best.on && x.c.price < best.c.price)))) best = x; });
+        const keepC = stays({ opts: scored.filter((x) => same(x, best)).map((x) => x.c), a: lead.a }, best.c, () => true);
         return scored.find((x) => x.c === keepC);
       };
       // Who has the floor now.
