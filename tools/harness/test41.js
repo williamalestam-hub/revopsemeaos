@@ -251,10 +251,15 @@ for (const name of Object.keys(FX)) {
 const lapOf = (p, q) => { const w = 14 - Math.abs(p.x - q.x) / 2, h = 20 - Math.abs(p.y - q.y) / 2; return w > 0 && h > 0 ? w * h / 280 : 0; };
 // (an anchor is 15 logical px above the feet, 16 for the one with the bulb: this is the same height for all)
 const stood = (s, a) => { const p = s.anchor(a.id); return p && a.look === 'bulb' ? { x: p.x, y: p.y + 2 } : p; };
+// The width of a text as headless Chromium gives it in the scene's font (measured there once, hundredths of a css px a
+// character at 11 px), for the checks that depend on how much room the words take.
+const BW_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~…", BW = [277, 353, 575, 708, 715, 1105, 729, 358, 410, 410, 594, 740, 351, 512, 351, 417, 726, 465, 685, 700, 733, 692, 704, 634, 704, 704, 351, 362, 740, 740, 740, 598, 1099, 800, 725, 810, 794, 666, 647, 824, 820, 305, 638, 773, 622, 1015, 835, 845, 710, 850, 718, 715, 726, 809, 800, 1122, 792, 785, 718, 410, 417, 410, 530, 516, 386, 632, 686, 641, 686, 650, 428, 688, 674, 288, 288, 626, 288, 990, 673, 670, 686, 686, 437, 604, 388, 674, 646, 923, 626, 647, 623, 500, 395, 500, 740, 1052];
+const browserW = (str, font) => { const px = parseFloat((/([\d.]+)px/.exec(String(font || '')) || [0, 22])[1]); let w = 0; for (const ch of String(str)) { const i = BW_CHARS.indexOf(ch); w += i >= 0 ? BW[i] : 550; } return w / 100 * px / 11; };
 // plays [atMs, crew] steps on a new scene (those before 0 are set before the size, as the page does); each(t, scene, canvas) after every frame
 const play = (width, steps, ms, each, opts) => {
   const canvas = mkCanvas(); let simT = 0; const heard = { hover: [], pick: [] };
   if (opts && opts.wideText) canvas.ctx.measureText = (str) => ({ width: String(str).length * (opts.letter || 12) });    // letters as wide as real ones (6 css px; 5.25 with letter: 10.5)
+  if (opts && opts.browserText) canvas.ctx.measureText = (str) => ({ width: browserW(str, canvas.ctx.font) });        // each letter as wide as headless Chromium makes it
   const scene = API.create(canvas, Object.assign({ now: () => FX.morning.clock + simT, seed: 7, reducedMotion: false, onHover: (id) => heard.hover.push(id), onPick: (id) => heard.pick.push(id) }, opts || {}));
   const todo = steps.slice().sort((a, b) => a[0] - b[0]); let i = 0;
   while (i < todo.length && todo[i][0] < 0) scene.setCrew(todo[i++][1]);
@@ -598,7 +603,9 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
     }
     // The five with steps of thirteen letters: w at work, n waiting for you, i idle (one letter a desk)
     const STEPS5 = ['Reading Slack', 'Reading Gmail', 'Drafting ideas', 'Sorting items', 'Writing lines'], CNT = [113, 17, 3, 2, 1];
-    const five = (st) => FX.clear.crew.map((a, i) => Object.assign({}, a, st[i] === 'w' ? { state: 'working', step: STEPS5[i], bubble: STEPS5[i] } : st[i] === 'n' ? { state: 'needs', waiting: CNT[i], bubble: CNT[i] + ' for you' } : {}));
+    const RUNS5 = ['07:13', '07:43', '08:07', '08:07', '07:37'];
+    const five = (st, steps) => FX.clear.crew.map((a, i) => { const step = (steps || STEPS5)[i]; return Object.assign({}, a, st[i] === 'w' ? { state: 'working', step, bubble: step } : st[i] === 'n' ? { state: 'needs', waiting: CNT[i], bubble: CNT[i] + ' for you' }
+      : st[i] === 'd' ? { state: 'due', bubble: 'Run due ' + RUNS5[i] } : st[i] === 'l' ? { state: 'late', bubble: 'No result ' + RUNS5[i] } : st[i] === 'e' ? { state: 'error', bubble: 'Run failed' } : {}); });
     const track = (runs, keep, c) => keep.forEach((text) => { const on = c.ctx.textAt.some((e) => e[0] === text), r2 = runs[text] || (runs[text] = []); if (!r2.length || r2[r2.length - 1][0] !== on) r2.push([on, 0]); r2[r2.length - 1][1]++; });
     // somebody walks past one at work (the five in place, then one change): a step that goes out stays out for
     // 0.6 s (nine frames) or more, whether it comes back in a free place or is handed the floor
@@ -608,18 +615,19 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9)), `one walks past those at work @${w} (${before} > ${after}): a step that goes out stays out for 0.6 s or more`, say(runs));
     }
-    // One more sits down to work beside those at work: a neighbour's step does not come on for a frame or two in the
-    // moment the newcomer takes its seat (its head and its name are still on their way to their places then).
-    for (const [w, before, after] of [[366, 'wwnww', 'wwwww'], [366, 'wwnwi', 'wwwwi'], [366, 'iwwwn', 'wwwwn'], [400, 'wwnww', 'wwwww'], [400, 'wwnwi', 'wwwwi']]) {
+    // One more sits down to work beside those at work: a neighbour's step does not come on for a moment only, in the
+    // frames in which the newcomer takes its seat (its head and its name are still on their way to their places
+    // then) or just before the floor passes to the newcomer. (Letters as wide as a browser's.)
+    for (const [w, before, after] of [[366, 'wwnww', 'wwwww'], [366, 'wwnwi', 'wwwwi'], [366, 'iwwwn', 'wwwwn'], [400, 'wwnww', 'wwwww'], [400, 'wwnwi', 'wwwwi'], [366, 'iwwin', 'iwwwn'], [366, 'iwnww', 'iwwww'], [366, 'wiwin', 'wiwwn'], [366, 'wwiww', 'wwwww'], [366, 'nniww', 'nnwww'], [400, 'iwwin', 'iwwwn'], [400, 'wwiiw', 'wwwiw']]) {
       const keep = STEPS5.filter((x, i) => before[i] === 'w' && after[i] === 'w'), runs = {};
-      const r = play(w, [[-1, five(before)], [20000, five(after)]], 32000, (t, s, c) => { if (t >= 20000) track(runs, keep, c); }, { wideText: true, letter: 10.5 });
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, keep, c); }, { browserText: true });
       r.scene.destroy();
-      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => x[0] && x[1] <= 2)), `one more sits down to work @${w} (${before} > ${after}): no neighbour's step is on show for a frame or two only`, say(runs));
+      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => x[0] && x[1] < 8)), `one more sits down to work @${w} (${before} > ${after}): no neighbour's step is on show for less than half a second between two stretches out`, say(runs));
     }
     // A page that opens on a phone with some at work while the others set off: no step comes on for a moment only to
     // be walked out of its place by a neighbour that gets up. What comes on stays on for half a second or more.
     // (Letters 5.25 css px wide, as in a browser.)
-    for (const [w, st] of [[366, 'wwnwn'], [366, 'iiwwn'], [400, 'wwwni'], [400, 'wwnwn']]) {
+    for (const [w, st] of [[366, 'wwnwn'], [366, 'iiwwn'], [400, 'wwwni'], [400, 'wwnwn'], [366, 'wwwwn'], [400, 'wwwnn'], [366, 'wwwni'], [400, 'wwwwn']]) {
       const keep = STEPS5.filter((x, i) => st[i] === 'w'), runs = {};
       const r = play(w, [[-1, []], [1000, five(st)]], 16000, (t, s, c) => { if (t >= 1000) track(runs, keep, c); }, { wideText: true, letter: 10.5 });
       r.scene.destroy();
@@ -633,19 +641,69 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(first !== null && first <= 3000 && frames >= 38, `four at work @${w} and one change (${before} > ${after}): its words are said within three seconds, for 2.5 s or more`, [first, frames]);
     }
+    // Two that change in the same update (Instinct and Muse are both due at 08:07) speak together where there is
+    // room for both: on a laptop the words of each are on show within a second, and stay for 2.5 s or more.
+    for (const [w, before, after, texts, within] of [[888, 'nniin', 'nnddn', { 'Run due 08:07': 2 }], [1280, 'nniin', 'nnddn', { 'Run due 08:07': 2 }], [888, 'nniin', 'nnnnn', { '3 for you': 1, '2 for you': 1 }], [1280, 'nniin', 'nnnnn', { '3 for you': 1, '2 for you': 1 }], [1201, 'iiiii', 'inndi', { '17 for you': 1, '3 for you': 1, 'Run due 08:07': 1 }, 2000]]) {
+      const first = {}, full = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 32000, (t, s, c) => { if (t < 20000) return; Object.keys(texts).forEach((text) => { const n = c.ctx.textAt.filter((e) => e[0] === text).length; if (n === texts[text]) { full[text] = (full[text] || 0) + 1; if (first[text] === undefined) first[text] = Math.round(t - 20000); } }); }, { wideText: true, letter: 10.5 });
+      r.scene.destroy();
+      ok(Object.keys(texts).every((text) => first[text] !== undefined && first[text] <= (within || 1000) && full[text] >= 38), `several change at once @${w} (${before} > ${after}): the words of each are on show within ${within ? 'two seconds (the third of three that leave the lounge together speaks once the first two are past it)' : 'a second'}, together, for 2.5 s or more`, [first, full]);
+    }
+    // ... and on a phone, where they walk past each other and past the others, none of them comes on for a moment only
+    for (const [w, before, after] of [[366, 'nniin', 'nnnnn'], [366, 'nniin', 'nnddn'], [400, 'iiiii', 'inndi'], [366, 'niiii', 'nnnnn']]) {
+      const texts = Array.from(new Set(five(after).filter((a, i) => before[i] !== after[i] && a.bubble).map((a) => a.bubble))), runs = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 36000, (t, s, c) => { if (t >= 20000) track(runs, texts, c); }, { wideText: true, letter: 10.5 });
+      r.scene.destroy();
+      ok(texts.every((text) => runs[text] && runs[text].some((x) => x[0]) && !runs[text].slice(0, -1).some((x) => x[0] && x[1] < 8)), `several change at once @${w} (${before} > ${after}): no words are on show for less than half a second before they go out again`, say(runs));
+    }
+    // One that walks past the red sign over a failed agent has no place for its words there, even cut short: they
+    // go out, and stay out for 0.6 s like any other (the one with the floor is let straight back only after a pointer).
+    for (const [w, before, after, text] of [[366, 'nnnie', 'nnnde', 'Run due 08:07'], [366, 'ninne', 'ndnne', 'Run due 07:43'], [366, 'ninie', 'nwnie', 'Reading Gmail']]) {
+      const runs = {};
+      const isOf = (e) => e[0] === text || (e[0].endsWith('…') && e[0].length > 6 && text.startsWith(e[0].slice(0, -1).trimEnd()));
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 30000, (t, s, c) => { if (t < 20000) return; const on = c.ctx.textAt.some(isOf), r2 = runs[text] || (runs[text] = []); if (!r2.length || r2[r2.length - 1][0] !== on) r2.push([on, 0]); r2[r2.length - 1][1]++; }, { browserText: true });
+      r.scene.destroy();
+      ok(runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9), `one walks past a failed agent's sign @${w} (${before} > ${after}): its words do not go out for less than 0.6 s`, say(runs));
+    }
+    // One that goes to work says its step on the way and again once it sits: the same words, with no hole between
+    for (const [w, before, after, who] of [[888, 'wwwwn', 'wwwww', 4], [888, 'wwwiw', 'wwwww', 3], [1280, 'wwwwn', 'wwwww', 4], [400, 'iiiin', 'iiiiw', 4]]) {
+      const text = STEPS5[who], runs = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, [text], c); }, { wideText: true, letter: 10.5 });
+      r.scene.destroy();
+      ok(runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9), `one goes to work @${w} (${before} > ${after}): its step does not go out for a moment as it sits down`, say(runs));
+    }
     // While one is pointed at, or has the focus, it speaks in every frame from one place, and the others go on
     // taking turns in the room that is left: nobody who took turns before is silent for as long as that lasts.
     for (const [w, st, hot] of [[366, 'wwwww', 'desk'], [366, 'wwwww', 'muse']]) {
       const runs = {}, at = new Set(); let scene = null;
       const r = play(w, [[-1, five(st)]], 60000, (t, s, c) => { if (!scene) { scene = s; } if (Math.abs(t - 20000) < STEP / 2) s.setFocus(hot); if (t < 20000 + STEP) return; track(runs, STEPS5, c); c.ctx.textAt.forEach((e) => { if (e[0] === STEPS5[IDS.indexOf(hot)]) at.add(e[1] + ',' + e[2]); }); }, { wideText: true, letter: 10.5 });
       r.scene.destroy();
-      const mine = runs[STEPS5[IDS.indexOf(hot)]], frames = Math.round(40000 / STEP) - 1;
+      const mine = runs[STEPS5[IDS.indexOf(hot)]];
       const silent = STEPS5.filter((text) => !runs[text] || !runs[text].some((x) => x[0]));
       const short = STEPS5.filter((text) => runs[text] && inner(runs[text]).some((x) => x[1] < 38));
       ok(mine && mine.length === 1 && mine[0][0] && at.size === 1, `five at work @${w}, the focus on ${hot}: it speaks in every frame, from one place`, [say(runs), Array.from(at)]);
       ok(silent.length === 0 && short.length === 0, `five at work @${w}, the focus on ${hot}: the others go on taking turns (nobody is silent throughout, and nothing comes or goes for less than 2.5 s)`, [silent, short, say(runs)]);
-      void frames;
     }
+    // ... and with long steps, of which only the one with the floor fits beside the one pointed at: the floor goes
+    // to those who find a place there, so nobody who can speak is silent for more than nine seconds
+    { const D5 = ['Checking pipeline health', 'Writing the Monday lines', 'Reading 40 Slack threads', 'Sorting seventeen items', 'Drafting a longer answer'];
+      for (const [w, hot] of [[366, 'desk'], [366, 'review']]) {
+        const runs = {};
+        const r = play(w, [[-1, five('wwwww', D5)]], 62000, (t, s, c) => { if (Math.abs(t - 20000) < STEP / 2) s.setFocus(hot); if (t >= 22000) track(runs, D5, c); }, { wideText: true, letter: 10.5 });
+        r.scene.destroy();
+        const speakers = D5.filter((text) => runs[text] && runs[text].some((x) => x[0])), longest = Math.max.apply(null, speakers.map((text) => Math.max.apply(null, runs[text].filter((x) => !x[0]).map((x) => x[1]).concat([0]))));
+        ok(speakers.length >= 3 && longest <= 135, `five at work with long steps @${w}, the focus on ${hot}: those who have a place beside it take turns, none silent for more than nine seconds`, [speakers.length, longest, say(runs)]);
+      } }
+    // ... from one place also when the floor passes among the others beside it (longer steps), and when a neighbour
+    // comes to its desk and starts to speak
+    { const C5 = ['Asking Salesforce', 'Sorting 17 items', 'Reading the thread', 'Drafting the reply', 'Checking the queue'];
+      for (const [w, before, after, hot] of [[366, 'iwwww', null, 'review'], [390, 'iwwww', null, 'review'], [400, 'wwnww', 'wwwww', 'desk'], [366, 'wwnii', 'wwwii', 'decide']]) {
+        const at = new Set(), mine = C5[IDS.indexOf(hot)]; let shownIn = 0, frames = 0;
+        const steps = [[-1, five(before, C5)]]; if (after) steps.push([26000, five(after, C5)]);
+        const r = play(w, steps, 52000, (t, s, c) => { if (Math.abs(t - 20000) < STEP / 2) point(c, s.anchor(hot).x, s.anchor(hot).y, 'mouse', 'pointermove'); if (t < 20000 + STEP) return; frames++; const e = c.ctx.textAt.find((x) => x[0] === mine); if (e) { shownIn++; at.add(e[1] + ',' + e[2]); } }, { wideText: true, letter: 10.5 });
+        r.scene.destroy();
+        ok(shownIn === frames && at.size === 1, `the pointer rests on ${hot} @${w} (${before}${after ? ' > ' + after : ''}): its words are there in every frame and stay in one place`, [shownIn, frames, Array.from(at)]);
+      } }
   }
   // a change that has to wait for its turn is still shown
   const said = { desk: 'Desk has 113 for you', decide: 'Decide has 17 for you', instinct: 'Instinct has 3 for you', muse: 'Muse has 2 for you' };
@@ -787,7 +845,7 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
   ok(src.split(line).length === 2, 'the probe finds the line of the scene it hooks into');
   if (src.split(line).length === 2) {
     const keep = global.OSCockpit;
-    new Function(src.replace(line, () => line + '      _dbg: () => ({ L, crew, queue, qPitch, feet: (id) => { const a = byId.get(id); return a ? feet(a) : null; } }),\n'))();
+    new Function(src.replace(line, () => line + '      _dbg: () => ({ L, crew, queue, qPitch, floor: () => ({ id: floorId, age: simT - floorSince }), feet: (id) => { const a = byId.get(id); return a ? feet(a) : null; } }),\n'))();
     const P = global.OSCockpit; global.OSCockpit = keep;
     const mkRnd = (seed) => { let v = (seed * 2654435761) >>> 0; return () => { v = (v * 1664525 + 1013904223) >>> 0; return v / 4294967296; }; };
     const mk = (opts) => { const canvas = mkCanvas(); const st = { t: 0 }; const s = P.create(canvas, Object.assign({ now: () => FX.morning.clock + st.t, seed: 7, reducedMotion: false, onHover() {}, onPick() {} }, opts || {})); return { canvas, s, st, run: (to) => { for (; st.t <= to; st.t += STEP) s.frame(st.t); } }; };
@@ -869,6 +927,61 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       const at0 = near(); let heaped = 0; const t1 = w7.st.t; for (; w7.st.t <= t1 + 14000; w7.st.t += STEP) { w7.s.frame(w7.st.t); if (near()) heaped++; }
       ok(at0 === 0 && heaped <= 8, 'seven wait on a wide page, three leave as it becomes a phone: nobody is put on top of anybody, and nobody hides another for more than half a second afterwards', [at0, heaped]);
       w7.s.destroy(); global.devicePixelRatio = 2; }
+
+    // ... closer together only where the row is too short, and never past its end; and those about to leave who find
+    // no room between the ones at rest are not put in front of the front place
+    { global.devicePixelRatio = 3; const past = [], front = [];
+      for (const [n, w0, w1] of [[5, 844, 366], [8, 888, 390]]) { const m = mk(); m.s.setCrew([]); m.s.resize(w0); m.run(1000); m.s.setCrew(crewOf(Array(n).fill('needs'))); m.run(61000);
+        m.s.setCrew(crewOf(['working'].concat(Array(n - 1).fill('needs')))); m.s.resize(w1);
+        const d = m.s._dbg(), xs = d.crew.filter((a) => a.state === 'needs').map((a) => a.x).sort((p, q2) => p - q2);
+        d.crew.forEach((a) => { if (a.state === 'needs' && (a.x > d.L.q.max + 0.5 || a.x < d.L.q.x0 - 0.5 || Math.abs(a.y - d.L.q.y) > 1)) past.push([n, w1, a.id, Math.round(a.x), Math.round(d.L.q.max)]); });
+        if (!xs.every((x, i) => i === 0 || x - xs[i - 1] >= 6)) past.push([n, w1, 'closer than 6 px', xs.map(Math.round)]); m.s.destroy(); }
+      { const m = mk(); m.s.setCrew([]); m.s.resize(888); m.run(1000); m.s.setCrew(crewOf(Array(8).fill('needs'))); m.run(61000);
+        m.s.setCrew(crewOf(['needs', 'needs', 'needs', 'needs', 'idle', 'idle', 'idle', 'idle'])); m.s.resize(366);
+        const d = m.s._dbg(); d.crew.forEach((a) => { if (a.state === 'idle' && Math.abs(a.y - d.L.q.y) < 1 && a.x < d.L.q.x0 - 0.5) front.push([a.id, Math.round(a.x), Math.round(d.L.q.x0)]); });
+        if (!d.crew.some((a) => a.state === 'idle' && Math.abs(a.y - d.L.q.y) < 1 && a.x > d.L.q.x0 && a.x < d.L.q.max)) front.push(['none of the four stands between those at rest']); m.s.destroy(); }
+      global.devicePixelRatio = 2;
+      ok(past.length === 0, 'a long queue whose first is handled as the page becomes a phone: those who wait stand closer together, none past the end of the row', past);
+      ok(front.length === 0, 'eight wait @888, the last four are handled as the page becomes a phone: none of them is put in front of the front place', front); }
+
+    // A phone turned sideways a moment after one of the queue is handled: the one that has just stepped out of the row
+    // can come to stand on one that still waits (its spot of the old room is a place of the new row). It walks on at
+    // once then, and does not stand on the other for a second and a half.
+    { const notes = []; let worst = 0;
+      const of = (letters) => crewOf(letters.split('').map((c) => ({ n: 'needs', w: 'working', i: 'idle' }[c])));
+      for (const [A, B, w0, w1, ratio, delay] of [['ininn', 'iwinn', 395, 878, 2, 768], ['nnnnn', 'wnnnn', 390, 844, 3, 733], ['nnnnn', 'wnnnn', 390, 844, 3, 1267], ['nnn', 'wnn', 390, 844, 3, 700]]) {
+        global.devicePixelRatio = ratio;
+        const m = mk(); m.s.setCrew([]); m.s.resize(w0); m.run(1000); m.s.setCrew(of(A)); m.run(61000);
+        m.s.setCrew(of(B)); m.run(m.st.t + delay); m.s.setCrew(of(B)); m.s.resize(w1);
+        let run = 0, longest = 0; const t0 = m.st.t;
+        for (; m.st.t <= t0 + 5000; m.st.t += STEP) { m.s.frame(m.st.t); const d = m.s._dbg(), v = d.crew.filter((a) => a.state !== 'unknown').map((a) => d.feet(a.id)); let near = false;
+          for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) if (Math.hypot(v[i].x - v[j].x, v[i].y - v[j].y) < 6) near = true;
+          run = near ? run + 1 : 0; longest = Math.max(longest, run); }
+        worst = Math.max(worst, longest); notes.push([A, B, w0, w1, delay, longest]); m.s.destroy(); }
+      global.devicePixelRatio = 2;
+      ok(worst <= 8, 'a phone turned sideways a moment after one of the queue is handled: nobody stands on another for more than half a second', notes); }
+
+    // The one with the floor has new words just as its turn is ending and somebody waits: the floor passes first, and
+    // the new words get a turn of their own later. They are not shown for a few frames and put out again. (Letters
+    // as wide as a browser's; the one whose words change is one that takes turns, not one with a place of its own.)
+    { const out = []; let tried = 0;
+      const C5 = ['Asking Salesforce', 'Sorting 17 items', 'Reading the thread', 'Drafting the reply', 'Checking the queue'];
+      for (const [w, letters, age] of [[366, 'wwwii', 2500], [366, 'wwwii', 2650], [366, 'wiwww', 2500], [366, 'wwiww', 2650]]) {
+        const crew = crewOf(letters.split('').map((c) => (c === 'w' ? 'working' : 'idle'))); crew.forEach((a, i) => { if (a.state === 'working') a.step = C5[i]; });
+        const m = mk(); m.canvas.ctx.measureText = (str) => ({ width: browserW(str, m.canvas.ctx.font) });
+        m.s.setCrew([]); m.s.resize(w); m.run(1000); m.s.setCrew(crew);
+        const turners = new Set();                                       // who was out in some frame while at work
+        for (; m.st.t <= 34000; m.st.t += STEP) { m.canvas.ctx.textAt.length = 0; m.s.frame(m.st.t); if (m.st.t > 20000) crew.forEach((a) => { if (a.step && !m.canvas.ctx.textAt.some((e) => e[0] === a.step)) turners.add(a.id); }); }
+        let who = null;                                                  // wait for a turn of one of them that is that old
+        for (; m.st.t <= 70000 && !who; m.st.t += STEP) { m.s.frame(m.st.t); const f = m.s._dbg().floor(); if (f.id && turners.has(f.id) && f.age >= age && f.age < age + 70) who = f.id; }
+        if (!who) { out.push([w, letters, 'no such turn']); m.s.destroy(); continue; }
+        tried++;
+        m.s.setCrew(crew.map((a) => (a.id === who ? Object.assign({}, a, { step: 'Posting the note', bubble: '' }) : a)));
+        const runs = []; const t0 = m.st.t;
+        for (; m.st.t <= t0 + 12000; m.st.t += STEP) { m.canvas.ctx.textAt.length = 0; m.s.frame(m.st.t); const on = m.canvas.ctx.textAt.some((e) => e[0] === 'Posting the note'); if (!runs.length || runs[runs.length - 1][0] !== on) runs.push([on, 0]); runs[runs.length - 1][1]++; }
+        const flash = runs.slice(0, -1).some((x) => x[0] && x[1] < 8), shown = runs.some((x) => x[0] && x[1] >= 38);
+        if (flash || !shown) out.push([w, letters, who, runs.map((x) => (x[0] ? '+' : '-') + x[1]).join(' ')]); m.s.destroy(); }
+      ok(tried === 4 && out.length === 0, 'new words of the one whose turn is just ending: the floor passes first, they are not shown for a moment and put out again, and they get a turn of 2.5 s or more', out); }
 
     // The queue's row when the room changes a little while the queue closes up (a scrollbar comes or goes, a zoom
     // step, a phone turned): those who still wait keep the place they stand on. Nobody is put on the place of one
