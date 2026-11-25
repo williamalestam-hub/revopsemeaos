@@ -653,6 +653,15 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => x[0] && x[1] < 8)), `one more sits down to work @${w} (${before} > ${after}): no neighbour's step is on show for less than half a second between two stretches out`, say(runs));
     }
+    // One of the queue starts work on a laptop: those behind it close up, and stand for a moment before they go.
+    // One that has its way but waits to set off may go at any moment, so no neighbour's step starts in its way, to
+    // go out three frames later.
+    for (const [w, before, after] of [[888, 'wwnnn', 'wwwnn'], [888, 'wwnnn', 'wwenn']]) {
+      const keep = STEPS5.filter((x, i) => before[i] === 'w' && after[i] === 'w'), runs = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, keep, c); }, { wideText: true, letter: 10.5 });
+      r.scene.destroy();
+      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => x[0] && x[1] < 8)), `one of the queue starts work @${w} (${before} > ${after}): no neighbour's step is on show for less than half a second between two stretches out`, say(runs));
+    }
     // A page that opens on a phone with some at work while the others set off: no step comes on for a moment only to
     // be walked out of its place by a neighbour that gets up. What comes on stays on for half a second or more.
     // (Letters 5.25 css px wide, as in a browser.)
@@ -710,6 +719,15 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(texts.every((text) => runs[text] && runs[text].some((x) => x[0]) && !runs[text].slice(0, -1).some((x) => x[0] && x[1] < 8)), `all five fall due at once @${w}${browser ? ' (letters of a browser)' : ''}: no words are on show for less than half a second before they go out again`, say(runs));
     }
+    // One that waits for its way out to be free still says its words from the start, where neither staying nor going
+    // on brings anything in their way: the first of five that change at once on a phone has its words on show for
+    // all of their four seconds. (Letters as wide as a browser's.)
+    for (const [w, after] of [[366, 'ddddd'], [366, 'dnwdn']]) {
+      const text = five(after)[0].bubble; let frames = 0;
+      const r = play(w, [[-1, five('iiiii')], [20000, five(after)]], 46000, (t, s, c) => { if (t >= 20000 && c.ctx.textAt.some((e) => e[0] === text)) frames++; }, { browserText: true });
+      r.scene.destroy();
+      ok(frames >= 60, `all five change at once @${w} (iiiii > ${after}): the first one's words are on show for all of their four seconds`, [text, frames]);
+    }
     // One that walks past the red sign over a failed agent has no place for its words there, even cut short: they
     // go out, and stay out for 0.6 s like any other (the one with the floor is let straight back only after a pointer).
     for (const [w, before, after, text] of [[366, 'nnnie', 'nnnde', 'Run due 08:07'], [366, 'ninne', 'ndnne', 'Run due 07:43'], [366, 'ninie', 'nwnie', 'Reading Gmail']]) {
@@ -719,7 +737,9 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9), `one walks past a failed agent's sign @${w} (${before} > ${after}): its words do not go out for less than 0.6 s`, say(runs));
     }
-    // One that goes to work says its step on the way and again once it sits: the same words, with no hole between
+    // One that goes to work says its step on the way and again once it sits: the same words, with no hole of a
+    // moment between them where it is near its seat when the words of the change are over (on a longer way they go
+    // out, and come back at the seat)
     for (const [w, before, after, who] of [[888, 'wwwwn', 'wwwww', 4], [888, 'wwwiw', 'wwwww', 3], [1280, 'wwwwn', 'wwwww', 4], [400, 'iiiin', 'iiiiw', 4]]) {
       const text = STEPS5[who], runs = {};
       const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, [text], c); }, { wideText: true, letter: 10.5 });

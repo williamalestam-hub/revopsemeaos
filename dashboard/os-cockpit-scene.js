@@ -1437,14 +1437,15 @@
       // that time: where it is until then, then along the way it was given. One that sits and is about to get up,
       // or is just taking or leaving a seat, or reaches its seat within that time: not known (moveOf: null), because
       // head and name change places as it does; nobody starts anywhere around it (soon: x, y, w, h, whose), nor
-      // does it start itself. Everybody else stays where they are, and so does one that has its way but has not
-      // taken its first step: it waits for its way out to be free, and until it goes it is where it is.
-      const reach = pace() * 0.6, far = reach * k, moveOf = new Map(), soon = [], comes = [];
+      // does it start itself. One that has its way but has not taken its first step waits for its way out to be
+      // free and may go at any moment: it is where it is, or anywhere on the first stretch of its way (mayGo).
+      // Everybody else stays where they are.
+      const reach = pace() * 0.6, far = reach * k, moveOf = new Map(), mayGo = new Map(), soon = [], comes = [];
       const unknown = (a, x, y) => { moveOf.set(a, null); soon.push(Math.round((x - 7 - reach) * k), Math.round((y - 28 - reach) * k), Math.round((14 + 2 * reach) * k), Math.round((45 + 2 * reach) * k), a.desk); };
       list.forEach((v) => {
         const a = v.a, off = a.pending && a.delay < 600, way = a.path || (off ? a.plan : null);
         if (a.sitKind && (off || a.sit < 1)) { unknown(a, v.x, v.y); return; }
-        if (a.path && !a.moved) return;                                      // it has its way but waits for its way out to be free: it stays where it is for now
+        const waits = !!a.path && !a.moved;                                  // it has its way but has not taken its first step: it waits for its way out to be free
         if (!way) { if (off) unknown(a, v.x, v.y); return; }
         const mv = []; let nx = a.x, ny = a.y, n = 0, gone = off ? -Math.max(0, a.delay) / 1000 * pace() : 0;   // (gone: how far it has walked; below nought while it has yet to set off)
         for (let q9 = 0; q9 < 9; q9++) {
@@ -1452,6 +1453,7 @@
           while (n < way.length && left > 0) { const p = way[n], dx = p.x - nx, dy = p.y - ny, d = Math.hypot(dx, dy); if (d <= left) { nx = p.x; ny = p.y; left -= d; n++; } else { nx += dx / d * left; ny += dy / d * left; left = 0; } }
           mv.push((nx - a.x) * k, (ny - a.y) * k);
         }
+        if (waits) { moveOf.set(a, null); mayGo.set(a, mv); return; }        // (it is where it is, or anywhere on the first stretch of its way: mayGo)
         if (n >= way.length && a.path) comes.push(a);
         if (n >= way.length && seatOf(a.goal)) unknown(a, nx, ny); else moveOf.set(a, mv);
       });
@@ -1489,14 +1491,22 @@
           for (let j = 0; j < signs.length; j += 5) if (signs[j + 4] !== a.desk && lap(X, Y, w, h, signs, j, 0, 0) > 0) sign = true;
           let astir = false;
           if (moveOf.size) {
-            const mine = moveOf.get(a);
-            if (mine === null) astir = true;
-            else {
+            // (One that waits to set off may start to speak where neither staying nor going on now brings anything
+            // in the way of its words: both are tried.)
+            const own = moveOf.get(a), tries = own !== null ? [own] : mayGo.has(a) ? [undefined, mayGo.get(a)] : null;
+            if (!tries) astir = true;
+            else for (let t9 = 0; t9 < tries.length && !astir; t9++) {
+              const mine = tries[t9];
               // (gap: how near counts as meeting. still: that one's box does not move sideways with its owner, as
               // words that stand against the edge of the stage do not.)
               const meets = (r, j, P, gap, still) => {
                 if (P === a) return false;
-                const mv = P ? moveOf.get(P) : undefined; if (mv === null) return false;   // (not known: its box around it speaks for it)
+                const mv = P ? moveOf.get(P) : undefined;
+                if (mv === null) {                                            // (not known: its box around it speaks for it. One that waits to set off may have gone at any moment until then, or not at all)
+                  const go = mayGo.get(P); if (!go) return false;
+                  for (let q9 = 0; q9 < 18; q9 += 2) for (let p9 = -2; p9 <= q9; p9 += 2) if (lap(X - (p9 < 0 || still ? 0 : go[p9]) + (mine ? mine[q9] : 0), Y - (p9 < 0 ? 0 : go[p9 + 1]) + (mine ? mine[q9 + 1] : 0), w, h, r, j, gap || 0, gap || 0) > 0) return true;
+                  return false;
+                }
                 if (!mv && !mine) return false;                              // (neither moves: the picture as it is says it all)
                 for (let q9 = 0; q9 < 18; q9 += 2) if (lap(X - (mv && !still ? mv[q9] : 0) + (mine ? mine[q9] : 0), Y - (mv ? mv[q9 + 1] : 0) + (mine ? mine[q9 + 1] : 0), w, h, r, j, gap || 0, gap || 0) > 0) return true;
                 return false;
@@ -1505,7 +1515,7 @@
               for (let j = 0; j < words.length && !astir; j += 4) astir = meets(words, j, wordsBy[j >> 2]);
               for (let j = 0; j < keep.length && !astir; j += 4) astir = meets(keep, j, keepBy[j >> 2]);
               for (let j = 0; j < signs.length && !astir; j += 5) if (signs[j + 4] !== a.desk) astir = meets(signs, j, null);
-              for (let j = 0; j < was.length && !astir; j += 4) { const P = wasBy[j >> 2]; astir = P !== a && moveOf.get(P) === null ? lap(X, Y, w, h, was, j, far, far) > 0 : meets(was, j, P, u, was[j] <= 2 * u || was[j] + was[j + 2] >= cw - 2 * u) || meets(was, j, P, u); }   // (the words of one whose next move is not known go wherever it goes; two bubbles keep a css px between them)
+              for (let j = 0; j < was.length && !astir; j += 4) { const P = wasBy[j >> 2]; astir = P !== a && moveOf.get(P) === null && !mayGo.has(P) ? lap(X, Y, w, h, was, j, far, far) > 0 : meets(was, j, P, u, was[j] <= 2 * u || was[j] + was[j + 2] >= cw - 2 * u) || meets(was, j, P, u); }   // (the words of one whose next move is not known go wherever it goes; two bubbles keep a css px between them)
             }
           }
           return { i, text, X, Y, w, tx, near, sign, astir, clean: near && !sign && on === 0, price: cost + i + (near ? 0 : 1e9) };
