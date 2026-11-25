@@ -9,9 +9,9 @@ global.dash = {
   data: (id) => (id in DATA ? { status: 'ok', data: DATA[id] } : { status: 'loading', data: [] }),
 };
 global.d3 = new Proxy({}, { get: (t, k) => (k === 'max' ? (a, f) => Math.max(...a.map(f)) : k === 'utcFormat' || k === 'format' ? () => (v) => String(v) : () => () => {}) });
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
-require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
+require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 let fails = 0;
 const eq = (label, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', label, ok ? '' : 'got ' + JSON.stringify(got) + ' want ' + JSON.stringify(want)); };
 const near = (label, got, want) => { const ok = got != null && Math.abs(got - want) < 1e-9; if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', label, ok ? '' : 'got ' + got + ' want ' + want); };

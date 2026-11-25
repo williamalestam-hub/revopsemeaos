@@ -6,7 +6,7 @@ global.dash = { loader: () => {}, calc: (id, o) => { calcs[id] = o; }, draw: (n,
 global.d3 = { utcFormat: () => (d) => d.toISOString().slice(0, 10), format: () => (v) => String(v), max: (a, f) => Math.max(...a.map(f)) };
 const handlers = []; document.addEventListener = (ev, fn) => { if (ev === 'click') handlers.push(fn); };
 let copied = null; Object.defineProperty(global, 'navigator', { value: { clipboard: { writeText: (t) => { copied = t; return Promise.resolve(); } } }, configurable: true, writable: true });
-require('/home/user/revopsemeaos/dashboard/os-core.js'); require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js'); require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js')); require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 const press = () => { copied = null; const btn = new Node('button'); btn.dataset.copySummary = ''; btn.matches = (sel) => sel === '[data-copy-summary]'; btn.closest = () => btn;
   const ev = { target: { closest: () => btn }, preventDefault() {} }; for (const h of handlers) { try { h(ev); } catch (e) { console.log('handler threw', e.message); } } return copied; };
 Object.assign(DATA, {

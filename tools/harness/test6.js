@@ -2,7 +2,7 @@ const calcs = {};
 global.dash = { loader: () => {}, calc: (id, o) => { calcs[id] = o; }, params: () => ({}), setParams: () => {}, onData: () => {}, draw: () => {}, colors: [], setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
 global.window = global; global.location = { hash: '' }; global.document = { querySelectorAll: () => [], addEventListener: () => {} };
 global.d3 = { format: () => (v) => String(v), utcFormat: () => (d) => String(d) }; global.requestAnimationFrame = (f) => f();
-require('/home/user/revopsemeaos/dashboard/os-calcs.js');
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js'));
 const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 const hb = [
   { id: '1', name: 'Ann Lee', email: 'ann.lee@legora.com', title: 'GTM Manager', department: 'GTM EMEA', team: 'GTM EMEA', site: 'S', manager: 'Bo Boss', startDate: day(200) },

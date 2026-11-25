@@ -12,7 +12,7 @@ if (NOW) { const RealDate = Date; const off = NOW - RealDate.now(); global.Date 
 const calcs = new Map();
 global.dash = { calc: (id, def) => calcs.set(id, def), loader: () => {} };
 global.d3 = {};
-require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
 const order = ['ld_handoff_rows', 'ld_backlog', 'ld_backlog_open', 'ld_reps', 'ld_problems', 'ld_sources', 'ld_kpi', 'ld_badge', 'ld_kpi_rt', 'ld_kpi_in', 'ld_trust', 'ld_trust_cap', 'checks_ld', 'checks_ld_rt', 'checks_ld_cap'];
 let fail = 0;
 const ok = (c, msg) => { if (!c) { fail++; console.log('FAIL', msg); } };

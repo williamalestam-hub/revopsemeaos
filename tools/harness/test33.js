@@ -11,7 +11,7 @@ const { Node } = require('./fakedom.js');
 const NOW = Date.parse('2026-11-04T10:00:00Z');
 { const RealDate = Date; global.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } static UTC(...a) { return RealDate.UTC(...a); } static parse(s) { return RealDate.parse(s); } }; }
 const fs = require('fs');
-const REPO = (process.env.CONV_REPO || '/home/user/revopsemeaos').replace(/\/?$/, '/');
+const REPO = (process.env.CONV_REPO || require('path').join(__dirname, '../..')).replace(/\/?$/, '/');
 const D = REPO + 'dashboard/';
 const LIVE = '/tmp/claude-0/-home-user-revopsemeaos/c3936b63-31db-5219-aa72-dbd9a885d4cb/scratchpad/wip-conv/live/conv-wide/';
 const calcs = {}, draws = {}, loaders = {}, onData = [];

@@ -18,9 +18,9 @@ document.querySelector = (sel) => (sel === '[data-view-panel="oneonone:upcoming"
 document.querySelectorAll = (sel) => REG[sel] || [];
 const handlers = []; document.addEventListener = (ev, fn) => { if (ev === 'click') handlers.push(fn); };
 let copied = null; Object.defineProperty(global, 'navigator', { value: { clipboard: { writeText: (t) => { copied = t; return Promise.resolve(); } } }, configurable: true, writable: true });
-require(process.env.CORE || '/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
-if (!process.env.CORE) require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(process.env.CORE || require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
+if (!process.env.CORE) require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 let fails = 0; const ok = (c, l, x) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', l, c ? '' : (x === undefined ? '' : JSON.stringify(x))); };
 const press = (attr) => { copied = null; const btn = new Node('button'); btn.dataset[attr] = ''; btn.matches = (sel) => sel === '[data-' + attr.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase()) + ']'; btn.closest = () => btn; const ev = { target: { closest: () => btn }, preventDefault() {} }; for (const h of handlers) h(ev); return copied || ''; };
 const items = (el) => { const out = []; const walk = (n) => { for (const c of n.children) { if (c.tagName === 'LI') out.push(c); else walk(c); } }; walk(el); return out; };

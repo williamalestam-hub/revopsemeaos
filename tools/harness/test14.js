@@ -1,7 +1,7 @@
 const calcs = {};
 global.dash = { loader: () => {}, calc: (id, o) => { calcs[id] = o; }, params: () => ({}), setParams: () => {}, onData: () => {}, draw: () => {}, colors: [], setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
 global.window = global; global.location = { hash: '' }; global.document = { querySelectorAll: () => [], addEventListener: () => {} };
-require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
 const users_all = [
   { userId: '1', name: 'Cee Oh', email: 'ceo@legora.com', role: 'CEO', manager: null },
   { userId: '2', name: 'Vee Pee', email: 'vp@legora.com', role: 'VP-SALES-EMEA', manager: 'Cee Oh' },

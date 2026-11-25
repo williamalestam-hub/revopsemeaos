@@ -4,8 +4,8 @@ const ST = {};
 global.dash = { loader() {}, calc() {}, draw() {}, params: () => ({ region: 'All', mgr: '' }), setParams() {}, onData() {}, colors: ['#1'], setLink() {},
   data: (id) => ({ status: ST[id] || 'ok', data: [] }) };
 global.d3 = new Proxy({}, { get: () => () => () => {} });
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
 let fails = 0; const eq = (l, g, w) => { const ok = g === w; if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', l, ok ? '' : 'got ' + g + ' want ' + w); };
 Object.assign(ST, { gr_notes: 'connect', gr_actions: 'error', gr_kpi: 'error' });
 eq('Granola not connected: gr_actions says connect', OS.state('gr_actions'), 'connect');

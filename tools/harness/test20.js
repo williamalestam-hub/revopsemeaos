@@ -13,7 +13,7 @@ const sent = [];
 global.claude = { use: async (n) => (n === 'room' ? { canSendToClaudeSession: async () => 'available', sendToClaudeSession: (d) => { sent.push(d); return Promise.resolve({}); } } : null) };
 const handlers = []; document.addEventListener = (ev, fn) => { if (ev === 'click') handlers.push(fn); };
 let copied = null; Object.defineProperty(global, 'navigator', { value: { clipboard: { writeText: (t) => { copied = t; return Promise.resolve(); } } }, configurable: true, writable: true });
-require('/home/user/revopsemeaos/dashboard/os-core.js'); require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js'); require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js')); require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 let fails = 0; const ok = (c, l, x) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', l, c ? '' : (x === undefined ? '' : JSON.stringify(x))); };
 const rows = (f) => JSON.parse(fs.readFileSync(path.join(S, 'leads-final', 'data', f), 'utf8')).records.map(({ attributes, ...r }) => r);
 Object.assign(DATA, { ld_ready: rows('ld_ready.json'), ld_handoffs: rows('ld_handoffs.json'), ld_inflow: rows('ld_inflow.json'), ld_open: rows('ld_open.json'), roster: JSON.parse(fs.readFileSync(path.join(S, 'leads-design', 'roster_test.json'), 'utf8')) });

@@ -10,7 +10,7 @@ const { Node } = require('./fakedom.js');
 const NOW = Date.parse('2026-11-04T10:00:00Z');
 { const RealDate = Date; global.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } static UTC(...a) { return RealDate.UTC(...a); } static parse(s) { return RealDate.parse(s); } }; }
 const fs = require('fs');
-const REPO = (process.env.CONV_REPO || '/home/user/revopsemeaos').replace(/\/?$/, '/');
+const REPO = (process.env.CONV_REPO || require('path').join(__dirname, '../..')).replace(/\/?$/, '/');
 const D = REPO + 'dashboard/';
 const calcs = {}, draws = {}, loaders = {}, onData = [];
 let params = { region: 'All', mgr: '', person: '', checkArea: 'All', ooWho: '', cvSeg: 'all', cvRt: 'nb', cvClean: false, grWindow: 30 };

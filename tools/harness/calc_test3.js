@@ -1,8 +1,8 @@
 const calcs = {};
 global.dash = { calc: (id, o) => { calcs[id] = o; }, loader: () => {}, params: () => ({}), setParams: () => {}, onData: () => {}, draw: () => {}, colors: [], setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
 global.window = global; global.location = { hash: '' }; global.document = { querySelectorAll: () => [], addEventListener: () => {} }; global.d3 = { format: () => (v) => String(v), utcFormat: () => (d) => String(d) }; global.requestAnimationFrame = (f) => f();
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js'));
 const today = new Date(); const iso = (d) => d.toISOString().slice(0,10);
 const y = today.getUTCFullYear(), q = Math.floor(today.getUTCMonth()/3)+1;
 const nq = q===4?{fy:y+1,fq:1}:{fy:y,fq:q+1};

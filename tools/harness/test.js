@@ -3,8 +3,8 @@ global.dash = { loader: (id, o) => { loaders[id] = o; }, calc: (id, o) => { calc
 global.window = global; global.location = { hash: '' };
 global.document = { querySelectorAll: () => [], addEventListener: () => {} };
 global.d3 = { format: () => (v) => String(v), utcFormat: () => (d) => d.toISOString() };
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js'));
 const list1 = `<requested_range time_range="custom">x</requested_range>
 <meetings_data connected_user_email="jo.doe@example.com" count="2">
 <meeting id="m1" title="Jo / Sam &lt;&gt; Weekly" date="Nov 3" meeting_at="2026-11-03T14:00:00.000+01:00" captured_by_me="true" listed_as_participant="true" url="https://notes.granola.ai/d/m1">

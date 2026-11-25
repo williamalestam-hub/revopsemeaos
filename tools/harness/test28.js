@@ -6,7 +6,7 @@ const calcs = {};
 global.dash = { loader: () => {}, calc: (id, o) => { calcs[id] = o; }, draw: () => {}, params: () => ({}), setParams: () => {}, onData: () => {}, colors: ['#111'], setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
 global.d3 = { utcFormat: () => (d) => d.toISOString().slice(0, 10), format: () => (v) => String(v), max: (a, f) => Math.max(...a.map(f)) };
 const { Node } = require('./fakedom.js');
-require('/home/user/revopsemeaos/dashboard/os-core.js'); require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
 let fails = 0; const ok = (c, l, x) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', l, c ? '' : JSON.stringify(x)); };
 const row = (forecast, arr, extra) => ({ role: 'AE-EMEA-DACH', manager: 'M1', recordType: 'New Business', stage: '3 - Validation', forecast, fy: 2026, fq: 4, opps: 1, arrUsd: arr, ...(extra || {}) });
 const pipe = [row('Commit', 100), row('Best Case', 50), row('Pipeline', 30), row(null, 20), row('Commit', 7, { fy: 2027, fq: 1 }), row('Commit', 1000, { recordType: 'Renewal' }),

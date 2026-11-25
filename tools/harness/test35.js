@@ -14,7 +14,7 @@ process.env.TZ = 'Europe/Stockholm'; // William's clock, so day names and "today
 const NOW = Date.parse('2026-11-05T09:00:00Z'); // a Thursday, 10:00 in Stockholm
 { const RealDate = Date; global.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } static UTC(...a) { return RealDate.UTC(...a); } static parse(s) { return RealDate.parse(s); } }; }
 const NODB = process.argv.includes('--nodb'); // the child run: claude.use('db') resolves null
-const D = '/home/user/revopsemeaos/dashboard/';
+const D = require('path').join(__dirname, '../../dashboard/');
 const calcs = {}, draws = {}, loaders = {}, onData = [];
 let params = { region: 'All', mgr: '', person: '', checkArea: 'All', ooWho: '', cvSeg: 'all', cvRt: 'nb', cvClean: false, grWindow: 30 };
 const DATA = {}, STATE = {};

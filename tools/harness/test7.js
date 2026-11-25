@@ -1,7 +1,7 @@
 const calcs = {};
 global.dash = { loader: () => {}, calc: (id, o) => { calcs[id] = o; }, params: () => ({}), setParams: () => {}, onData: () => {}, draw: () => {}, colors: [], setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
 global.window = global; global.location = { hash: '' }; global.document = { querySelectorAll: () => [], addEventListener: () => {} };
-require('/home/user/revopsemeaos/dashboard/os-calcs.js');
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js'));
 require('../pending/book_moves.js');
 const bo = [
   ['A', 'AE-EMEA-FR', 40], ['B', 'AE-EMEA-FR', 12], ['C', 'AE-EMEA-FR', 10], ['D', 'AE-EMEA-FR', 3], ['E', 'AE-EMEA-FR', 2], ['F', 'AE-EMEA-FR', 11],

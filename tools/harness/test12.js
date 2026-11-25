@@ -11,9 +11,9 @@ global.d3 = new Proxy({}, { get: (t, k) => (k === 'max' ? (a, f) => Math.max(...
 const sent = [];
 global.claude = { use: async (n) => (n === 'room' ? { canSendToClaudeSession: async () => 'available', sendToClaudeSession: (d, o) => { sent.push([d, o]); return Promise.resolve({ to: 'pane' }); } } : null) };
 global.SENT = sent;
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
-require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
+require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 const iso = (n) => new Date(Date.now() + n * 864e5).toISOString();
 DATA.users_all = [
   { userId: '1', name: 'Cee Oh', email: 'ceo@legora.com', role: 'CEO', manager: null },

@@ -1,4 +1,4 @@
-const fs=require("fs"); process.chdir('/home/user/revopsemeaos/dashboard');
+const fs=require("fs"); process.chdir(require('path').join(__dirname, '../../dashboard'));
 const html=fs.readFileSync("index.html","utf8"); const js=["os-core.js","os-calcs.js","os-calcs-leads.js","os-calcs-act.js","os-calcs-conv.js","os-draw.js","os-cockpit-model.js","os-cockpit-scene.js","os-cockpit.js"].map(f=>fs.readFileSync(f,"utf8")).join("\n");
 const draws=new Set([...html.matchAll(/data-draw="([^"]+)"/g)].map(m=>m[1]));
 const regA=[...js.matchAll(/(?:dash\.draw|OS\.defTable|OS\.defList|OS\.defChart)\(\s*["\x27]([^"\x27]+)["\x27]\s*,/g)].map(m=>m[1]); const reg=new Set(regA);

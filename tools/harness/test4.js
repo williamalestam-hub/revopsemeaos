@@ -2,7 +2,7 @@ const loaders = {}, calcs = {};
 global.dash = { loader: (id, o) => { loaders[id] = o; }, calc: (id, o) => { calcs[id] = o; }, params: () => ({}), setParams: () => {}, onData: () => {}, draw: () => {}, colors: [], setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
 global.window = global; global.location = { hash: '' }; global.document = { querySelectorAll: () => [], addEventListener: () => {} };
 global.d3 = { format: () => (v) => String(v), utcFormat: () => (d) => String(d) }; global.requestAnimationFrame = (f) => f();
-require('/home/user/revopsemeaos/dashboard/os-core.js'); require('/home/user/revopsemeaos/dashboard/os-calcs.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs.js'));
 const list = `<meetings_data connected_user_email="jo.doe@example.com" count="1"><meeting id="m1" title="T" meeting_at="2026-11-03T10:00:00.000+01:00" captured_by_me="true" url="https://notes.granola.ai/d/m1"><known_participants>
     Jo Doe (note creator) from Org (jo.doe@example.com)
     </known_participants></meeting></meetings_data><pagination has_more="false" />`;

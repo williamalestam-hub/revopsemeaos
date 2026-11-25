@@ -5,7 +5,7 @@
 // And the database: a second run closes the first run's subscriptions before it opens its own (ten documents, not
 // twenty, then thirty), and OS.hub, OS.sense and OS.lanes say when William's own documents have answered (ready()).
 const { Node } = require('./fakedom.js');
-const D = '/home/user/revopsemeaos/dashboard/';
+const D = require('path').join(__dirname, '../../dashboard/');
 global.dash = { loader: () => {}, calc: () => {}, draw: () => {}, params: () => ({ region: 'All', mgr: '', person: '' }), setParams: () => {}, onData: () => {}, colors: Array(8).fill('#111'), setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
 global.d3 = { utcFormat: () => (d) => d.toISOString().slice(0, 10), format: () => (v) => String(v), max: () => 0, select: () => ({ selectAll: () => ({ remove() {} }) }) };
 const L = [];

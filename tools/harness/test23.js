@@ -6,7 +6,7 @@ const flush = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(
 // one shared server; each tab is a fresh load of os-core with its own snapshot listeners
 const server = { exists: false, data: null, limitKeys: Infinity };
 const loadTab = () => {
-  delete require.cache[require.resolve('/home/user/revopsemeaos/dashboard/os-core.js')];
+  delete require.cache[require.resolve(require('path').join(__dirname, '../../dashboard/os-core.js'))];
   const listeners = [];
   global.dash = { loader() {}, calc() {}, draw() {}, params: () => ({}), setParams() {}, onData() {}, colors: ['#1'], setLink() {}, data: () => ({ status: 'loading', data: [] }) };
   global.d3 = new Proxy({}, { get: () => () => () => {} });
@@ -17,7 +17,7 @@ const loadTab = () => {
     update(body) { if (!server.exists) return Promise.reject({ code: 'invalid_argument' }); const next = merge(server.data, body); if (Object.keys(next.done || {}).length > server.limitKeys) return Promise.reject({ code: 'invalid_argument' }); server.data = next; return Promise.resolve(); },
   };
   global.claude = { use: async (n) => (n === 'db' ? { doc: () => ref } : n === 'user' ? { id: async () => 'u_x', can: async () => false } : null) };
-  require('/home/user/revopsemeaos/dashboard/os-core.js');
+  require(require('path').join(__dirname, '../../dashboard/os-core.js'));
   const tab = { OS: global.OS, deliver: () => listeners.forEach((l) => l({ exists: server.exists, data: () => JSON.parse(JSON.stringify(server.data)), metadata: { fromCache: false } })) };
   return tab;
 };

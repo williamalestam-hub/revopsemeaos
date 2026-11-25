@@ -4,8 +4,8 @@ global.window = global; global.location = { hash: '' };
 global.document = { querySelectorAll: () => [], addEventListener: () => {} };
 global.d3 = { format: () => (v) => String(v), utcFormat: () => (d) => d.toISOString() };
 global.requestAnimationFrame = (f) => f();
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js'));
 const listPage = (ms, more) => `<requested_range time_range="custom">x</requested_range>
 <meetings_data connected_user_email="jo.doe@example.com" workspace_name="W" count="${ms.length}">
 ${ms.map((m) => `<meeting id="${m.id}" title="${m.title}" date="x" meeting_at="${m.at}" captured_by_me="${m.mine}" listed_as_participant="true" url="https://notes.granola.ai/d/${m.id}">

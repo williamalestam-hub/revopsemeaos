@@ -8,9 +8,9 @@ global.dash = {
   data: (id) => (id in DATA ? { status: 'ok', data: DATA[id] } : { status: 'loading', data: [] }),
 };
 global.d3 = new Proxy({}, { get: (t, k) => (k === 'max' ? (a, f) => Math.max(...a.map(f)) : k === 'utcFormat' || k === 'format' ? () => (v) => String(v) : () => () => {}) });
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js');
-require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js'));
+require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 const iso = (n) => new Date(Date.now() + n * 864e5).toISOString();
 DATA.users_all = [
   { userId: '1', name: 'Cee Oh', email: 'ceo@legora.com', role: 'CEO', manager: null },

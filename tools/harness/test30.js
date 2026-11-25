@@ -14,7 +14,7 @@ global.d3 = { utcFormat: () => (d) => d.toISOString().slice(0, 10), format: (f) 
 global.claude = { use: async () => null };
 document.querySelectorAll = () => [];
 document.addEventListener = () => {};
-const D = '/home/user/revopsemeaos/dashboard/';
+const D = require('path').join(__dirname, '../../dashboard/');
 require(D + 'os-core.js'); require(D + 'os-calcs.js'); require(D + 'os-calcs-leads.js'); require(D + 'os-calcs-act.js'); require(D + 'os-draw.js');
 let fails = 0; const ok = (c, l, x) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', l, c ? '' : (x === undefined ? '' : JSON.stringify(x))); };
 const run = (id) => calcs[id].fn(...calcs[id].inputs.map((i) => DATA[i] || []));

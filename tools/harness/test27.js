@@ -22,7 +22,7 @@ document.querySelector = (sel) => (/data-view-panel/.test(sel) ? new Node('div')
 document.querySelectorAll = (sel) => REG[sel] || [];
 const handlers = []; document.addEventListener = (ev, fn) => { if (ev === 'click') handlers.push(fn); };
 let copied = null; Object.defineProperty(global, 'navigator', { value: { clipboard: { writeText: (t) => { copied = t; return Promise.resolve(); } } }, configurable: true, writable: true });
-require('/home/user/revopsemeaos/dashboard/os-core.js'); require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js'); require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js')); require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 let fails = 0; const ok = (c, l, x) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', l, c ? '' : (x === undefined ? '' : JSON.stringify(x))); };
 const rec = (f) => { const j = JSON.parse(fs.readFileSync(path.join(S, f), 'utf8')); return (j.records || j).map(({ attributes, ...r }) => r); };
 const roster = rec('act/roster.json').map((u, i) => ({ ...u, userId: '005TEST' + String(i).padStart(11, '0') }));

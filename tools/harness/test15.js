@@ -16,7 +16,7 @@ const makeRef = () => ({
 });
 // a Contributor: can('data.write') answers false for shared documents, but their own subtree is writable
 global.claude = { use: async (n) => (n === 'db' ? { doc: () => makeRef() } : n === 'user' ? { id: async () => 'u_x', can: async () => false } : null) };
-require('/home/user/revopsemeaos/dashboard/os-core.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
 const deliver = () => listeners.forEach((l) => l({ exists: server.exists, data: () => JSON.parse(JSON.stringify(server.data)), metadata: { fromCache: false } }));
 const flush = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
 const k = (item) => OS.done.keyOf({ meetingId: 'm1', item });

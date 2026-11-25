@@ -7,9 +7,9 @@ global.d3 = new Proxy({}, { get: (t, k) => (k === 'max' ? (a, f) => Math.max(...
 const paras = [];
 const mkP = (forName, msg, text) => { const p = new Node('p'); p.dataset.msgFor = forName; p.dataset.msg = msg; p.textContent = text; p.hidden = true; paras.push(p); return p; };
 global.document.querySelectorAll = (sel) => (sel === '[data-msg-for]' ? paras : []);
-require('/home/user/revopsemeaos/dashboard/os-core.js');
-require('/home/user/revopsemeaos/dashboard/os-calcs.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-leads.js'); require('/home/user/revopsemeaos/dashboard/os-calcs-act.js');
-require('/home/user/revopsemeaos/dashboard/os-draw.js');
+require(require('path').join(__dirname, '../../dashboard/os-core.js'));
+require(require('path').join(__dirname, '../../dashboard/os-calcs.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-leads.js')); require(require('path').join(__dirname, '../../dashboard/os-calcs-act.js'));
+require(require('path').join(__dirname, '../../dashboard/os-draw.js'));
 let fails = 0; const eq = (l, g, w) => { const ok = JSON.stringify(g) === JSON.stringify(w); if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', l, ok ? '' : 'got ' + JSON.stringify(g) + ' want ' + JSON.stringify(w)); };
 const pConnect = mkP('home-next', 'connect', 'Connect Google Calendar in your claude.ai connectors to see your next 1:1s here.');
 const slot = () => { const s = new Node('span'); s.dataset.for = 'home-next'; OS.drawMsg(s); return s; };
