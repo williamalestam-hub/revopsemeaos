@@ -602,6 +602,10 @@ const standIns = async () => {
     ok(clicks.length === 1 && TYPE.thrown.length === 0, 'an unknown id clicks nothing');
     const hid = hubPane.closest('section'); hid.hidden = true; s1.opts.onPick('desk'); flush(); hid.hidden = false;
     ok(scrolled.length === 2, 'nothing scrolls to an element under a hidden tab');
+    // the answer to a pick: did it lead somewhere? (the scene ends a tap's highlight when it did)
+    const led = ['decide', 'desk', 'review', 'nobody'].map((id) => { const a = s1.opts.onPick(id); flush(); return a; });
+    s1.opts.onHover(null);
+    ok(same(led, [true, true, false, false]), 'a pick answers whether it led somewhere: yes for a chip that opens a tab, no for one that only shows its tooltip, and no for nobody', led);
   }
 
   // ---- chips light up their robot and show its tooltip; the ? button opens the legend ----
@@ -633,8 +637,10 @@ const standIns = async () => {
 
   // ---- the timer is the script's, not the picture's ----
   {
+    s1.anchors.desk = { x: 300, y: 100 }; s1.opts.onHover('desk');   // a robot is pointed at when the stage leaves
     TYPE.leave(st);
     ok(s1.destroyed === 1 && timers.size === 1, 'unmount destroys the scene; the 30-second timer stays', [s1.destroyed, timers.size]);
+    ok($$('[data-ck]').every((c) => c.getAttribute('aria-describedby') === null), '... and no chip is left described by the tooltip of a stage that has left', $$('[data-ck]').map((c) => c.getAttribute('aria-describedby')));
     bus.changed();
     ok(scenes.length === 2 && scene() !== s1 && timers.size === 1 && same(scene().log, ['setCrew', 'resize 600', 'start']) && st.children.filter((c) => c.tagName === 'CANVAS').length === 1 && scene().crew.length === 5, 'the next call mounts afresh: one canvas, one scene (started once, with the crew: nothing is held a second time), still one timer', [scenes.length, timers.size, scene().log]);
     ok(st.children.find((c) => c.tagName !== 'CANVAS').id === 'ck-tip-2', 'each tooltip has an id of its own', st.children.map((c) => c.id));
@@ -769,25 +775,51 @@ const standIns = async () => {
     TYPE.all();
     const st = stage(), s = scene(), n = scenes.length, before = lines(), boom = new Error('a frame threw');
     ok(typeof s.opts.onError === 'function' && !st.classList.contains('ck-off') && !s.destroyed && before.every((l) => l && l !== '—'), 'the scene is told how to report a throw (onError), and the picture is up');
+    // a robot is pointed at when it happens: its chip is described by the tooltip
+    const tipOf = () => st.children.find((c) => c.tagName !== 'CANVAS'), described = () => $$('[data-ck]').filter((c) => c.getAttribute('aria-describedby') !== null).map((c) => c.dataset.ck);
+    s.anchors.desk = { x: 300, y: 100 }; s.opts.onHover('desk');
+    const tip = tipOf(), shown = tip.hidden === false && same(described(), ['desk']);
     s.opts.onError(boom);
     const first = thrownOn();
     ok(st.classList.contains('ck-off') && s.destroyed === 1 && first.length === 1 && first[0] === boom && alive().length === 0, 'a frame that throws: the stage folds away, the scene is let go, and the error is thrown on once outside the drawing', [st.className, s.destroyed, first.map(String)]);
+    ok(shown && tip.hidden === true && described().length === 0, '... and the tooltip that was showing goes with it: no chip is left described by a tooltip that is folded away', [shown, tip.hidden, described()]);
     s.opts.onError(new Error('and again'));
     ok(thrownOn().length === 0, '... a second report from the same picture is not thrown on again');
     bus.changed(); tickNow(); TYPE.all();
     ok(scenes.length === n && TYPE.thrown.length === 0 && st.classList.contains('ck-off') && thrownOn().length === 0, '... after that the drawing is left alone: no new scene, nothing thrown, still folded away', [scenes.length - n, TYPE.thrown.map(String), st.className]);
     ok(same(lines(), before) && IDS.every((id) => stateOf(chip(id)).length === 1), '... and the chips keep their lines and states', lines());
-    // the stage mounted anew (the tab was left and came back): the picture gets another go
+    // the chips carry on alone: a document changes; then nothing changes but the clock, and the 30-second timer fires
+    H.doc.counts.waiting = 7; bus.changed();
+    ok(whatOf('desk') === 'needs 7' && same(stateOf(chip('desk')), ['is-needs']) && st.classList.contains('ck-off'), '... a document that changes after the fold still reaches its chip', [lineOf('desk'), stateOf(chip('desk'))]);
+    H.doc.counts.waiting = 0; const drawn = model.calls.length; advance(30000);
+    ok(timers.size === 1 && model.calls.length === drawn + 5 && model.calls[model.calls.length - 1].now === NOW + T && whatOf('desk') === 'idle 0' && same(stateOf(chip('desk')), ['is-idle']), '... and the 30-second timer still runs: half a minute on, the chips are drawn again with the clock moved on (the stage is left alone)', [timers.size, model.calls.length - drawn, lineOf('desk'), stateOf(chip('desk'))]);
+    H.doc.counts.waiting = 113; bus.changed();
+    // the stage mounted anew (its element left the page and came back; a tab that is only hidden keeps its mount, and
+    // with it the fold, for this run of the script): the picture gets another go
     TYPE.leave(st); TYPE.all();
     const s2 = scene();
     ok(scenes.length === n + 1 && !st.classList.contains('ck-off') && st.children.length === 2 && same(s2.log, ['setCrew', 'resize 600', 'start']) && s2.crew.length === 5, 'mounted anew, the picture is back with the crew', [scenes.length - n, st.className, s2.log]);
-    // a throw when the picture is handed a crew
+    // a throw when the picture is handed a crew (again with a robot pointed at)
+    s2.anchors.desk = { x: 300, y: 100 }; s2.opts.onHover('desk');
+    const tip2 = tipOf(), shown2 = tip2.hidden === false && same(described(), ['desk']);
     const boom2 = new Error('setCrew threw'); s2.setCrew = () => { throw boom2; };
     let out = null; try { bus.changed(); } catch (e) { out = e; }
     const second = out ? [out] : thrownOn();
     ok(TYPE.thrown.length === 0 && st.classList.contains('ck-off') && s2.destroyed === 1 && second.length === 1 && second[0] === boom2, 'a throw when it is handed a crew: the drawing itself does not throw, the stage folds away, the error is thrown on once', [TYPE.thrown.map(String), st.className, s2.destroyed, second.map(String)]);
+    ok(shown2 && tip2.hidden === true && described().length === 0, '... and its tooltip goes with it as well', [shown2, tip2.hidden, described()]);
     tickNow(); bus.changed();
     ok(scenes.length === n + 1 && TYPE.thrown.length === 0 && thrownOn().length === 0 && same(lines(), before), '... and it is not tried again every tick', [scenes.length - n - 1, lines()]);
+    // the same guard holds the other two calls of update: a throw when it is handed its size, or started
+    for (const call of ['resize', 'start']) {
+      const make = sceneStandIn.create, boom3 = new Error(call + ' threw'), m = scenes.length;
+      sceneStandIn.create = (c, o) => { const x = make(c, o); x[call] = () => { throw boom3; }; return x; };
+      TYPE.leave(st); TYPE.all();                                // mounted anew: update hands the new scene a crew and a size, and starts it
+      sceneStandIn.create = make;
+      const third = thrownOn();
+      ok(scenes.length === m + 1 && TYPE.thrown.length === 0 && st.classList.contains('ck-off') && scene().destroyed === 1 && third.length === 1 && third[0] === boom3, 'a throw from ' + call + ' in update: the drawing itself does not throw, the stage folds away, the error is thrown on once', [scenes.length - m, TYPE.thrown.map(String), st.className, scene().destroyed, third.map(String)]);
+      tickNow(); bus.changed();
+      ok(scenes.length === m + 1 && TYPE.thrown.length === 0 && thrownOn().length === 0 && same(lines(), before), '... and ' + call + ' is not tried again every tick either', [scenes.length - m - 1, TYPE.thrown.map(String)]);
+    }
     // a later run of the script (a new version of the file) takes over and tries again
     load('os-cockpit.js'); await tick(); await tick();
     push('hub/weekly', WEEK); push('hub/pulse', undefined);

@@ -4,6 +4,9 @@
 // reduced motion places agents at once, and destroy() lets go of listeners and frames. The last part holds what the
 // review of the published scene asked for: nobody walks through anybody, tags at rest do not overlap, and so on.
 // The very last part: a frame that throws ends the picture (wiped, let go, said once) instead of leaving it standing.
+// After that, what the review of the third round asked for: bubbles at their owner and in turns, a name for an agent
+// under a new id, a tap that is over once it led somewhere, and (with a probe added to a copy of the scene) no queue
+// place on a plant, nobody painted over furniture it is behind, and a room that changes size under those on their way.
 //   node tools/harness/test41.js [path/to/scene.js]
 const path = require('path');
 const FILE = path.resolve(process.argv[2] || path.join(__dirname, '../../dashboard/os-cockpit-scene.js'));
@@ -259,6 +262,18 @@ const play = (width, steps, ms, each, opts) => {
 const IDS = FX.morning.crew.map((a) => a.id);
 const far = (p, q) => (p && q ? Math.hypot(p.x - q.x, p.y - q.y) : 1e9);
 const point = (canvas, x, y, kind, type) => canvas.listeners.filter((l) => l[0] === type).forEach((l) => l[1]({ type, clientX: x, clientY: y, pointerType: kind, target: canvas, preventDefault() {}, stopPropagation() {} }));
+// Where each robot belongs once the walking is over: a scene that does not animate stands everybody in place at once
+// (checked above), so handed the same crews in the same order it says where that is (the queue in the order they came,
+// a place in the lounge each, its own chair for the rest; null for one that is not in the room).
+const placed = (width, steps, list) => {
+  const s = API.create(mkCanvas(), { now: () => FX.morning.clock, seed: 7, reducedMotion: true, onHover() {}, onPick() {} });
+  const todo = steps.slice().sort((a, b) => a[0] - b[0]); let i = 0;
+  while (i < todo.length && todo[i][0] < 0) s.setCrew(todo[i++][1]);
+  s.resize(width);
+  while (i < todo.length) s.setCrew(todo[i++][1]);
+  s.frame(0);
+  const at = list.map((a) => stood(s, a)); s.destroy(); return at;
+};
 
 // 1. nobody walks through anybody: the page loading, everything handled at once, a morning arriving, a new result
 {
@@ -267,6 +282,8 @@ const point = (canvas, x, y, kind, type) => canvas.listeners.filter((l) => l[0] 
     'everything handled at once': [[-1, FX.morning.crew], [14000, FX.clear.crew]],
     'a morning arriving': [[-1, FX.clear.crew], [14000, FX.morning.crew]],
     'a new result': [[-1, FX.handover.crew], [14000, FX.handover.script[0].crew]],
+    // and a change that arrives while they are still on their way, as on the page (150 ms after any document changes)
+    'the page loading, and Desk handled two seconds later': [[-1, []], [1000, FX.morning.crew], [3000, FX.morning.crew.map((a) => (a.id === 'desk' ? Object.assign({}, a, { state: 'idle', waiting: 0, bubble: '' }) : a))]],
   };
   for (const [what, steps] of Object.entries(cases)) for (const w of [366, 400, 888]) {
     const run = {}; let worst = 0, who = '', last = null, prev = null;
@@ -276,7 +293,8 @@ const point = (canvas, x, y, kind, type) => canvas.listeners.filter((l) => l[0] 
       prev = last; last = at;
     });
     ok(worst <= 3, `${what} @${w}: no two robots are more than a quarter on top of each other for more than three frames`, [worst, who]);
-    ok(last.every((p, i) => far(p, prev[i]) < 0.01), `${what} @${w}: and everybody has arrived`, last.map((p, i) => Math.round(far(p, prev[i]))));
+    const want = placed(w, steps, FX.morning.crew);
+    ok(last.every((p, i) => far(p, prev[i]) < 0.01 && far(p, want[i]) <= 1.5), `${what} @${w}: and everybody has arrived: nobody moves any more, and each stands in the place its state calls for`, last.map((p, i) => [Math.round(far(p, prev[i])), Math.round(far(p, want[i]))]));
     r.scene.destroy();
   }
 }
@@ -295,25 +313,26 @@ const point = (canvas, x, y, kind, type) => canvas.listeners.filter((l) => l[0] 
       prev = last; last = at;
     });
     r.scene.destroy();
-    return { worst, who, still: last.map((p, i) => (p || prev[i] ? Math.round(far(p, prev[i])) : 0)) };
+    const want = placed(w, steps, FX.eight.crew.slice(0, n));     // how far each still is from the place its state calls for
+    return { worst, who, still: last.map((p, i) => (p || prev[i] ? Math.round(far(p, prev[i])) : 0)), away: last.map((p, i) => (p || want[i] ? Math.round(far(p, want[i]) * 10) / 10 : 0)) };
   };
   for (const [letters, widths] of [['nniwiin', [366, 400]], ['iiiwwni', [366, 400]], ['nnniii', [366]], ['ineinnw', [366]], ['idnndnnn', [366, 400]], ['iiiiiiii', [366, 400, 888]]]) for (const w of widths) {
     const r = lapse(w, [[-1, []], [1000, mix(letters)]], 30000, 0);
     ok(r.worst <= 3, `the page loading with ${letters.length} agents (${letters}) @${w}: no two robots are more than a quarter on top of each other for more than three frames`, [r.worst, r.who]);
-    ok(r.still.every((d) => d < 0.01), `${letters} @${w}: and everybody has arrived`, r.still);
+    ok(r.still.every((d) => d < 0.01) && r.away.every((d) => d <= 1.5), `${letters} @${w}: and everybody has arrived: nobody moves any more, and each stands in the place its state calls for`, [r.still, r.away]);
   }
   // three leave the lounge of the tight room past one who stays: there is no height for an aisle, so they go along the very edge
   {
     const r = lapse(366, [[-1, []], [1000, mix('wiiiiw')], [16000, mix('llneiu')]], 40000, 16000);
     ok(r.worst <= 3, 'three leaving the lounge of the tight room @366 past one who stays: nobody walks through anybody', [r.worst, r.who]);
-    ok(r.still.every((d) => d < 0.01), 'leaving the lounge of the tight room @366: and everybody has arrived', r.still);
+    ok(r.still.every((d) => d < 0.01) && r.away.every((d) => d <= 1.5), 'leaving the lounge of the tight room @366: and everybody has arrived, each in the place its state calls for', [r.still, r.away]);
   }
   // everybody somewhere else at once (three of them want each other's places): they go one after the other
   const swap = FX.eight.crew.map((a, i) => Object.assign({}, a, { state: ['idle', 'needs', 'needs', 'idle', 'idle', 'needs', 'working', 'idle'][i], waiting: i + 1, step: i === 6 ? 'Reading Slack' : '' }));
   for (const w of [400, 888]) {
     const r = lapse(w, [[-1, FX.eight.crew], [16000, swap]], 46000, 16000);
     ok(r.worst <= 3, `the whole crew of eight changing places at once @${w}: nobody walks through anybody`, [r.worst, r.who]);
-    ok(r.still.every((d) => d < 0.01), `the whole crew changing places @${w}: and everybody has arrived half a minute later`, r.still);
+    ok(r.still.every((d) => d < 0.01) && r.away.every((d) => d <= 1.5), `the whole crew changing places @${w}: and everybody has arrived half a minute later, each in the place its state calls for`, [r.still, r.away]);
   }
 }
 
@@ -488,6 +507,201 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
   const boom3 = new Error('threw under reduced motion'); breakIt(canvas, boom3); r.setCrew(FX.clear.crew);
   let out4 = null; try { t = pump(10, 1000 / 60, t); } catch (e) { out4 = e; }
   ok(out4 === null && heard.length === 1 && heard[0] === boom3 && raf.q.size === 0, 'under reduced motion a throwing frame is reported and ends the picture the same way', [out4 && String(out4), heard.map(String), raf.q.size]);
+}
+// ---- what the review of the third round asked for ----
+// 13. bubbles: always at their owner, never on each other, in turns where they cannot all be shown
+{
+  const W5 = [['desk', 'idle'], ['decide', 'working'], ['instinct', 'working'], ['muse', 'working'], ['review', 'idle']];
+  const STEPS = { decide: 'Sorting seventeen new items', instinct: 'Checking pipeline health', muse: 'Drafting a longer answer' };
+  const three = FX.clear.crew.map((a, i) => Object.assign({}, a, { state: W5[i][1], step: STEPS[a.id] || '', bubble: '' }));
+  const owner = Object.fromEntries(Object.entries(STEPS).map(([id, text]) => [text, id]));
+  // the box of a bubble from where its text was drawn (device px; letters 12 wide, see wideText)
+  const boxOf = (e) => ({ text: e[0], x: e[1] - 12, y: e[2] - 23, w: e[0].length * 12 + 24, h: 32 });
+  const laps = (p, q) => Math.min(p.x + p.w, q.x + q.w) > Math.max(p.x, q.x) && Math.min(p.y + p.h, q.y + q.h) > Math.max(p.y, q.y);
+  for (const w of [366, 400, 888]) {
+    const shown = {}, gap = {}, worstGap = {}; let frames = 0, away = [], onTop = [], twice = [], most = 0, flips = 0, prev = '';
+    const r = play(w, [[-1, three]], 34000, (t, s, c) => {
+      if (t < 12000) return;                                             // everybody is in its chair by then
+      frames++;
+      const first = c.ctx.textAt.map((e) => e.join('@'));
+      const bubs = c.ctx.textAt.filter((e) => owner[e[0]]).map(boxOf);
+      most = Math.max(most, bubs.length);
+      bubs.forEach((b, i) => {
+        const p = s.anchor(owner[b.text]), hx = p.x * 2, up = p.y * 2 - (b.y + b.h);
+        const dx = hx < b.x ? b.x - hx : hx > b.x + b.w ? hx - (b.x + b.w) : 0;
+        if (dx > 30 || up < 16 || up > 64) away.push([Math.round(t), b.text, Math.round(dx), Math.round(up)]);
+        for (let j = 0; j < i; j++) if (laps(b, bubs[j])) onTop.push([Math.round(t), b.text, bubs[j].text]);
+      });
+      Object.keys(owner).forEach((text) => { const on = bubs.some((b) => b.text === text); if (on) { shown[text] = (shown[text] || 0) + 1; gap[text] = 0; } else { gap[text] = (gap[text] || 0) + STEP; worstGap[text] = Math.max(worstGap[text] || 0, gap[text]); } });
+      const now = bubs.map((b) => b.text).sort().join('|'); if (prev && now !== prev) flips++; prev = now;
+      c.ctx.textAt.length = 0; s.frame(t);                               // the same moment once more
+      if (c.ctx.textAt.map((e) => e.join('@')).join('#') !== first.join('#')) twice.push(Math.round(t));
+    }, { wideText: true });
+    ok(away.length === 0, `three neighbours at work @${w}: every bubble stands at its owner, over its head and less than a row above it`, away.slice(0, 4));
+    ok(onTop.length === 0, `three neighbours at work @${w}: no bubble lies on another`, onTop.slice(0, 4));
+    ok(Object.keys(owner).every((text) => (shown[text] || 0) >= frames * 0.2 && (worstGap[text] || 0) <= 7000), `three neighbours at work @${w}: each of them has its say (a fifth of the time or more, never silent for more than seven seconds)`, [frames, shown, worstGap]);
+    ok(flips <= 20, `three neighbours at work @${w}: the bubbles do not flicker (they change hands every few seconds)`, flips);
+    ok(twice.length === 0, `three neighbours at work @${w}: the same moment drawn twice is the same picture, also when a turn ends`, twice.slice(0, 6));
+    if (w === 366) ok(most < 3, 'three long bubbles do not fit side by side on a phone, so not all three are shown at once', most);
+    // the one with the focus speaks at once, and keeps the floor while it has the focus
+    const silent = Object.keys(owner).find((text) => !r.canvas.ctx.textAt.some((e) => e[0] === text));
+    if (silent) {
+      r.scene.setFocus(owner[silent]); let held = 0, n = 0;
+      for (let t = 34000 + STEP; t <= 39000; t += STEP) { r.canvas.ctx.textAt.length = 0; r.scene.frame(t); n++; if (r.canvas.ctx.textAt.some((e) => e[0] === silent)) held++; }
+      ok(held === n, `three neighbours at work @${w}: the one that has the focus speaks at once and for as long as it has it`, [silent, held, n]);
+    } else ok(w !== 366, `three neighbours at work @${w}: somebody waits its turn on a phone`, r.canvas.ctx.textAt.map((e) => e[0]));
+    r.scene.destroy();
+  }
+  // a change that has to wait for its turn is still shown
+  const said = { desk: 'Desk has 113 for you', decide: 'Decide has 17 for you', instinct: 'Instinct has 3 for you', muse: 'Muse has 2 for you' };
+  const four = FX.clear.crew.map((a) => (said[a.id] ? Object.assign({}, a, { state: 'needs', waiting: 3, bubble: said[a.id] }) : a));
+  for (const w of [366, 888]) {
+    const seen = {}; let onTop = 0;
+    const r = play(w, [[-1, FX.clear.crew], [14000, four]], 27000, (t, s, c) => {
+      const bubs = c.ctx.textAt.filter((e) => Object.values(said).includes(e[0])).map(boxOf);
+      bubs.forEach((b, i) => { seen[b.text] = (seen[b.text] || 0) + 1; for (let j = 0; j < i; j++) if (laps(b, bubs[j])) onTop++; });
+    }, { wideText: true });
+    ok(Object.values(said).every((text) => (seen[text] || 0) >= 15) && onTop === 0, `four change at once @${w}: each one's words are shown for a second or more within thirteen, none on top of another`, [seen, onTop]);
+    ok(!r.canvas.ctx.textAt.some((e) => Object.values(said).includes(e[0])), `four change at once @${w}: and the words are gone again afterwards`, r.canvas.ctx.textAt.map((e) => e[0]));
+    r.scene.destroy();
+  }
+  // the sign over one that has failed is never covered by somebody else's bubble; and a change that has had its say
+  // and lost the floor does not come back
+  {
+    const fail = FX.clear.crew.map((a) => (a.id === 'desk' ? Object.assign({}, a, { state: 'working', step: 'Checking pipeline health now' }) : a.id === 'decide' ? Object.assign({}, a, { state: 'error', bubble: 'The run has failed' }) : a.id === 'instinct' ? Object.assign({}, a, { state: 'late', bubble: 'No result since 13:13' }) : a));
+    for (const w of [366, 400, 888]) {
+      let covered = 0, signs = 0, said = 0, cut = 0; const runsOf = {}, on = {};
+      const r = play(w, [[-1, FX.clear.crew], [14000, fail]], 40000, (t, s, c) => {
+        if (t < 14000) return;
+        const p = s.anchor('decide'), sign = { x: p.x * 2 - 16, y: p.y * 2 - 80, w: 36, h: 44 };   // the sign over Decide (device px), from its anchor
+        signs++;
+        // the others' bubbles, whole or shortened (as much as fits beside the sign, with an ellipsis)
+        const others = ['Checking pipeline health now', 'No result since 13:13'], isOf = (text, full) => text === full || (text.endsWith('…') && text.length > 6 && full.startsWith(text.slice(0, -1).trimEnd()));
+        c.ctx.textAt.forEach((e) => { if (!others.some((full) => isOf(e[0], full))) return; if (isOf(e[0], others[0])) said++; if (e[0].endsWith('…')) cut++; if (laps(boxOf(e), sign)) covered++; });
+        for (const text of ['The run has failed', 'No result since 13:13']) { const now = c.ctx.textAt.some((e) => e[0] === text); if (now && !on[text]) runsOf[text] = (runsOf[text] || []).concat([0]); if (now) runsOf[text][runsOf[text].length - 1]++; on[text] = now; }
+      }, { wideText: true });
+      const back = Object.entries(runsOf).filter(([, runs]) => { let told = 0; for (let i = 0; i < runs.length - 1; i++) { told += runs[i]; if (told >= 42) return true; } return false; });
+      ok(covered === 0 && signs > 300, `one fails beside one at work @${w}: nobody else's bubble covers the sign over the one that failed`, [covered, signs]);
+      ok(said >= 150 && (w === 888 ? cut === 0 : cut >= 150), `one fails beside one at work @${w}: the one at work still says its step, ${w === 888 ? 'whole where there is room' : 'as much of it as fits beside the sign on a phone'}`, [said, cut]);
+      ok(Object.keys(runsOf).length === 2 && back.length === 0, `one fails beside one at work @${w}: both changes are said, and one that has had its say (2.8 s) and lost the floor does not come back`, runsOf);
+      r.scene.destroy();
+    }
+  }
+  // reduced motion: nothing takes turns; the lowest desk speaks, and whoever has the focus
+  {
+    const c = mkCanvas(); c.ctx.measureText = (str) => ({ width: String(str).length * 12 });
+    const s = API.create(c, { now: () => FX.morning.clock, seed: 7, reducedMotion: true, onHover() {}, onPick() {} });
+    s.setCrew(three); s.resize(366); s.frame(0);
+    const texts = () => c.ctx.textAt.filter((e) => owner[e[0]]).map((e) => e[0]);
+    c.ctx.textAt.length = 0; s.frame(1000); const still = texts();
+    const hidden = Object.keys(owner).find((text) => !still.includes(text));
+    ok(still.includes(STEPS.decide) && !!hidden, 'reduced motion: the lowest desk speaks, and somebody waits', still);
+    if (hidden) { s.setFocus(owner[hidden]); c.ctx.textAt.length = 0; s.frame(2000); ok(texts().includes(hidden), 'reduced motion: the one that has the focus speaks', texts()); }
+    s.destroy();
+  }
+}
+
+// 14. an agent that takes another's place under a new id has its name drawn; a tap that led somewhere is over
+{
+  const one = (id) => [{ id, name: 'Solo', look: 'plain', hue: 'teal', state: 'idle', waiting: 0, step: '', bubble: '', fresh: 0 }];
+  const r = play(888, [[-1, one('a')]], 12000);
+  r.scene.setCrew(one('b')); let drawn = 0;
+  for (let t = 12000 + STEP; t <= 16000; t += STEP) { r.canvas.ctx.texts.length = 0; r.scene.frame(t); }
+  drawn = r.canvas.ctx.texts.filter((x) => x === 'Solo').length;
+  ok(drawn === 1, 'an agent that takes another one\'s place under a new id has its name drawn', drawn);
+  r.scene.destroy();
+  const tap = (went) => {
+    const q = play(400, [[-1, FX.morning.crew]], 14000, null, { onPick: () => went }), p = q.scene.anchor('desk'), h = [];
+    const s2 = q.scene; q.heard.hover.length = 0;
+    return { q, p, h, s2 };
+  };
+  for (const [went, what] of [[true, 'that led somewhere'], [undefined, 'that led nowhere']]) {
+    const canvas = mkCanvas(), hover = [], picks = []; let simT = 0;
+    const s = API.create(canvas, { now: () => FX.morning.clock + simT, seed: 7, reducedMotion: false, onHover: (id) => hover.push(id), onPick: (id) => { picks.push(id); return went; } });
+    s.setCrew(FX.morning.crew); s.resize(400);
+    for (let t = 0; t <= 14000; t += STEP) { simT = t; s.frame(t); }
+    const p = s.anchor('desk');
+    point(canvas, p.x, p.y, 'touch', 'pointerdown'); point(canvas, p.x, p.y, 'touch', 'pointerleave'); point(canvas, p.x, p.y, 'touch', 'click');
+    for (let t = 14000 + STEP; t <= 16000; t += STEP) { simT = t; s.frame(t); }
+    if (went === true) ok(picks.join() === 'desk' && hover.join() === 'desk,', `a tap ${what}: the robot is picked, and nothing stays pointed at`, [picks, hover]);
+    else ok(picks.join() === 'desk' && hover.join() === 'desk', `a tap ${what}: the robot stays pointed at (its tooltip stays)`, [picks, hover]);
+    // a mouse that clicks stays where it is: the robot under it stays pointed at
+    hover.length = 0; picks.length = 0;
+    point(canvas, 2, 2, 'touch', 'pointerdown');
+    point(canvas, p.x, p.y, 'mouse', 'pointermove'); point(canvas, p.x, p.y, 'mouse', 'click');
+    for (let t = 16000 + STEP; t <= 17000; t += STEP) { simT = t; s.frame(t); }
+    ok(picks.join() === 'desk' && hover[hover.length - 1] === 'desk', `a click with the mouse ${what}: the robot under the pointer stays pointed at`, [picks, hover]);
+    s.destroy();
+  }
+}
+
+// 15. with a probe (a copy of the scene that also hands out its layout and its crew, read only): what cannot be seen
+// from outside
+{
+  const fs = require('fs');
+  const src = fs.readFileSync(FILE, 'utf8'), line = '      frame, start, stop, destroy, hit, anchor,\n';
+  ok(src.split(line).length === 2, 'the probe finds the line of the scene it hooks into');
+  if (src.split(line).length === 2) {
+    const keep = global.OSCockpit;
+    new Function(src.replace(line, () => line + '      _dbg: () => ({ L, crew, qPitch, feet: (id) => { const a = byId.get(id); return a ? feet(a) : null; } }),\n'))();
+    const P = global.OSCockpit; global.OSCockpit = keep;
+    const mkRnd = (seed) => { let v = (seed * 2654435761) >>> 0; return () => { v = (v * 1664525 + 1013904223) >>> 0; return v / 4294967296; }; };
+    const mk = (opts) => { const canvas = mkCanvas(); const st = { t: 0 }; const s = P.create(canvas, Object.assign({ now: () => FX.morning.clock + st.t, seed: 7, reducedMotion: false, onHover() {}, onPick() {} }, opts || {})); return { canvas, s, st, run: (to) => { for (; st.t <= to; st.t += STEP) s.frame(st.t); } }; };
+    const crewOf = (states) => states.map((state, i) => Object.assign({}, FX.eight.crew[i], { state, waiting: state === 'needs' ? i + 1 : 0, step: state === 'working' ? 'Reading Slack' : '', bubble: '' }));
+    // what stands on the floor and is taller than a robot's feet are high: x, top, w, base (as drawn)
+    const piecesOf = (L) => L.plants.map((p) => ({ kind: 'plant', x: p.x, top: p.y, w: 14, base: p.y + 22 })).concat(L.extras.map((e) => (e.kind === 'meet' ? { kind: 'meet', x: e.x + 18, top: e.y + 5, w: 44, base: e.y + 36 } : e.kind === 'board' ? { kind: 'board', x: e.x, top: e.y, w: 30, base: e.y + 33 }
+      : e.kind === 'foos' ? { kind: 'foos', x: e.x, top: e.y, w: 44, base: e.y + 28 } : e.kind === 'pong' ? { kind: 'pong', x: e.x, top: e.y + 1, w: 56, base: e.y + 31 } : { kind: 'bags', x: e.x, top: e.y + 1, w: 40, base: e.y + 14 })));
+    // a robot's figure lies on a piece it is behind (its feet are above the piece's base and below its top)
+    const behind = (f, p) => f.y < p.base - 1 && f.y > p.top + 1 && Math.min(f.x + 7, p.x + p.w) - Math.max(f.x - 7, p.x) > 1;
+    // the low furniture, as it stands on the floor (a desk has a way into its chair from behind: sx is the chair)
+    const lowOf = (L) => L.desks.map((d) => ({ x: d.x0, y: d.dy - 11, w: d.w, h: 27, sx: d.sx, dy: d.dy })).concat([{ x: L.table.x, y: L.table.y, w: 24, h: 12 }, { x: L.cart.x, y: L.cart.y - 14, w: 28, h: 32 }, { x: L.sofa.x, y: L.sofa.y, w: 58, h: 24 }]);
+    const inside = (f, o) => f.x > o.x && f.x < o.x + o.w && f.y > o.y && f.y < o.y + o.h && !(o.sx !== undefined && Math.abs(f.x - o.sx) <= 3.5 && f.y <= o.dy);
+
+    // no place in a long queue is on a plant
+    { const hit = [];
+      for (const [ratio, widths] of [[1, [1690, 1740, 1776, 1800, 1856, 1900, 2074, 2160]], [2, [2130, 2200, 2350, 2560]]]) { global.devicePixelRatio = ratio;
+        for (const w of widths) for (const n of [6, 7, 8]) { const m = mk({ reducedMotion: true }); m.s.setCrew(crewOf(Array(n).fill('needs'))); m.s.resize(w); m.s.frame(0); const d = m.s._dbg();
+          d.crew.forEach((a) => { const f = d.feet(a.id); d.L.plants.forEach((p) => { if (Math.min(f.x + 7, p.x + 14) - Math.max(f.x - 7, p.x) > 0 && f.y > p.y && f.y < p.y + 22) hit.push([ratio, w, n, a.id]); }); }); m.s.destroy(); } }
+      global.devicePixelRatio = 2;
+      ok(hit.length === 0, 'with six to eight waiting on a very wide page, no place in the queue is on a plant', hit.slice(0, 4)); }
+
+    // nobody is painted over furniture it is behind, on the way or at rest; and everybody still gets where it belongs
+    { const ST = ['working', 'due', 'needs', 'needs', 'needs', 'idle', 'idle', 'idle', 'late'];
+      for (const [ratio, w] of [[1, 1920], [2, 2560], [1, 640]]) { global.devicePixelRatio = ratio; let over = 0, moving = 0; const kinds = {};
+        for (let run = 0; run < 4; run++) { const rnd = mkRnd(9000 + run * 17 + w), n = 4 + Math.floor(rnd() * 5), pick = () => Array.from({ length: n }, () => ST[Math.floor(rnd() * ST.length)]);
+          const m = mk(); m.s.setCrew([]); m.s.resize(w);
+          for (const at of [1000, 36000, 71000]) { m.run(at); m.s.setCrew(crewOf(pick())); const end = at + 35000;
+            for (; m.st.t <= end; m.st.t += STEP) { m.s.frame(m.st.t); const d = m.s._dbg(), ps = piecesOf(d.L); d.crew.forEach((a) => { if (a.state === 'unknown' || !(a.alpha > 0.5)) return; const f = d.feet(a.id); ps.forEach((p) => { if (behind(f, p)) { over++; kinds[p.kind] = (kinds[p.kind] || 0) + 1; } }); }); }
+            moving += m.s._dbg().crew.filter((a) => a.state !== 'unknown' && (a.path || a.pending)).length; }
+          m.s.destroy(); }
+        ok(over === 0, `a wide room @${w} at ratio ${ratio}: nobody is painted over a table, a board or a plant it stands or walks behind`, [over, kinds]);
+        ok(moving === 0, `a wide room @${w} at ratio ${ratio}: and everybody is in place 35 s after each change`, moving); }
+      global.devicePixelRatio = 2; }
+
+    // the room changes size while they change places: nobody is dropped into the furniture
+    { let inFurn = 0, stoodUp = 0; const notes = [];
+      for (const [w0, w1, wait] of [[700, 400, 300], [400, 888, 300], [888, 400, 1200], [888, 1280, 2500], [700, 366, 5000]]) {
+        const m = mk(); m.s.setCrew([]); m.s.resize(w0); m.run(1000); m.s.setCrew(crewOf(['idle', 'idle', 'idle', 'idle', 'idle'])); m.run(22000);
+        m.s.setCrew(crewOf(['working', 'needs', 'working', 'needs', 'due'])); m.run(22000 + wait);
+        const sat = m.s._dbg().crew.filter((a) => a.sitKind === 'sofa' && a.seated && a.pending).map((a) => a.id);
+        m.s.resize(w1);
+        m.s._dbg().crew.forEach((a) => { if (sat.includes(a.id) && !(a.sitKind === 'sofa' && a.seated)) stoodUp++; });
+        const end = m.st.t + 14000;
+        for (; m.st.t <= end; m.st.t += STEP) { m.s.frame(m.st.t); const d = m.s._dbg(), low = lowOf(d.L); d.crew.forEach((a) => { if (a.sitKind) return; const f = d.feet(a.id); if (low.some((o) => inside(f, o))) { inFurn++; if (notes.length < 3) notes.push([w0, w1, a.id, Math.round(f.x), Math.round(f.y)]); } }); }
+        m.s.destroy(); }
+      ok(inFurn === 0, 'the page changes width while robots change places: nobody stands or walks inside a desk, the table or the coffee cart afterwards', [inFurn, notes]);
+      ok(stoodUp === 0, '... and one still waiting on the sofa for its turn stays seated on the sofa of the new room', stoodUp); }
+
+    // a zoom that keeps the room's logical size but not the size of a pixel: placed for the new room at once
+    { const m = mk(); m.s.setCrew([]); m.s.resize(400); m.run(1000); m.s.setCrew(FX.morning.crew); m.run(21000);
+      const xs = () => { const d = m.s._dbg(); return d.crew.filter((a) => a.state === 'needs').map((a) => Math.round(d.feet(a.id).x * 10) / 10); };
+      const before = xs(), w0 = m.s._dbg().L.W;
+      global.devicePixelRatio = 2.2; m.s.resize(364); const d1 = m.s._dbg(), at = xs(), want = at.map((x, j) => Math.round((d1.L.q.x0 + j * d1.qPitch) * 10) / 10);
+      m.run(m.st.t + 3000); m.s.setCrew(FX.morning.crew); m.run(m.st.t + 9000); const after = xs();
+      global.devicePixelRatio = 2;
+      ok(d1.L.W === w0 && at.join() === want.join() && at.join() !== before.join() && after.join() === at.join(), 'a zoom that keeps the room as wide but changes the size of a pixel: the queue is spaced for the new room at once, and nobody shuffles later', [w0, d1.L.W, before, at, want, after]);
+      m.s.destroy(); }
+  }
 }
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

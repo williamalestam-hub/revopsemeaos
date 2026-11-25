@@ -194,8 +194,9 @@
     m.scene = Scene.create(canvas, {
       now: () => Date.now(), seed: Math.floor(Date.now() / 1000) % 100000, reducedMotion: reduced(),
       onHover: (id) => { if (m.dead) return; if (id) showTip(m, id); else hideTip(m); canvas.style.cursor = id && linked(id) ? 'pointer' : ''; },
-      // a click on a robot is a click on its chip: the page's own handler opens the chip's tab
-      onPick: (id) => { const c = chipOf(id); if (!m.dead) hideTip(m); if (c && typeof c.click === 'function') c.click(); },
+      // a click on a robot is a click on its chip: the page's own handler opens the chip's tab. The answer tells the
+      // scene whether that led somewhere: then a tap is over, and nothing stays pointed at.
+      onPick: (id) => { const c = chipOf(id); if (!m.dead) hideTip(m); if (c && typeof c.click === 'function') c.click(); return linked(id); },
       onError: (e) => fold(m, e),
     });
     S.live.add(m);

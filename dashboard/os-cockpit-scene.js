@@ -140,7 +140,11 @@
         let ex = t0 + edge;
         top.forEach((e) => { const x = Math.round(ex); L.extras.push({ kind: e.kind, x, y: e.y }); if (e.kind === 'meet') L.rugs.push({ kind: 'meet', x, y: e.y, w: 80, h: 40 }); ex += e.w + gapT; });
         if (top.length) q.max = Math.min(q.max, Math.round(t0 + edge) - 16);
-        if (top.length && edge >= 64) L.plants.push({ x: Math.round(t0 + edge / 2) - 7, y: wallH + 26 }, { x: Math.round(t1 - edge / 2) - 7, y: wallH + 26 });
+        if (top.length && edge >= 64) {
+          const px = Math.round(t0 + edge / 2) - 7;                        // (not where a long queue reaches: its places are up to 40 apart)
+          if (px - 9 >= Math.min(q.max, q.x0 + (Math.max(n, 1) - 1) * 40)) L.plants.push({ x: px, y: wallH + 26 });
+          L.plants.push({ x: Math.round(t1 - edge / 2) - 7, y: wallH + 26 });
+        }
         if (Lw >= 220) L.extras.push({ kind: 'foos', x: sofa.x + 84, y: sofa.y + 46 }); }
       L.rugs.push({ kind: 'lounge', x: sofa.x - 2, y: sofa.y + 21, w: Math.min(W - 8 - (sofa.x - 2), 62 + Math.max(0, Lw - 128)), h: Math.min(56, H - 8 - (sofa.y + 21)) });
       L.lights = [[L.lamp.x + 4, L.lamp.y + 24, 56, 34, 0.95], [cart.x + 12, cart.y + 4, 30, 22, 0.6]];
@@ -171,25 +175,28 @@
     }
     spots.forEach((p) => { p.x = clamp(p.x, 11, W - 12); p.y = clamp(p.y, wallH + 8, H - 6); });
     Object.assign(L, { H, sofa, table, cart, spots });
-    // what a robot has to walk around (floor footprints, with the tall parts behind them); the floor right in front of
-    // your desk is kept clear as well, so that nobody walks across the plate with your name
+    // What a robot has to walk around. A robot is painted over the room, so it must not stand behind anything that is
+    // taller than its feet are high: each piece is walked around as a whole, with room above it for the name at a
+    // walker's feet (tall(): from that far above its top; from the wall where less than a walkway would be left behind
+    // it). The floor right in front of your desk is kept clear as well, so nobody walks across the plate with your name.
+    const tall = (x, top, w, base) => { const y = top - 7 - 2 - (wallH + 4) < 6 ? wallH : top - 7; return { x, y, w, h: base - y }; };
     L.obst.push({ x: wd.x, y: wd.by - 15, w: wd.w, h: 36 + clamp(dy0 - 21 - (wd.by + 21), 0, 16) });
     desks.forEach((d) => L.obst.push({ x: d.x0, y: d.dy - 11, w: d.w, h: 27 }));
     L.obst.push({ x: sofa.x, y: sofa.y, w: 58, h: 24 }, { x: table.x, y: table.y, w: 24, h: 12 }, { x: cart.x, y: cart.y - 14, w: 28, h: 32 });
     L.obst.push({ x: shelf.x, y: wallH, w: shelf.w, h: shelf.bottom - wallH });
-    L.plants.forEach((p) => L.obst.push({ x: p.x + 2, y: p.y + 8, w: 10, h: 14 }));
+    L.plants.forEach((p) => L.obst.push(tall(p.x + 2, p.y, 10, p.y + 22)));
     L.sides.forEach((u) => L.obst.push({ x: u.x, y: u.dy + 3, w: 12, h: 13 }));
-    L.extras.forEach((e) => L.obst.push(e.kind === 'meet' ? { x: e.x + 14, y: e.y + 5, w: 52, h: 31 } : e.kind === 'board' ? { x: e.x, y: e.y + 27, w: 30, h: 6 } : e.kind === 'foos' ? { x: e.x, y: e.y + 5, w: 44, h: 22 } : e.kind === 'pong' ? { x: e.x, y: e.y + 4, w: 56, h: 26 } : { x: e.x, y: e.y + 2, w: 40, h: 12 }));
+    L.extras.forEach((e) => L.obst.push(e.kind === 'meet' ? tall(e.x + 14, e.y + 5, 52, e.y + 36) : e.kind === 'board' ? tall(e.x, e.y, 30, e.y + 33) : e.kind === 'foos' ? tall(e.x, e.y, 44, e.y + 27) : e.kind === 'pong' ? tall(e.x, e.y + 1, 56, e.y + 30) : { x: e.x, y: e.y + 2, w: 40, h: 12 }));
     if (L.lamp) L.obst.push({ x: L.lamp.x, y: L.lamp.y + 27, w: 8, h: 4 });
     if (L.cooler) L.obst.push({ x: L.cooler.x, y: wallH, w: 10, h: 8 });
     if (L.cabinet) L.obst.push({ x: L.cabinet.x, y: wallH, w: 22, h: 9 });
     // things that stand in front of a window: the sky is painted last and has to go around them
-    const tall = [{ x: cart.x + 2, y: cart.y - 15, w: 25, h: 16 }];
-    L.plants.forEach((p) => tall.push({ x: p.x, y: p.y, w: 14, h: 14 }));
-    if (L.lamp) tall.push({ x: L.lamp.x - 1, y: L.lamp.y, w: 10, h: 10 });
-    if (L.cooler) tall.push({ x: L.cooler.x, y: L.cooler.y, w: 10, h: 27 });
-    if (L.cabinet) tall.push({ x: L.cabinet.x, y: L.cabinet.y - 3, w: 22, h: 12 });
-    L.windows.forEach((w) => { w.holes = tall.filter((t) => t.x < w.x + w.w - 2 && t.x + t.w > w.x + 2 && t.y < w.y + w.h - 2 && t.y + t.h > w.y + 2); });
+    const inFront = [{ x: cart.x + 2, y: cart.y - 15, w: 25, h: 16 }];
+    L.plants.forEach((p) => inFront.push({ x: p.x, y: p.y, w: 14, h: 14 }));
+    if (L.lamp) inFront.push({ x: L.lamp.x - 1, y: L.lamp.y, w: 10, h: 10 });
+    if (L.cooler) inFront.push({ x: L.cooler.x, y: L.cooler.y, w: 10, h: 27 });
+    if (L.cabinet) inFront.push({ x: L.cabinet.x, y: L.cabinet.y - 3, w: 22, h: 12 });
+    L.windows.forEach((w) => { w.holes = inFront.filter((t) => t.x < w.x + w.w - 2 && t.x + t.w > w.x + 2 && t.y < w.y + w.h - 2 && t.y + t.h > w.y + 2); });
     return L;
   }
 
@@ -605,11 +612,25 @@
       if (around && wayLen(ax, ay, around) <= most) return { way: around, push: false };
       return { way: direct || [{ x: bx, y: by }], push: true };
     }
+    // the open cell nearest to cell c0 (itself when it is open; -1 when there is none near)
+    function freeCell(c0) {
+      const { nc, nr, blk } = nav;
+      if (!blk[c0]) return c0;
+      const r0 = Math.floor(c0 / nc), q0 = c0 - r0 * nc; let best = -1, bd = 1e9;
+      for (let rad = 1; rad < 24 && best < 0; rad++) for (let r = r0 - rad; r <= r0 + rad; r++) for (let c = q0 - rad; c <= q0 + rad; c++) { if (r < 0 || c < 0 || r >= nr || c >= nc || blk[r * nc + c]) continue; const dd = (r - r0) * (r - r0) + (c - q0) * (c - q0); if (dd < bd) { bd = dd; best = r * nc + c; } }
+      return best;
+    }
+    // the point itself when it is on open floor, else the nearest point that is
+    function openAt(x, y) {
+      if (!nav) buildNav();
+      const { cs, nc, nr } = nav, c0 = clamp(Math.floor(y / cs), 0, nr - 1) * nc + clamp(Math.floor(x / cs), 0, nc - 1), c = freeCell(c0);
+      if (c === c0 || c < 0) return { x, y };
+      const r = Math.floor(c / nc); return { x: (c - r * nc) * cs + 1, y: r * cs + 1 };
+    }
     function route(ax, ay, bx, by) {
       const { cs, nc, nr, blk, prev, qu } = nav;
       const cell = (x, y) => clamp(Math.floor(y / cs), 0, nr - 1) * nc + clamp(Math.floor(x / cs), 0, nc - 1);
-      const free = (c0) => { if (!blk[c0]) return c0; const r0 = Math.floor(c0 / nc), q0 = c0 - r0 * nc; let best = -1, bd = 1e9; for (let rad = 1; rad < 24 && best < 0; rad++) for (let r = r0 - rad; r <= r0 + rad; r++) for (let c = q0 - rad; c <= q0 + rad; c++) { if (r < 0 || c < 0 || r >= nr || c >= nc || blk[r * nc + c]) continue; const dd = (r - r0) * (r - r0) + (c - q0) * (c - q0); if (dd < bd) { bd = dd; best = r * nc + c; } } return best; };
-      const sc = free(cell(ax, ay)), gc = free(cell(bx, by));
+      const sc = freeCell(cell(ax, ay)), gc = freeCell(cell(bx, by));
       if (sc < 0 || gc < 0) return null;
       prev.fill(-1); let head = 0, tail = 0; qu[tail++] = gc; prev[gc] = gc;
       while (head < tail && prev[sc] < 0) {
@@ -706,7 +727,7 @@
         const raw = arr[i]; if (!raw || typeof raw !== 'object') continue;
         const id = String(raw.id == null ? 'agent' + i : raw.id); if (seen.has(id)) continue; seen.add(id);
         let a = byId.get(id); const isNew = !a;
-        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', seated: true, path: null, pending: false, delay: 0, go: 0, held: 0, sat: 0, stuck: 0, waited: 0, far: 0, hold: null, why: 0, moved: false, waitFor: null, waitOn: null, sweep: null, push: false, barge: null, replan: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, tagAt: 0, bubAt: 0, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
+        if (isNew) a = { id, x: 0, y: 0, placed: false, alpha: 0, sit: 1, sitKind: 'desk', seated: true, path: null, pending: false, delay: 0, go: 0, held: 0, sat: 0, stuck: 0, waited: 0, far: 0, hold: null, why: 0, moved: false, waitFor: null, waitOn: null, sweep: null, push: false, barge: null, replan: 0, dist: 0, face: 0, dx: 0, state: '', fresh: 0, bubbleText: '', bubbleUntil: -1, popAt: -1e9, tagAt: 0, bubAt: 0, bubWas: 0, sayText: '', spoke: 0, quiet: 0, told: 0, bubLate: 0, seed: Math.floor(hash(seed, next.length * 31 + 7) * 1e6) };
         const state = own(STATES, raw.state) ? raw.state : 'unknown', was = a.state;
         const name = String(raw.name == null ? '' : raw.name);
         a.name = name.length > 14 ? name.slice(0, 13) + '…' : name;
@@ -725,7 +746,7 @@
           const appearing = isNew || was === 'unknown' || was === '';
           if (appearing) { a.placed = false; a.alpha = reduced || quiet ? 1 : 0; }   // the fade-in runs in step(), which reduced motion never calls
           const loud = state === 'due' || state === 'late' || state === 'error';   // on arrival only trouble speaks; later every change does
-          if (bubble && !reduced && !quiet && state !== 'unknown' && (!appearing || loud)) { a.bubbleText = bubble; a.bubbleUntil = simT + 4200 + (appearing ? 600 : 0); } else a.bubbleUntil = -1;
+          if (bubble && !reduced && !quiet && state !== 'unknown' && (!appearing || loud)) { a.bubbleText = bubble; a.bubbleUntil = simT + 4200 + (appearing ? 600 : 0); a.bubLate = 0; } else a.bubbleUntil = -1;
         }
         a.state = state; a.desk = next.length;
         next.push(a);
@@ -772,24 +793,39 @@
       w = clamp(num(w, 0), 0, 4096);
       const d = ratio();
       if (sized && w === cssW && d === dpr && canvas.width === cw && canvas.height === ch) { wake(); return cssH; }   // nothing changed: nobody is moved
-      const W0 = L.W, H0 = L.H, had = sized;
+      const L0 = L, pitch0 = qPitch, s0 = s, had = sized;
       dpr = d; cssW = w; cw = Math.round(w * dpr); sized = true;
       fit(); applySize();
       if (!had || !framed) retarget('first');
-      else if (L.W !== W0 || L.H !== H0) reflow(W0, H0);                  // the same room in other pixels (a zoom, another screen) moves nobody
+      else if (L.W !== L0.W || L.H !== L0.H || s !== s0) reflow(L0, pitch0);   // the same room in other pixels (another screen, a zoom that keeps the size of a pixel) moves nobody
       if (drew) draw();
       wake();
       return cssH;
     }
-    // The room changed size under them: those at rest stand in their new places at once; those on their way keep
-    // walking from where the same spot of the old room now is.
-    function reflow(W0, H0) {
+    // The room changed under them. Those at rest stand in their new places at once. One that has yet to take its first
+    // step stands on the place it is about to leave, where that place is in the new room. One on its way keeps
+    // walking from where the same spot of the old room now is, or from the nearest open floor when something stands
+    // there now.
+    function reflow(L0, pitch0) {
+      // the place of the old room that a stands on, in the new room: a place in the lounge, a place in the queue
+      const placeOf = (a) => {
+        for (let i = 0; i < L0.spots.length; i++) { const sp = L0.spots[i]; if (Math.abs(a.x - sp.x) < 1 && Math.abs(a.y - sp.y) < 1) return L.spots[i % L.spots.length]; }
+        const j = Math.round((a.x - L0.q.x0) / pitch0);
+        if (j >= 0 && Math.abs(a.y - L0.q.y) < 1 && Math.abs(a.x - (L0.q.x0 + j * pitch0)) < 1) return { x: Math.min(slotX(j), Math.max(L.q.x0, L.q.max)), y: L.q.y };
+        return null;
+      };
       spaceQueue();
       crew.forEach((a) => {
         const goal = goalOf(a), d = L.desks[a.desk];
         if (reduced || !present(a) || (!a.path && !a.pending)) { rest(a, goal); return; }
+        const at = inChair(a) || (a.path && a.moved) ? null : placeOf(a);
         if (inChair(a) && d) { a.x = d.sx; a.y = d.sy; }                   // still in its chair, about to leave
-        else { a.x = clamp(a.x * L.W / W0, 9, L.W - 9); a.y = clamp(a.y * L.H / H0, L.wallH + 4, L.H - 5); if (!a.path) a.seated = false; }
+        else if (at) { a.x = at.x; a.y = at.y; }                           // still on its place (and on the sofa, if that is where it sat)
+        else {
+          let x = clamp(a.x * L.W / L0.W, 9, L.W - 9), y = clamp(a.y * L.H / L0.H, L.wallH + 4, L.H - 5);
+          if (L.obst.some((o) => x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h)) { const p = openAt(x, y); x = p.x; y = p.y; }   // in a piece of furniture now: out to the nearest open floor
+          a.x = x; a.y = y; if (!a.path) a.seated = false;
+        }
         a.goal = goal;
         if (a.path) turn(a);
       });
@@ -1288,7 +1324,7 @@
       const mixIn = (n) => { sig = (Math.imul(sig, 16777619) ^ (n | 0)) | 0; };
       still.forEach((tg) => { mixIn(tg.cx); mixIn(tg.top); mixIn(tg.w); mixIn(tg.a.desk); });
       for (let i = 0; i < bodies.length; i++) mixIn(bodies[i]);
-      if (sig !== tagSig || tagPos.size !== still.length) {
+      if (sig !== tagSig || tagPos.size !== still.length || still.some((tg) => !tagPos.has(tg.a.id))) {
         tagSig = sig; tagPos = new Map();
         const put = [];
         still.forEach((tg) => {
@@ -1320,41 +1356,90 @@
       wordAt(Math.round(v.slip.x * k), Y, Math.round(v.slip.w * k), Math.round(7 * k));
     }
 
-    // bubbles: the step while working, a few words on a change. Over everything, close to their owner.
+    // Bubbles: the step while working, a few words on a change. Over everything, and always right at their owner with
+    // a tail to it, because a bubble anywhere else reads as somebody else's. Where one would lie on another, on a
+    // name, a slip, a head or the question mark over an empty chair, they take turns, a few seconds each: whoever is
+    // speaking keeps the floor for that long, then the one that has waited longest goes first and takes the best place
+    // there is, and the others speak only if a free place is left. Nobody's bubble covers the sign over another one
+    // that has failed. (Under reduced motion nothing takes turns: the lowest desk speaks, and whoever is pointed at
+    // or has the focus.)
+    let bubT = 0;
     function drawBubbles(list) {
-      const u = dpr, cut = Math.max(1, Math.round(k)), heads = [];
-      list.forEach((v) => heads.push(Math.round((v.x + v.hx - 6) * k), Math.round((v.y - 19 + v.hy) * k), Math.round(12 * k), Math.round(9 * k)));
-      g.font = fontTag;
+      const u = dpr, cut = Math.max(1, Math.round(k)), keep = [], signs = [], says = [], put = [];
+      const h = Math.round(16 * u), tail = Math.round(3 * k), up = h + 3 * u, since = clamp(simT - bubT, 0, 250);
+      bubT = simT;
+      // What the last picture showed counts for the time since then: who spoke has spoken that much longer, who had
+      // to wait has waited that much longer. A change that waits for its first turn is not lost meanwhile, within
+      // reason; one that has had its say and lost the floor is over. Nothing is counted while time stands still, so
+      // the same moment drawn twice is the same picture.
+      if (since > 0) crew.forEach((a) => {
+        if (a.bubWas === 1) { a.spoke += since; a.told += since; a.quiet = 0; }
+        else if (a.bubWas === 2 || a.bubWas === 3) {
+          a.spoke = 0; a.quiet += since;
+          if (a.bubWas === 3) { if (a.told >= 2800) a.bubbleUntil = -1; else if (a.bubLate < 5600) { a.bubLate += since; a.bubbleUntil += since; } }
+        }
+      });
+      crew.forEach((a) => { a.bubWas = 0; });
+      // not to be covered: everybody's head, the question marks, the plate with your name; and never, by anybody
+      // else's bubble, the sign over one that has failed (signs: x, y, w, h, whose)
+      list.forEach((v) => keep.push(Math.round((v.x + v.hx - 6) * k), Math.round((v.y - 19 + v.hy) * k), Math.round(12 * k), Math.round(9 * k)));
+      list.forEach((v) => { if (v.fx === 'err') signs.push(Math.round((v.x - 4) * k), Math.round((v.y - 35) * k), Math.round(9 * k), Math.round(11 * k), v.a.desk); });
+      crew.forEach((a) => { const d = L.desks[a.desk]; if (!present(a) && d) keep.push(Math.round((d.sx - 4) * k), Math.round((d.dy - 24) * k), Math.round(8 * k), Math.round(11 * k)); });
+      { const wd = L.wd, w = Math.round(textW('You', false) + 10 * u); keep.push(Math.round((wd.x + wd.w / 2) * k - w / 2), Math.round((wd.by + 13) * k), w, Math.round(14 * u)); }
       list.forEach((v) => {
-        const a = v.a; let text = '';
+        const a = v.a; let text = '', change = false;
         if (a.state === 'working' && a.step && a.sitKind === 'desk' && a.sit >= 1) text = a.step;
-        else if (a.bubbleUntil > simT && a.bubbleText) text = a.bubbleText;
-        if (!text) return;
-        const w = Math.round(textW(text, false) + 12 * u), h = Math.round(16 * u), tail = Math.round(3 * k);
-        // Right above the head (beside an antenna, so the bubble stays close and the antenna in sight); where that is
-        // taken, a little to one side or one row up: the place that covers least of the other words and of everybody's
-        // head. Never further from its owner than that.
-        const headTop = (v.y - 20 + v.hy) * k, hx = v.x * k, up = h + 3 * u, side = w * 0.4, b1 = headTop - h - tail;
+        else if (a.bubbleUntil > simT && a.bubbleText) { text = a.bubbleText; change = true; }
+        if (text !== a.sayText) { a.sayText = text; a.spoke = 0; a.quiet = 0; a.told = 0; a.bubAt = 0; }
+        if (text) says.push({ v, text, change });
+      });
+      // in turn: the one pointed at or with the focus; those who have the floor; those who wait, the longest wait first;
+      // those who have had their say
+      const turnOf = (a) => (a.id === focusId || a.id === hoverId ? 0 : a.spoke > 0 && a.spoke < 2800 ? 1 : a.spoke > 0 ? 3 : 2);
+      says.sort((p, q2) => (turnOf(p.v.a) - turnOf(q2.v.a)) || (q2.v.a.quiet - p.v.a.quiet) || (p.v.a.desk - q2.v.a.desk));
+      g.font = fontTag;
+      says.forEach((say) => {
+        const v = say.v, a = v.a, lead = !put.length;                      // lead: the first to be placed this time
+        const headTop = (v.y - 20 + v.hy) * k, hx = v.x * k, b1 = headTop - h - tail;
         const b0 = (v.y - (a.look === 'antenna' ? 28 : a.look === 'bulb' || a.look === 'gavel' ? 22 : 20) + v.hy) * k - h - tail;
-        const cand = a.look === 'antenna' ? [[hx - 2 * k - w, b1], [hx + 3 * k, b1], [hx - w / 2, b0]] : a.look === 'gavel' ? [[hx - w / 2, b0], [hx + 5 * k - w, b1]] : [[hx - w / 2, b0]];
-        cand.push([hx - w / 2 - side, b0], [hx - w / 2 + side, b0], [hx - w / 2, b0 - up], [hx - w / 2 - side, b0 - up], [hx - w / 2 + side, b0 - up]);
-        const cover = (i) => {
-          const x2 = Math.round(clamp(cand[i][0], 2 * u, cw - w - 2 * u)), y2 = Math.round(clamp(cand[i][1], 2 * u, ch - h - 2 * u)); let c2 = 0;
-          for (let j = 0; j < words.length; j += 4) c2 += lap(x2, y2, w, h, words, j, 2 * u, u) + 8 * lap(x2, y2, w, h, words, j, 0, 0);   // too close is poor, on top is worse
-          for (let j = 0; j < heads.length; j += 4) c2 += lap(x2, y2, w, h, heads, j, u, u) + 8 * lap(x2, y2, w, h, heads, j, 0, 0);
-          return c2;
+        // Where these words can stand: right above the head (beside an antenna, so the bubble stays close and the
+        // antenna in sight), or a little to one side of that; of those the place that covers least of the other words
+        // and of what is not to be covered. null: nowhere this time.
+        const place = (text) => {
+          const w = Math.round(textW(text, false) + 12 * u), side = w * 0.4;
+          const cand = a.look === 'antenna' ? [[hx - 2 * k - w, b1], [hx + 3 * k, b1], [hx - w / 2, b0]] : a.look === 'gavel' ? [[hx - w / 2, b0], [hx + 5 * k - w, b1]] : [[hx - w / 2, b0]];
+          cand.push([hx - w / 2 - side, b0], [hx - w / 2 + side, b0]);
+          const at = cand.map((c) => [Math.round(clamp(c[0], 2 * u, cw - w - 2 * u)), Math.round(clamp(c[1], 2 * u, ch - h - 2 * u))]);
+          const tailX = (X) => Math.round(clamp(hx, X + 3 * cut, X + w - 4 * cut));
+          const near = (X, Y) => Y + h <= headTop && headTop - (Y + h) < up && Math.abs(tailX(X) - hx) <= 7 * k;   // over its owner's head, less than a row above it: where the tail reaches
+          const cover = (X, Y) => {
+            let c2 = 0;
+            for (let j = 0; j < words.length; j += 4) c2 += lap(X, Y, w, h, words, j, 2 * u, u) + 8 * lap(X, Y, w, h, words, j, 0, 0);   // too close is poor, on top is worse
+            for (let j = 0; j < keep.length; j += 4) c2 += lap(X, Y, w, h, keep, j, u, u) + 8 * lap(X, Y, w, h, keep, j, 0, 0);
+            return c2;
+          };
+          const onTop = (X, Y) => { let c2 = 0; for (let j = 0; j < put.length; j += 4) c2 += lap(X, Y, w, h, put, j, u, u); for (let j = 0; j < keep.length; j += 4) c2 += lap(X, Y, w, h, keep, j, 0, 0); for (let j = 0; j < words.length; j += 4) c2 += lap(X, Y, w, h, words, j, 0, 0); return c2; };
+          const onSign = (X, Y) => { for (let j = 0; j < signs.length; j += 5) if (signs[j + 4] !== a.desk && lap(X, Y, w, h, signs, j, 0, 0) > 0) return true; return false; };
+          // the lead speaks whatever stands there, short of another one's sign; the others only from a place at their
+          // owner that is free
+          const free = (i) => !onSign(at[i][0], at[i][1]) && (lead || (near(at[i][0], at[i][1]) && onTop(at[i][0], at[i][1]) === 0));
+          const price = (i) => cover(at[i][0], at[i][1]) + i + (near(at[i][0], at[i][1]) ? 0 : 1e9);
+          let best = -1, bestC = Infinity;
+          for (let i = 0; i < cand.length; i++) { if (!free(i)) continue; const c2 = price(i); if (c2 < bestC) { best = i; bestC = c2; } }
+          if (best < 0) return null;
+          if (best !== a.bubAt && a.bubAt < cand.length && free(a.bubAt) && (says.length > 1 || bestC > 0) && price(a.bubAt) <= bestC + 0.03 * w * h) best = a.bubAt;   // it does not hop about for a little
+          return { text, w, i: best, X: at[best][0], Y: at[best][1], tx: tailX(at[best][0]), tail: near(at[best][0], at[best][1]) };
         };
-        let at = 0, bestC = cover(0);
-        for (let i = 1; i < cand.length && bestC > 0; i++) { const c2 = cover(i) + i; if (c2 < bestC) { at = i; bestC = c2; } }
-        if (at !== a.bubAt && bestC > 0 && a.bubAt < cand.length && cover(a.bubAt) <= bestC + 0.03 * w * h) at = a.bubAt;   // it does not hop about for a little
-        a.bubAt = at;
-        const X = Math.round(clamp(cand[at][0], 2 * u, cw - w - 2 * u)), Y = Math.round(clamp(cand[at][1], 2 * u, ch - h - 2 * u));
+        let p = place(say.text);
+        // The lead has nowhere to stand only when a sign is in the way: then it says as much as fits beside the sign.
+        if (!p && lead) for (let n = say.text.length - 1; n >= 6 && !p; n--) p = place(say.text.slice(0, n).trimEnd() + '…');
+        if (!p) { a.bubWas = say.change ? 3 : 2; return; }                 // no room this time: it waits for its turn
+        a.bubAt = p.i; a.bubWas = 1;
+        const w = p.w, X = p.X, Y = p.Y, tx = p.tx;
         plate(g, X, Y, w, h, cut, INK); plate(g, X + cut, Y + cut, w - 2 * cut, h - 2 * cut, cut, '#fffdf2');
-        // the tail points at its owner, so it is drawn only when the bubble is less than a row above that head and over it
-        const tx = Math.round(clamp(hx, X + 3 * cut, X + w - 4 * cut));
-        if (Y + h <= headTop && headTop - (Y + h) < up && Math.abs(tx - hx) <= 6.5 * k) { g.fillStyle = INK; g.fillRect(tx - cut, Y + h - cut, 3 * cut, 2 * cut); g.fillRect(tx, Y + h + cut, cut, cut); g.fillStyle = '#fffdf2'; g.fillRect(tx, Y + h - cut, cut, 2 * cut); markD(tx - cut - 1, Y + h - cut, 3 * cut + 2, 3 * cut + 1); }
-        g.fillStyle = INK; g.fillText(text, X + Math.round(6 * u), Y + Math.round(11.5 * u));
-        wordAt(X, Y, w, h);
+        if (p.tail) { g.fillStyle = INK; g.fillRect(tx - cut, Y + h - cut, 3 * cut, 2 * cut); g.fillRect(tx, Y + h + cut, cut, cut); g.fillStyle = '#fffdf2'; g.fillRect(tx, Y + h - cut, cut, 2 * cut); markD(tx - cut - 1, Y + h - cut, 3 * cut + 2, 3 * cut + 1); }
+        g.fillStyle = INK; g.fillText(p.text, X + Math.round(6 * u), Y + Math.round(11.5 * u));
+        wordAt(X, Y, w, h); put.push(X, Y, w, h);
       });
       inkOf = null;
     }
@@ -1537,7 +1622,8 @@
     const onMove = (e) => { const p = spot(e), id = hit(p.x, p.y), touch = e.pointerType === 'touch'; ptr = touch && !id ? null : { x: p.x, y: p.y, touch }; setHover(id); };
     // a finger that lifts fires pointerleave at once: what it touched stays pointed at until it walks off or another place is touched
     const onLeave = (e) => { if (e && e.type === 'pointerleave' && e.pointerType === 'touch') return; ptr = null; setHover(null); };
-    const onClick = (e) => { const p = spot(e), id = hit(p.x, p.y); if (id) onPick(id); };
+    // (a tap that took the reader somewhere is over: onPick says so by returning true, and nothing stays pointed at)
+    const onClick = (e) => { const p = spot(e), id = hit(p.x, p.y); if (!id) return; const went = onPick(id); if (went === true && ptr && ptr.touch) { ptr = null; setHover(null); } };
     // The robots move under a pointer that does not: once everybody has stepped, look again who is under it. A touch does
     // not pick up whoever walks by afterwards.
     function repoint() {
