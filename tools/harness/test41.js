@@ -644,6 +644,22 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
     ok(!r.canvas.ctx.textAt.some((e) => Object.values(said).includes(e[0])), `four change at once @${w}: and the words are gone again afterwards`, r.canvas.ctx.textAt.map((e) => e[0]));
     r.scene.destroy();
   }
+  // all five change at once on a phone: they walk, so each speaks when the floor is its own, one after the other, and
+  // the last of them is not lost for having waited four turns
+  {
+    const said5 = Object.assign({}, said, { review: 'Review has 1 for you' });
+    const all5 = FX.clear.crew.map((a) => Object.assign({}, a, { state: 'needs', waiting: 3, bubble: said5[a.id] }));
+    for (const w of [366, 400]) {
+      const seen = {}; let onTop = 0;
+      const r = play(w, [[-1, FX.clear.crew], [14000, all5]], 36000, (t, s, c) => {
+        const bubs = c.ctx.textAt.filter((e) => Object.values(said5).includes(e[0])).map(boxOf);
+        bubs.forEach((b, i) => { seen[b.text] = (seen[b.text] || 0) + 1; for (let j = 0; j < i; j++) if (laps(b, bubs[j])) onTop++; });
+      }, { wideText: true });
+      ok(Object.values(said5).every((text) => (seen[text] || 0) >= 30) && onTop === 0, `five change at once @${w}: each one's words are shown for two seconds or more, none on top of another`, [seen, onTop]);
+      ok(!r.canvas.ctx.textAt.some((e) => Object.values(said5).includes(e[0])), `five change at once @${w}: and the words are gone again afterwards`, r.canvas.ctx.textAt.map((e) => e[0]));
+      r.scene.destroy();
+    }
+  }
   // the sign over one that has failed is never covered by somebody else's bubble; and a change that has had its say
   // and lost the floor does not come back
   {

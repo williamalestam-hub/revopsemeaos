@@ -1406,7 +1406,7 @@
         if (a.bubWas === 1) { a.told += since; a.quiet = 0; }
         else if (a.bubWas === 2 || a.bubWas === 3) {
           a.quiet += since;
-          if (a.bubWas === 3) { if (a.told >= 2800) a.bubbleUntil = -1; else if (a.bubLate < 5600) { a.bubLate += since; a.bubbleUntil += since; } }
+          if (a.bubWas === 3) { if (a.told >= 2800) a.bubbleUntil = -1; else if (a.bubLate < 11200) { a.bubLate += since; a.bubbleUntil += since; } }   // (four turns: the last of five that change at once still gets its say)
         }
       });
       crew.forEach((a) => { a.bubWas = 0; });
