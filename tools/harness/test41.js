@@ -608,6 +608,14 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       r.scene.destroy();
       ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9)), `one walks past those at work @${w} (${before} > ${after}): a step that goes out stays out for 0.6 s or more`, say(runs));
     }
+    // One more sits down to work beside those at work: a neighbour's step does not come on for a frame or two in the
+    // moment the newcomer takes its seat (its head and its name are still on their way to their places then).
+    for (const [w, before, after] of [[366, 'wwnww', 'wwwww'], [366, 'wwnwi', 'wwwwi'], [366, 'iwwwn', 'wwwwn'], [400, 'wwnww', 'wwwww'], [400, 'wwnwi', 'wwwwi']]) {
+      const keep = STEPS5.filter((x, i) => before[i] === 'w' && after[i] === 'w'), runs = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 32000, (t, s, c) => { if (t >= 20000) track(runs, keep, c); }, { wideText: true, letter: 10.5 });
+      r.scene.destroy();
+      ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => x[0] && x[1] <= 2)), `one more sits down to work @${w} (${before} > ${after}): no neighbour's step is on show for a frame or two only`, say(runs));
+    }
     // A page that opens on a phone with some at work while the others set off: no step comes on for a moment only to
     // be walked out of its place by a neighbour that gets up. What comes on stays on for half a second or more.
     // (Letters 5.25 css px wide, as in a browser.)

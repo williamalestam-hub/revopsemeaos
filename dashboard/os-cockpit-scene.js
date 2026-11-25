@@ -1417,10 +1417,11 @@
       list.forEach((v) => { if (v.fx === 'err') signs.push(Math.round((v.x - 4) * k), Math.round((v.y - 35) * k), Math.round(9 * k), Math.round(11 * k), v.a.desk); });
       crew.forEach((a) => { const d = L.desks[a.desk]; if (!present(a) && d) signs.push(Math.round((d.sx - 4) * k), Math.round((d.dy - 24) * k), Math.round(8 * k), Math.round(11 * k), a.desk); });
       { const wd = L.wd, w = Math.round(textW('You', false) + 10 * u); keep.push(Math.round((wd.x + wd.w / 2) * k - w / 2), Math.round((wd.by + 13) * k), w, Math.round(14 * u)); }
-      // around those on their way or about to set off, as far as they get in half a second: nobody starts to speak
-      // there (it would be walked out of its place the next moment)
+      // around those on their way, about to set off, or just taking or leaving a seat (head and name are on their
+      // way to their places for a few frames then), as far as they get in half a second: nobody starts to speak there
+      // (it would be walked out of its place the next moment)
       const soon = [];
-      list.forEach((v) => { if (!(v.a.pending || v.a.path)) return; const m = pace() * 0.5; soon.push(Math.round((v.x - 7 - m) * k), Math.round((v.y - 28 - m) * k), Math.round((14 + 2 * m) * k), Math.round((38 + 2 * m) * k)); });
+      list.forEach((v) => { if (!(v.a.pending || v.a.path || (v.a.sitKind && v.a.sit < 1))) return; const m = pace() * 0.5; soon.push(Math.round((v.x - 7 - m) * k), Math.round((v.y - 28 - m) * k), Math.round((14 + 2 * m) * k), Math.round((38 + 2 * m) * k)); });
       list.forEach((v) => {
         const a = v.a; let text = '', change = false;
         if (a.state === 'working' && a.step && a.sitKind === 'desk' && a.sit >= 1) text = a.step;
