@@ -810,20 +810,26 @@
     // there now.
     function reflow(L0) {
       // The queue's row of the old room, from the front. Those at rest in it stand on their slots of the new room.
-      // Those who have yet to take their first step out of it, or up in it, stand between them in the order they
-      // stood, as close together as it takes to fit. (Where they stood is not to be read from the row's spacing: that
-      // may be the spacing of a queue that has just got shorter or longer.)
+      // Those who have yet to take their first step out of it, or up in it, keep the place they stand on: as far
+      // behind the one at rest before them (or the front of the row) as they stood, in the new room's spacing. So a
+      // place that somebody has just stepped out of stays open for the one who is walking to it, and nobody is put in
+      // front of one that came before it. Only where the row is too short for that do they stand closer together; and
+      // where there is no room left at all behind those at rest, they stand between them, half a place from each,
+      // rather than on one spot. (One that finds no gap there is put down like one on its way.)
       const inRow = (o) => Math.abs(o.y - L0.q.y) < 1 && o.x >= L0.q.x0 - 1, going = (o) => o.pending || !!o.path;
       const row = crew.filter((o) => present(o) && inRow(o) && !(o.path && o.moved)).sort((p, q2) => (p.x - q2.x) || (p.desk - q2.desk));
-      spaceQueue();
-      const rowX = new Map();
+      const p0 = qPitch; spaceQueue();
+      const rowX = new Map(), scale = qPitch / p0;
       for (let i = 0; i < row.length;) {
         if (!going(row[i])) { i++; continue; }
         let j = i; while (j < row.length && going(row[j])) j++;
         const m = j - i, left = i > 0 ? goalOf(row[i - 1]).x : null, right = j < row.length ? goalOf(row[j]).x : null;
         const from = left === null ? L.q.x0 : left, to = right === null ? Math.max(from, L.q.max) : right;
-        const step = Math.min(qPitch, Math.max(0, to - from) / Math.max(1, m - 1 + (left === null ? 0 : 1) + (right === null ? 0 : 1)));
-        for (let n = 0; n < m; n++) rowX.set(row[i + n], from + (n + (left === null ? 0 : 1)) * step);
+        const x0 = left === null ? L0.q.x0 : row[i - 1].x, far = (row[j - 1].x - x0) * scale;
+        const room = Math.max(0, to - from - (right === null ? 0 : Math.min(qPitch, (to - from) / (m + 1))));   // (short of the one at rest behind them, if there is one)
+        const fit = far > room ? room / far : 1;
+        if (qPitch * fit >= 6) for (let n = 0; n < m; n++) rowX.set(row[i + n], from + (row[i + n].x - x0) * scale * fit);
+        else for (let n = 0; n < m; n++) { const x = from - (m - n - 0.5) * qPitch; if (x > L.q.x0) rowX.set(row[i + n], x); }
         i = j;
       }
       // the place of the old room that a stands on, in the new room: a place in the lounge, a place in the queue's row
@@ -1376,16 +1382,21 @@
     // a tail to it, because a bubble anywhere else reads as somebody else's. Where one would lie on another, on a
     // name, a slip or a head, they take turns. One of them has the floor: it stands in the best place there is,
     // whatever is under it, and moves aside where that lets more of the others speak; the others speak only from a
-    // free place at their owner. The floor is kept for 2.8 s and for as long as nobody waits; then it goes to the one
-    // that has waited longest, or to the words of a change that have not had it yet. Whoever is pointed at, or has
-    // the focus, speaks first meanwhile. Nobody's bubble covers what says how another one is (the sign over one that
-    // has failed, the question mark over an empty chair): beside it, the one with the floor says as much as fits.
-    // (Under reduced motion time stands still and nothing takes turns: the lowest desk has the floor.)
+    // free place at their owner, and do not start to speak where somebody is about to walk. The floor is kept for
+    // 2.8 s and for as long as nobody waits; then it goes to the one that has waited longest, or to the words of a
+    // change that have not had it yet. One that has just gone out stays out for a moment, with the floor as without,
+    // so nothing comes and goes within the blink of an eye. Whoever is pointed at, or has the focus, speaks first
+    // meanwhile, and the others go on taking turns in the room that is left. Nobody's bubble covers what says how
+    // another one is (the sign over one that has failed, the question mark over an empty chair): beside it, the one
+    // with the floor says as much as fits.
+    // (Under reduced motion time stands still and nothing takes turns: the lowest desk has the floor, whoever spoke
+    // first, and nothing is kept from an earlier picture.)
     let bubT = 0, floorId = null, floorSince = 0;
     function drawBubbles(list) {
       const u = dpr, cut = Math.max(1, Math.round(k)), keep = [], signs = [], says = [];
       const h = Math.round(16 * u), tail = Math.round(3 * k), up = h + 3 * u, since = clamp(simT - bubT, 0, 250);
       bubT = simT;
+      if (reduced) { floorId = null; crew.forEach((a) => { a.bubAt = -1; }); }   // time stands still: nothing is kept from an earlier picture, so the same crew is the same picture
       // What the last picture showed counts for the time since then: who spoke has been on show that much longer, who
       // had to wait has waited that much longer. A change that waits for its first turn is not lost meanwhile, within
       // reason; one that has had its say and lost its place is over. Nothing is counted while time stands still, so
@@ -1406,6 +1417,10 @@
       list.forEach((v) => { if (v.fx === 'err') signs.push(Math.round((v.x - 4) * k), Math.round((v.y - 35) * k), Math.round(9 * k), Math.round(11 * k), v.a.desk); });
       crew.forEach((a) => { const d = L.desks[a.desk]; if (!present(a) && d) signs.push(Math.round((d.sx - 4) * k), Math.round((d.dy - 24) * k), Math.round(8 * k), Math.round(11 * k), a.desk); });
       { const wd = L.wd, w = Math.round(textW('You', false) + 10 * u); keep.push(Math.round((wd.x + wd.w / 2) * k - w / 2), Math.round((wd.by + 13) * k), w, Math.round(14 * u)); }
+      // around those on their way or about to set off, as far as they get in half a second: nobody starts to speak
+      // there (it would be walked out of its place the next moment)
+      const soon = [];
+      list.forEach((v) => { if (!(v.a.pending || v.a.path)) return; const m = pace() * 0.5; soon.push(Math.round((v.x - 7 - m) * k), Math.round((v.y - 28 - m) * k), Math.round((14 + 2 * m) * k), Math.round((38 + 2 * m) * k)); });
       list.forEach((v) => {
         const a = v.a; let text = '', change = false;
         if (a.state === 'working' && a.step && a.sitKind === 'desk' && a.sit >= 1) text = a.step;
@@ -1418,7 +1433,7 @@
       // The places these words can stand in: right above the figure (beside an antenna first, so the antenna stays in
       // sight), or a little to one side of that. Each with what it costs: how much it covers of the names and slips
       // and of what is not to be covered. near: over its owner's head and less than a row above the figure, where the
-      // tail reaches. clean: near, and on nothing at all.
+      // tail reaches. clean: near, and on nothing at all. astir: where somebody is about to walk.
       const placesOf = (say, text) => {
         const v = say.v, a = say.a, w = Math.round(textW(text, false) + 12 * u), side = w * 0.4, hx = v.x * k;
         const top = a.look === 'antenna' ? 28 : a.look === 'bulb' || a.look === 'gavel' ? 22 : 20;
@@ -1432,7 +1447,8 @@
           for (let j = 0; j < words.length; j += 4) { const l = lap(X, Y, w, h, words, j, 0, 0); on += l; cost += lap(X, Y, w, h, words, j, 2 * u, u) + 8 * l; }   // too close is poor, on top is worse
           for (let j = 0; j < keep.length; j += 4) { const l = lap(X, Y, w, h, keep, j, 0, 0); on += l; cost += lap(X, Y, w, h, keep, j, u, u) + 8 * l; }
           for (let j = 0; j < signs.length; j += 5) if (signs[j + 4] !== a.desk && lap(X, Y, w, h, signs, j, 0, 0) > 0) sign = true;
-          return { i, text, X, Y, w, tx, near, sign, clean: near && !sign && on === 0, price: cost + i + (near ? 0 : 1e9) };
+          let astir = false; for (let j = 0; j < soon.length && !astir; j += 4) if (lap(X, Y, w, h, soon, j, 0, 0) > 0) astir = true;
+          return { i, text, X, Y, w, tx, near, sign, astir, clean: near && !sign && on === 0, price: cost + i + (near ? 0 : 1e9) };
         });
       };
       says.forEach((say) => { say.opts = placesOf(say, say.text); });
@@ -1443,14 +1459,15 @@
         return prev && prev !== best && ok(prev) && prev.price <= best.price + 0.03 * best.w * h ? prev : best;
       };
       // Who of the others gets a place when the one with the floor stands at `first`: those on show keep their
-      // places before those who wait, the longest wait first. One that has just gone out stays out for a moment, so
-      // that nothing comes and goes within the blink of an eye.
+      // places before those who wait, the longest wait first (pick, if any, chooses before them all). One that has
+      // just gone out stays out for a moment, so that nothing comes and goes within the blink of an eye; and one
+      // that is not on show does not start where somebody is about to walk.
       const byDesk = (p, q2) => p.a.desk - q2.a.desk, byWait = (p, q2) => (q2.a.quiet - p.a.quiet) || byDesk(p, q2);
-      const others = (lead, first) => {
+      const others = (lead, first, pick) => {
         const placed = [first], out = [];
-        says.filter((s2) => s2 !== lead).sort((p, q2) => (p.a.shown === q2.a.shown ? (p.a.shown ? byDesk(p, q2) : byWait(p, q2)) : p.a.shown ? -1 : 1)).forEach((s2) => {
+        says.filter((s2) => s2 !== lead).sort((p, q2) => (p === pick ? -1 : q2 === pick ? 1 : p.a.shown === q2.a.shown ? (p.a.shown ? byDesk(p, q2) : byWait(p, q2)) : p.a.shown ? -1 : 1)).forEach((s2) => {
           if (!s2.a.shown && s2.a.quiet > 0 && s2.a.quiet < 600) return;
-          const ok = (c) => c.clean && !placed.some((p) => hits(c, p));
+          const ok = (c) => c.clean && (s2.a.shown || !c.astir) && !placed.some((p) => hits(c, p));
           let best = null;
           s2.opts.forEach((c) => { if (ok(c) && (!best || c.price < best.price)) best = c; });
           if (!best) return;
@@ -1461,11 +1478,11 @@
       // Where the one with the floor stands: anywhere short of another one's sign or question mark, there where most
       // of the others can speak too, and of those places the cheapest. With one of those in the way it says as much
       // as fits beside it.
-      const leadAt = (lead) => {
+      const leadAt = (lead, pick) => {
         let opts = lead.opts.filter((c) => !c.sign);
         for (let n = lead.text.length - 1; n >= 6 && !opts.length; n--) opts = placesOf(lead, lead.text.slice(0, n).trimEnd() + '…').filter((c) => !c.sign);
         if (!opts.length) return null;
-        let best = null, most = -1; const scored = opts.map((c) => ({ c, rest: others(lead, c) }));
+        let best = null, most = -1; const scored = opts.map((c) => ({ c, rest: others(lead, c, pick) }));
         scored.forEach((x) => { if (x.rest.length > most || (x.rest.length === most && x.c.price < best.c.price)) { best = x; most = x.rest.length; } });
         const keepC = stays({ opts: scored.filter((x) => x.rest.length === most).map((x) => x.c), a: lead.a }, best.c, () => true);
         return scored.find((x) => x.c === keepC);
@@ -1481,9 +1498,20 @@
       queueUp(hot); if (!due) queueUp(holder);
       waiting.forEach(queueUp); news.forEach(queueUp); queueUp(holder); says.slice().sort(byDesk).forEach(queueUp);
       let lead = null, plan = null;
-      for (let i = 0; i < line.length && !plan; i++) { plan = leadAt(line[i]); if (plan) lead = line[i]; }
-      if (lead && lead !== hot && lead !== holder) { floorId = lead.a.id; floorSince = simT; }   // (while somebody is pointed at, the floor stays with whoever has it)
+      // One that went out a moment ago is not handed the floor yet either: it stays out for as long as it would
+      // without the floor. (Not the one pointed at, which speaks at once; nor the one that has the floor and was
+      // only put out by a pointer that has moved on.)
+      const justOut = (s2) => s2 !== hot && s2 !== holder && !s2.a.shown && s2.a.told > 0 && s2.a.quiet > 0 && s2.a.quiet < 600;
+      for (let i = 0; i < line.length && !plan; i++) { if (justOut(line[i])) continue; plan = leadAt(line[i]); if (plan) lead = line[i]; }
+      // While somebody is pointed at, that one speaks first, and the floor is the first choice of place among the
+      // others: it is kept and passed on as ever, to the first in the line that finds a place beside the one
+      // pointed at. (Not under reduced motion, where nothing takes turns.)
+      let second = null;
+      if (!reduced && lead && lead === hot) for (let i = 1; i < line.length && !second; i++) { const p2 = leadAt(hot, line[i]); if (p2 && p2.rest.some((r) => r.say === line[i])) { second = line[i]; plan = p2; } }
+      const floor = lead === hot ? second : lead;
+      if (floor && floor !== holder) { floorId = floor.a.id; floorSince = simT; }
       if (lead) lead.a.led = true;
+      if (second) second.a.led = true;
       const drawn = plan ? [{ say: lead, c: plan.c }].concat(plan.rest) : [];
       says.forEach((say) => { if (!drawn.some((d) => d.say === say)) say.a.bubWas = say.change ? 3 : 2; });   // no room this time: it waits for its turn
       drawn.forEach((d) => {
