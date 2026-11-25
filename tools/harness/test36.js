@@ -93,6 +93,11 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   room.canSendToClaudeSession = async () => 'off'; await OS.ask.refresh(); await tick();
   ul = draw('hub-top', 'ul'); rows = find(ul, (n) => n.tagName === 'LI');
   ok(!label(rows[0], 'Send on Slack via Claude') && /Open the Claude chat beside this page/.test(rows[0].textContent), 'without Claude beside the page: no send button, a note instead');
+  // The opened item is a fourth child of the item's grid. It has to span all its columns: left in the first one it
+  // made that column as wide as its text and the title beside it one letter wide (seen on the page on 25 Nov).
+  { const css = require('fs').readFileSync(require('path').join(__dirname, '../../dashboard/os.css'), 'utf8');
+    const rule = (sel) => { const m = css.match(new RegExp('(^|\\n)\\s*' + sel.replace(/[.-]/g, '\\$&') + '\\s*\\{([^}]*)\\}')); return m ? m[2] : ''; };
+    ok(/display:\s*grid/.test(rule('.itm')) && /grid-column:\s*1\s*\/\s*-1/.test(rule('.hub-x')) && /min-width:\s*0/.test(rule('.hub-x')), 'an opened item lies under its title across the whole row: it spans every column of the item\'s grid', [rule('.itm').slice(0, 90), rule('.hub-x').slice(0, 90)]); }
   console.log(`\n${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.log('FAIL crashed', e && e.stack); process.exit(1); });

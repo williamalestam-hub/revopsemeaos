@@ -472,10 +472,11 @@
   .itm-dot.sev-low { color: var(--cds-chart-muted); }
   .hub-head { all: unset; cursor: pointer; display: block; }
   .hub-head:focus-visible { outline: 2px solid var(--color-fg-muted); outline-offset: 2px; border-radius: 4px; }
-  .hub-itm { flex-wrap: wrap; }
   .hub-itm.hub-acted .itm-title { text-decoration: line-through; color: var(--color-fg-muted); }
-  .hub-x { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; padding: 6px 0 4px 22px; }
-  .hub-x p { margin: 0; }
+  /* an opened item: its own row under the title, across all the columns of .itm (left in the first column it made
+     that column as wide as its text, and the title beside it one letter wide) */
+  .hub-x { grid-column: 1 / -1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 6px 0 4px 22px; }
+  .hub-x p { margin: 0; overflow-wrap: anywhere; }
   .hub-why { color: var(--color-fg); }
   .hub-sum, .hub-to, .hub-note { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
   .hub-body { box-sizing: border-box; width: 100%; font: inherit; font-size: 0.95em; line-height: 1.45; padding: 8px 10px; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-bg); color: var(--color-fg); resize: vertical; }
