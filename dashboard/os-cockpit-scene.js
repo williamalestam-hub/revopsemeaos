@@ -850,6 +850,14 @@
         a.goal = goal;
         if (a.path) turn(a);
       });
+      // One on its way that this puts within 6 px of another one goes to the nearest open floor that is clear of everybody.
+      const clearOf = (a, x, y) => !crew.some((o) => { if (o === a || !present(o)) return false; const f = feet(o); return Math.hypot(f.x - x, f.y - y) < 6.5; });
+      crew.forEach((a) => {
+        if (reduced || !present(a) || !(a.path && a.moved) || clearOf(a, a.x, a.y)) return;
+        let best = null, bd = 1e9;
+        for (let dy = -14; dy <= 14; dy += 2) for (let dx = -14; dx <= 14; dx += 2) { const p = openAt(a.x + dx, a.y + dy), d = Math.hypot(p.x - a.x, p.y - a.y); if (d < bd && clearOf(a, p.x, p.y)) { bd = d; best = p; } }
+        if (best) { a.x = best.x; a.y = best.y; turn(a); }
+      });
       crew.forEach((a) => { if (present(a) && a.pending && !a.path) a.plan = findPath(a.x, a.y, a.goal.x, a.goal.y, a).way; });   // (the way kept for one that has yet to set off is a way of this room)
     }
 
@@ -1392,8 +1400,9 @@
     // with the floor says as much as fits.
     // (Under reduced motion time stands still and nothing takes turns: the lowest desk has the floor, whoever spoke
     // first, and nothing is kept from an earlier picture.)
-    // One that goes to work says its step on the way, and says it again once it sits: within a moment of its seat
-    // the words stay on, so there is no hole between the two.
+    // One that goes to work says its step on the way, for as long as any change is said, and says it again once it
+    // sits. Where the words are still on show within a moment of its seat they stay on, so there is no short hole
+    // between the two; on a long walk they go out on the way.
     const nearSeat = (a) => a.state === 'working' && !!a.step && a.bubbleText === a.step && a.sayText === a.step && a.goal && a.goal.kind === 'desk' && !a.pending &&
       (a.path ? a.moved && wayLen(a.x, a.y, a.path) < pace() * 0.8 : a.sitKind === 'desk' && a.sit < 1);
     let bubT = 0, floorId = null, floorSince = 0, pointedAt = -1e9;
@@ -1483,18 +1492,20 @@
             const mine = moveOf.get(a);
             if (mine === null) astir = true;
             else {
-              const meets = (r, j, P) => {
+              // (gap: how near counts as meeting. still: that one's box does not move sideways with its owner, as
+              // words that stand against the edge of the stage do not.)
+              const meets = (r, j, P, gap, still) => {
                 if (P === a) return false;
                 const mv = P ? moveOf.get(P) : undefined; if (mv === null) return false;   // (not known: its box around it speaks for it)
                 if (!mv && !mine) return false;                              // (neither moves: the picture as it is says it all)
-                for (let q9 = 0; q9 < 18; q9 += 2) if (lap(X - (mv ? mv[q9] : 0) + (mine ? mine[q9] : 0), Y - (mv ? mv[q9 + 1] : 0) + (mine ? mine[q9 + 1] : 0), w, h, r, j, 0, 0) > 0) return true;
+                for (let q9 = 0; q9 < 18; q9 += 2) if (lap(X - (mv && !still ? mv[q9] : 0) + (mine ? mine[q9] : 0), Y - (mv ? mv[q9 + 1] : 0) + (mine ? mine[q9 + 1] : 0), w, h, r, j, gap || 0, gap || 0) > 0) return true;
                 return false;
               };
               for (let j = 0; j < soon.length && !astir; j += 5) if (soon[j + 4] !== a.desk && lap(X, Y, w, h, soon, j, 0, 0) > 0) astir = true;
               for (let j = 0; j < words.length && !astir; j += 4) astir = meets(words, j, wordsBy[j >> 2]);
               for (let j = 0; j < keep.length && !astir; j += 4) astir = meets(keep, j, keepBy[j >> 2]);
               for (let j = 0; j < signs.length && !astir; j += 5) if (signs[j + 4] !== a.desk) astir = meets(signs, j, null);
-              for (let j = 0; j < was.length && !astir; j += 4) { const P = wasBy[j >> 2]; astir = P !== a && moveOf.get(P) === null ? lap(X, Y, w, h, was, j, far, far) > 0 : meets(was, j, P); }   // (the words of one whose next move is not known go wherever it goes)
+              for (let j = 0; j < was.length && !astir; j += 4) { const P = wasBy[j >> 2]; astir = P !== a && moveOf.get(P) === null ? lap(X, Y, w, h, was, j, far, far) > 0 : meets(was, j, P, u, was[j] <= 2 * u || was[j] + was[j + 2] >= cw - 2 * u) || meets(was, j, P, u); }   // (the words of one whose next move is not known go wherever it goes; two bubbles keep a css px between them)
             }
           }
           return { i, text, X, Y, w, tx, near, sign, astir, clean: near && !sign && on === 0, price: cost + i + (near ? 0 : 1e9) };

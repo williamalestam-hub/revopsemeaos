@@ -618,13 +618,23 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       ok(keep.every((text) => runs[text] && runs[text].some((x) => x[0]) && !inner(runs[text]).some((x) => !x[0] && x[1] < 9)), `one walks past those at work @${w} (${before} > ${after}${browser ? ', letters of a browser' : ''}): a step that goes out stays out for 0.6 s or more`, say(runs));
     }
     // A step that changes while a neighbour walks by with its words on show: the new step does not start where those
-    // words are about to be, to go out again a third of a second later. (Letters as wide as a browser's.)
-    for (const [w, before, after, who] of [[366, 'nniwi', 'nndwi', 3], [366, 'wniwn', 'wnnwn', 3], [366, 'nnniw', 'nnnnw', 4], [366, 'wwiwi', 'wwdwi', 3]]) {
+    // words are about to be, to go out again a third of a second later. (Letters as wide as a browser's. At 367 to
+    // 400 the walker's words stand against the edge of the stage and do not move sideways with her; at 372 they
+    // come within a pixel of the step's place without touching it, and two bubbles keep a pixel between them.)
+    for (const [w, before, after, who] of [[366, 'nniwi', 'nndwi', 3], [366, 'wniwn', 'wnnwn', 3], [366, 'nnniw', 'nnnnw', 4], [366, 'wwiwi', 'wwdwi', 3], [367, 'nnniw', 'nnnnw', 4], [372, 'nnniw', 'nnnnw', 4], [400, 'nnniw', 'nnnnw', 4]]) {
       const c2 = five(after).map((x, j) => (j === who ? Object.assign({}, x, { step: 'Posting the note', bubble: 'Posting the note' }) : x)), runs = {};
       const r = play(w, [[-1, five(before)], [20000, five(after)], [22000, c2]], 29000, (t, s, c) => { if (t >= 22000) track(runs, ['Posting the note'], c); }, { browserText: true });
       r.scene.destroy();
       const v = runs['Posting the note'] || [];
       ok(v.some((x) => x[0]) && !v.slice(0, -1).some((x) => x[0] && x[1] < 8), `a step that changes as a neighbour walks by with its words @${w} (${before} > ${after}, a new step two seconds later): it is not on show for less than half a second before it goes out again`, say(runs));
+    }
+    // One at work is done and has something for you: it is about to get up, and where it will be the next moment is
+    // not known, so its words do not start while it still sits, to go out as it gets up.
+    for (const [w, before, after] of [[366, 'wwwwn', 'nwwwn'], [400, 'wwwwn', 'nwwwn']]) {
+      const text = CNT[0] + ' for you', runs = {};
+      const r = play(w, [[-1, five(before)], [20000, five(after)]], 34000, (t, s, c) => { if (t >= 20000) track(runs, [text], c); }, { browserText: true });
+      r.scene.destroy();
+      ok(runs[text] && runs[text].some((x) => x[0]) && !runs[text].slice(0, -1).some((x) => x[0] && x[1] < 8), `one at work is done and has something for you @${w} (${before} > ${after}): its words are not on show for less than half a second before they go out again`, say(runs));
     }
     // One that failed comes to its desk beside those at work: the sign over it lights when it sits, and no
     // neighbour's step comes on a moment before that only to be put out by it (nor is one put out early for it).
@@ -750,14 +760,14 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       } }
     // The pointer, or the focus, rests on the only one that speaks (it has the floor then): what happens afterwards
     // is still said. The words of a change, and the step of one that goes to work, come on beside it.
-    for (const [w, before, after, hot, text, how] of [[1280, 'wiiii', 'wiiid', 'desk', 'Run due 07:37', 'pointer'], [888, 'wiiii', 'wiini', 'desk', '2 for you', 'focus'], [366, 'iiiiw', 'iidiw', 'review', 'Run due 08:07', 'pointer'], [1201, 'wiiii', 'wiwii', 'desk', 'Drafting ideas', 'focus']]) {
+    for (const [w, before, after, hot, text, how, within] of [[1280, 'wiiii', 'wiiid', 'desk', 'Run due 07:37', 'pointer', 1500], [888, 'wiiii', 'wiini', 'desk', '2 for you', 'focus', 1500], [366, 'iiiiw', 'iidiw', 'review', 'Run due 08:07', 'pointer', 3000], [1201, 'wiiii', 'wiwii', 'desk', 'Drafting ideas', 'focus', 1500]]) {
       let first = null, frames = 0;
       const r = play(w, [[-1, five(before)], [23000, five(after)]], 36000, (t, s, c) => {
         if (Math.abs(t - 20000) < STEP / 2) { if (how === 'focus') s.setFocus(hot); else point(c, s.anchor(hot).x, s.anchor(hot).y, 'mouse', 'pointermove'); }
         if (t >= 23000 && c.ctx.textAt.some((e) => e[0] === text)) { frames++; if (first === null) first = Math.round(t - 23000); }
       }, { wideText: true, letter: 10.5 });
       r.scene.destroy();
-      ok(first !== null && first <= 3000 && frames >= 38, `the ${how} rests on ${hot}, the only one that speaks @${w} (${before} > ${after}): what the other one has to say is said within three seconds, for 2.5 s or more`, [first, frames]);
+      ok(first !== null && first <= within && frames >= 38, `the ${how} rests on ${hot}, the only one that speaks @${w} (${before} > ${after}): what the other one has to say is said within ${within / 1000} s, for 2.5 s or more`, [first, frames]);
     }
   }
   // a change that has to wait for its turn is still shown
@@ -1027,7 +1037,7 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
     // once then, and does not stand on the other for a second and a half.
     { const notes = []; let worst = 0;
       const of = (letters) => crewOf(letters.split('').map((c) => ({ n: 'needs', w: 'working', i: 'idle' }[c])));
-      for (const [A, B, w0, w1, ratio, delay] of [['ininn', 'iwinn', 395, 878, 2, 768], ['nnnnn', 'wnnnn', 390, 844, 3, 733], ['nnnnn', 'wnnnn', 390, 844, 3, 1267], ['nnn', 'wnn', 390, 844, 3, 700]]) {
+      for (const [A, B, w0, w1, ratio, delay] of [['ininn', 'iwinn', 395, 878, 2, 768], ['nnnnn', 'wnnnn', 390, 844, 3, 733], ['nnnnn', 'wnnnn', 390, 844, 3, 1267], ['nnn', 'wnn', 390, 844, 3, 700], ['ninnn', 'iinnn', 888, 366, 2, 1600], ['nnn', 'wnn', 390, 844, 3, 600], ['nnnnn', 'wnnnn', 390, 844, 3, 600], ['nnnnn', 'wnnnn', 366, 820, 3, 1467], ['nnnnn', 'innnn', 366, 820, 3, 2133]]) {
         global.devicePixelRatio = ratio;
         const m = mk(); m.s.setCrew([]); m.s.resize(w0); m.run(1000); m.s.setCrew(of(A)); m.run(61000);
         m.s.setCrew(of(B)); m.run(m.st.t + delay); m.s.setCrew(of(B)); m.s.resize(w1);
@@ -1038,6 +1048,23 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
         worst = Math.max(worst, longest); notes.push([A, B, w0, w1, delay, longest]); m.s.destroy(); }
       global.devicePixelRatio = 2;
       ok(worst <= 8, 'a phone turned sideways a moment after one of the queue is handled: nobody stands on another for more than half a second', notes); }
+
+    // And where the turn puts nobody on another: one on its way stops at one who stands in its way (and goes around
+    // it, or waits); it does not walk through. Nobody is within 6 px of another in any frame. (The two cases are
+    // exact moments: if a change to the walking shifts them, pick them again.)
+    { const notes = [];
+      const of = (letters) => crewOf(letters.split('').map((c) => ({ n: 'needs', w: 'working', i: 'idle' }[c])));
+      for (const [A, B, w0, w1, ratio, delay] of [['nnnnn', 'nwnnn', 390, 844, 3, 200], ['nnn', 'inn', 844, 390, 3, 2600]]) {
+        global.devicePixelRatio = ratio;
+        const m = mk(); m.s.setCrew([]); m.s.resize(w0); m.run(1000); m.s.setCrew(of(A)); m.run(61000);
+        m.s.setCrew(of(B)); m.run(m.st.t + delay); m.s.setCrew(of(B)); m.s.resize(w1);
+        let frames = 0; const t0 = m.st.t;
+        for (; m.st.t <= t0 + 6000; m.st.t += STEP) { m.s.frame(m.st.t); const d = m.s._dbg(), v = d.crew.filter((a) => a.state !== 'unknown').map((a) => d.feet(a.id)); let near = false;
+          for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) if (Math.hypot(v[i].x - v[j].x, v[i].y - v[j].y) < 6) near = true;
+          if (near) frames++; }
+        if (frames) notes.push([A, B, w0, w1, delay, frames]); m.s.destroy(); }
+      global.devicePixelRatio = 2;
+      ok(notes.length === 0, 'a phone turned a moment after one of the queue is handled, nobody put on another: one on its way does not walk through one who stands', notes); }
 
     // The one with the floor has new words just as its turn is ending and somebody waits: the floor passes first, and
     // the new words get a turn of their own later. They are not shown for a few frames and put out again. (Letters

@@ -115,13 +115,13 @@ they choose their ways again then). So a bubble does not come on only to be walk
 that for a page that opens and for one agent changing on a phone; in a run of changes a few seconds apart it can still
 happen now and then. Two that change at the same moment (Instinct and Muse are both due at 08:07) speak together where
 there is room for both, and one after the other where there is not; on a phone a step may come on a second or two
-after the page opens, once the neighbours have left. One that goes to work says its step on the way and keeps saying
-it once it sits. The one you point at speaks first, from one place, and the others go on taking turns beside it. No
-neighbour's bubble covers the red sign over an agent that failed or the question mark over an empty chair: beside it
-the neighbour says as much of its step as fits. (The failed agent's own few words stand on its own sign while they
-last.) With reduced motion nothing takes turns: the agent at the lowest desk speaks, and whoever you point at. The
-room stays empty for a moment after the page opens, until every document and your own reactions to it have answered
-(2.5 seconds at most), so that no robot sets off with a count that is about to drop.
+after the page opens, once the neighbours have left. One that goes to work says its step for a few seconds on the way,
+and again once it sits. The one you point at speaks first, from one place, and the others go on taking turns beside
+it. No neighbour's bubble covers the red sign over an agent that failed or the question mark over an empty chair:
+beside it the neighbour says as much of its step as fits. (The failed agent's own few words stand on its own sign
+while they last.) With reduced motion nothing takes turns: the agent at the lowest desk speaks, and whoever you point
+at. The room stays empty for a moment after the page opens, until every document and your own reactions to it have
+answered (2.5 seconds at most), so that no robot sets off with a count that is about to drop.
 
 Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
 chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide
