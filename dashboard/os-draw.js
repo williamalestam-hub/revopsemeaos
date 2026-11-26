@@ -1103,6 +1103,8 @@ const showsTwin = (el, name, on) => {
 };
 // a tab's number: n when something waits, nothing at zero. A badge is shown by its class (os.css: .app-badge:not(.is-on)).
 // (Drawn where no empty drawing stands beside it, it still hides itself at zero.)
+// None of the three shows before William's own reactions have answered (ready() on OS.hub and OS.lanes): until then
+// it would count what he has handled already, and drop a moment later. The cockpit holds its counts for the same reason.
 const tabBadge = (el, name, n) => {
   if (showsTwin(el, name, !!n)) return;
   el.textContent = n ? OS.num(n) : '';
@@ -1113,7 +1115,7 @@ const tabBadge = (el, name, n) => {
 dash.draw('hub-badge', (el) => {
   const c = OS.hub.counts();
   const acted = OS.hub.top().filter((it) => OS.hub.acted(it.id) && (it.status === 'new' || it.status === 'waiting')).length;
-  tabBadge(el, 'hub-badge', c && typeof c.waiting === 'number' && c.waiting - acted > 0 ? c.waiting - acted : 0);
+  tabBadge(el, 'hub-badge', OS.hub.ready() && c && typeof c.waiting === 'number' && c.waiting - acted > 0 ? c.waiting - acted : 0);
 });
 // Each item opens in place: why it matters, the prepared draft (editable here), and what can be done from this tab.
 // Sending goes through Claude beside the page with the exact text and recipient, and Claude waits for William's OK
@@ -1343,7 +1345,7 @@ const decCard = (d, done) => {
 };
 dash.draw('dec-list', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).map((d) => decCard(d, null))); });
 dash.draw('dec-done', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => OS.lanes.answered(d.id)).map((d) => decCard(d, OS.lanes.answered(d.id)))); });
-dash.draw('dec-badge', (el) => tabBadge(el, 'dec-badge', OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length));
+dash.draw('dec-badge', (el) => tabBadge(el, 'dec-badge', OS.lanes.ready() ? OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length : 0));
 dash.draw('dec-note', () => {
   const s = OS.lanes.state('decisions'); const open = OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length;
   pickNote('dec', noteOf(s, s === 'missing' || (s === 'ok' && !open)));
@@ -1397,7 +1399,7 @@ dash.draw('leo-list', (ul) => {
     return li;
   }));
 });
-dash.draw('leo-badge', (el) => tabBadge(el, 'leo-badge', OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length));
+dash.draw('leo-badge', (el) => tabBadge(el, 'leo-badge', OS.lanes.ready() ? OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length : 0));
 dash.draw('leo-pack-n', (el) => { el.textContent = OS.num(OS.lanes.packSize()); });
 dash.draw('leo-note', () => {
   const s = OS.lanes.state('leo'); const open = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length;
@@ -1520,22 +1522,25 @@ dash.draw('sense', (el) => {
 // the first one is handled, the next one says the scope and the source. A card is made anew only when what it is
 // made of changed, and that includes whether it carries those two lines. Every other card is left where it stands,
 // untouched: a draft that is open stays open and the keyboard keeps its place, when the cockpit redraws and when
-// another card goes. Beside a reader that has no cards() (an older os-core.js, for the moment a new version of the
-// page is being stored file by file) the lane has no card.
+// another card goes. What a card is made of is no more than it uses: on trial nothing can be sent, so such a card
+// is not made of whether Claude is beside the page or of Leo's name, and stays when Claude comes or goes. It does
+// include the words of the time he sent it on ("Sent to Claude · 13:50"): they change at midnight, and a card that
+// is kept would go on saying a time of day for a day gone by. Beside a reader that has no cards() (an older
+// os-core.js, for the moment a new version of the page is being stored file by file) the lane has no card.
 const laneDrawn = new WeakMap(); // each lane's cards, as last made: [what the card was made of, the card]
 dash.draw('ck-lane', (ul) => {
   const crew = window.OSCrew, room = crew && Array.isArray(crew.ROOMS) ? crew.ROOMS.find((r) => r && r.id === ul.dataset.ckRoom) : null;
   const leo = OS.lanes.leoTo(); // a card's button for Leo is there only once For Leo's document names him
-  const all = [OS.sense.canWrite(), OS.ask.can(), leo ? [leo.name, leo.slackId] : null]; // what every card is made of
+  const all = [OS.sense.canWrite(), OS.ask.can(), leo ? [leo.name, leo.slackId] : null]; // what a card is made of beside its own item: may he react; may it send, and to Leo
   const want = []; // each card the lane is to hold: [what it is made of, as text; how to make it]
   for (const a of (room && room !== crew.ROOMS[0] && Array.isArray(room.agents) ? room.agents : [])) {
     const d = OS.sense.doc(a.id), trial = !!d && d.trial === true;
     const when = d ? laneWhen(d.at) : '', scope = d && typeof d.scope === 'string' ? d.scope.slice(0, 80) : '';
     let before = null; // the source of this agent's card before the one in hand; null before its first
     for (const x of (typeof OS.sense.cards === 'function' ? OS.sense.cards(a.id) : [])) {
-      const source = typeof x.source === 'string' ? x.source : '';
+      const source = typeof x.source === 'string' ? x.source : '', did = OS.sense.acted(x.id);
       const of = { id: a.id, name: a.name, trial, meta: [when, before === null ? scope : ''].filter(Boolean).join(' · '), from: !!source && source !== before };
-      want.push([JSON.stringify([all, of, x, OS.sense.acted(x.id)]), () => senseCard(x, 'instinct', of)]);
+      want.push([JSON.stringify([trial ? all.slice(0, 1) : all, of, x, did, did ? laneWhen(did.at) : '']), () => senseCard(x, 'instinct', of)]);
       before = source;
     }
   }
