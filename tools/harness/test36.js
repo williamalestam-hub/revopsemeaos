@@ -3,6 +3,9 @@
 // and asks it to wait for William's OK; Open in Hub links to the item; Done / Snooze / Dismiss write only William's own
 // data/users/<id>/hub-actions document, take the item out of the counts at once, and Undo puts it back. Nothing else is
 // written. Synthetic data only, on a fake database and a fake Claude-beside-the-page.
+// The Today tab's number follows the same actions. It is a drawing stored hidden, and the dashboard type runs no drawing
+// under the hidden attribute: the empty drawing of its name beside it takes hidden off it, and the type then draws it.
+// The test keeps that rule (tabNumber): it draws the two stored elements as the type would, never one that is hidden.
 const { Node } = require('./fakedom.js');
 process.env.TZ = 'Europe/Stockholm';
 const NOW = Date.parse('2026-11-05T09:00:00Z');
@@ -32,6 +35,16 @@ const walk = (n, f) => { f(n); for (const c of n.children || []) walk(c, f); };
 const find = (el, pick) => { const out = []; walk(el, (n) => { if (pick(n)) out.push(n); }); return out; };
 const draw = (name, tag = 'div', ds = {}) => { const el = new Node(tag); el.dataset.draw = name; Object.assign(el.dataset, ds); draws[name](el); return el; };
 const tick = () => new Promise((r) => setTimeout(r, 0));
+// the Today tab's number as the page stores it (the empty drawing, then the number, hidden), drawn by the type's rule:
+// no drawing runs on a hidden element; one whose hidden came off during the pass is drawn in the same pass
+const BADGE = [...require('fs').readFileSync(D + 'index.html', 'utf8').matchAll(/<span class="([^"]*)" data-draw="hub-badge"( hidden)?><\/span>/g)].map((m) => { const el = new Node('span'); el.className = m[1]; el.dataset.draw = 'hub-badge'; el.hidden = !!m[2]; return el; });
+document.querySelectorAll = (sel) => (sel === '[data-draw="hub-badge"]' ? BADGE : []);
+const tabNumber = () => {
+  const drawn = new Set();
+  for (let more = true; more;) { more = false; for (const el of BADGE) if (!el.hidden && !drawn.has(el)) { draws['hub-badge'](el); drawn.add(el); more = true; } }
+  const b = BADGE.find((el) => !el.classList.contains('msg-slot'));
+  return !b ? 'no number on the page' : b.hidden || !b.classList.contains('is-on') ? 'hidden' : b.textContent;
+};
 const HUB = 'https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU';
 const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, critical: 0, prepared: 1, doneToday: 0 }, lastRun: { at: '2026-11-05T08:00:00Z', status: 'ok' }, brief: { headline: 'h' },
   top: [
@@ -44,10 +57,12 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   await tick(); await tick(); await tick();
   ok(Array.isArray(DB.subs['hub/today']) && DB.subs['hub/today'].length === 1, 'subscribes once to hub/today');
   ok(Array.isArray(DB.subs['data/users/' + UID + '/hub-actions']) && DB.subs['data/users/' + UID + '/hub-actions'].length === 1, "subscribes once to William's own hub-actions document");
+  ok(BADGE.length === 2 && BADGE[0].classList.contains('msg-slot') && !BADGE[0].hidden && BADGE[1].hidden === true && tabNumber() === 'hidden', 'before the summary arrives the Today tab shows no number: it is stored hidden, after the empty drawing of its name', [BADGE.length, tabNumber()]);
   DB.subs['hub/today'][0](snapOf('hub/today', DOC));
   DB.subs['data/users/' + UID + '/hub-actions'][0](snapOf('x', null));
   await OS.ask.refresh(); await tick();
   ok(OS.ask.can() === true, 'Claude beside the page is available in this run');
+  ok(tabNumber() === '2', 'the Today tab shows how many need you: 2', tabNumber());
   let ul = draw('hub-top', 'ul');
   let rows = find(ul, (n) => n.tagName === 'LI');
   ok(rows.length === 3 && find(ul, (n) => n.tagName === 'TEXTAREA').length === 0, 'three rows, closed');
@@ -76,11 +91,13 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   ok(DB.writes[0].p === 'data/users/' + UID + '/hub-actions', '... and nowhere else');
   const count = (field) => draw('hub-count', 'b', { field }).textContent;
   ok(count('waiting') === '1' && count('doneToday') === '1', 'Done counts at once: Needs you 2 → 1, Done today 0 → 1', [count('waiting'), count('doneToday')]);
+  ok(tabNumber() === '1', 'the Today tab\'s number follows an item done: 2 → 1', tabNumber());
   ul = draw('hub-top', 'ul'); rows = find(ul, (n) => n.tagName === 'LI');
   ok(/hub-acted/.test(rows[0].className) && /Done here · reaches the Hub at its next run/.test(rows[0].textContent), 'the row says Done here and when it reaches the Hub');
   ok(label(rows[0], 'Undo') && !label(rows[0], 'Send on Slack via Claude'), 'a done row offers Undo and no send');
   fire(label(rows[0], 'Undo'), 'click'); await tick(); await tick();
   ok(DB.writes.length === 2 && !('sl-D1-1' in DB.writes[1].data.actions) && count('waiting') === '2', 'Undo removes the entry and the count comes back');
+  ok(tabNumber() === '2', '... and so does the Today tab\'s number: 2 again', tabNumber());
   // Snooze sets until a day later; Dismiss on a doc item
   fire(find(rows[1], (n) => n.className === 'hub-head')[0], 'click');
   ul = draw('hub-top', 'ul'); rows = find(ul, (n) => n.tagName === 'LI');
@@ -89,6 +106,11 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   const sn = DB.writes[DB.writes.length - 1].data.actions['gr-m-1-share-doc'];
   ok(sn && sn.action === 'snoozed' && Date.parse(sn.until) - NOW === 864e5, 'Snooze 1 day: until is 24 h later', sn);
   ok(count('doneToday') === '0' && count('waiting') === '1', 'a snooze leaves Needs you but is not Done');
+  // the last one that waits is dismissed: nothing needs him, and the tab's number goes; Undo brings it back
+  OS.hub.act('sl-D1-1', 'dismissed', 'Vicky asks about round robins'); await tick(); await tick();
+  const none = [count('waiting'), tabNumber()];
+  OS.hub.act('sl-D1-1', null); await tick(); await tick();
+  ok(JSON.stringify(none) === JSON.stringify(['0', 'hidden']) && count('waiting') === '1' && tabNumber() === '1', 'with both waiting items handled the Today tab shows no number (hidden at zero); one put back, it shows again: 1', [none, count('waiting'), tabNumber()]);
   // without Claude beside the page there is no send button, and the note says how
   room.canSendToClaudeSession = async () => 'off'; await OS.ask.refresh(); await tick();
   ul = draw('hub-top', 'ul'); rows = find(ul, (n) => n.tagName === 'LI');

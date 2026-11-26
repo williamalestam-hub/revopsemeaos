@@ -45,6 +45,18 @@ document once (`claude.use('db')`, like the ticks) and redraws when it changes; 
 Claude and writes nothing. Before the worker's first run it says "The Hub has not run yet", with the Open button as soon as
 the document carries the Hub's URL (the link's address is fixed in `index.html`; it shows while `hub/today` names that same address). Below the Hub block sits the greeting hero that used to open Home (what needs you, your next
 1:1, Copy weekly summary), so Today = the Hub's summary + the OS's own severity lines; Home keeps the numbers.
+**The numbers on the tabs, and the headline.** The Today, Decide and For Leo tabs each show a number while something
+waits on you: Needs you less what you have handled on this tab; the decisions you have not answered; the points for
+Leo you have not acted on. At nothing the number goes. The brief's headline stands under the four counts while the
+brief has one. Each of these four is a drawing that is stored hidden, and the dashboard type runs no drawing under the
+`hidden` attribute: a drawing can hide itself, but it is never run again to show itself. So beside each stands an
+empty drawing of the same name (a `.msg-slot`, in the tab's button or in the Hub pane) that only sets `hidden` on it;
+when `hidden` comes off, the type draws it, and it writes its own number or headline. A tab's number is displayed by
+the class `is-on` (`os.css`), which its drawing sets. The numbers' empty drawings stand in the tab row, so a number
+follows whichever tab is open; the headline's stands under Today, so the headline is drawn while Today is open and
+when it comes back. `tools/harness/test35.js`, `test36.js` and `test42.js` draw these as the type does (nothing is
+run while hidden); `test42.js` also holds that nothing else on the page is stored hidden where only a drawing on it
+or under it could show it.
 **Acting from Today**: click an item to open it in place: why it matters, the summary, and the prepared draft in an
 editable box. From there, **Send on Slack / Create Gmail draft / Create Google Doc / Create Notion page via Claude** hands
 the Claude chat beside the page the exact (edited) text and the recipient with ids, and Claude shows it and waits for your
@@ -94,8 +106,12 @@ hours from 08:07 to 16:07 Stockholm.
 - *Muse* (first run of the day): 2 or 3 data-backed ideas, logged in `hub/muse-log` so it doesn't repeat itself.
 - Each card can be sent on through Claude (on your OK), sent to Leo, or marked Got it / Keep / Not useful (kept in your
   private `data/users/<you>/sense-acts`). `tools/harness/test38.js` covers the panel.
+- A word too long for its line (a long link, say) is broken: in these cards, in Decide's and For Leo's, in the lines
+  under their lists and in the Hub's headline, as in the cockpit's lane. A topic chip that is too long runs over
+  several lines. So nothing a document says makes the page scroll sideways on a phone (`os.css`; `test38.js` holds the
+  rule, and that a document's words stand only where they can be broken).
 
-`tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering that the hero still draws and the Chat links.
+`tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering that the hero still draws, the Chat links, and that the Today tab's number and the headline show, go at nothing and come back.
 
 ## Cockpit
 

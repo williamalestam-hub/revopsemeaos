@@ -367,6 +367,34 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
     const plain = ':lane-ev-l+lane-ev-v', words = 'lane-ev-text' + plain;
     ok(inLane.join() === [plain, plain, plain, plain, words, words, words, plain].join() && inPane.join() === Array(8).fill(plain).join(),
       'in the lane a pill whose value is words is marked (lane-ev-text), so that it opens with its label and not with the answer; a figure ("41 · $1.2M", 17, "12%", "−$1.1M") and a row with no value are not marked; on an Instinct card nothing is marked: its evidence is as it was', [inLane, inPane]); }
+  // ---- a word too long for its line ----
+  // Seen in Chromium at 360 px: a long link in an Instinct card made the whole page scroll sideways, and so did one in
+  // a decision or a point for Leo. The fix is a rule in os.css. This harness opens no browser, so it holds what the
+  // rule stands on: the rule itself, that the lists and the headline carry the classes it names, that no part of a card
+  // is told not to wrap, and that a document's words go only where they can be broken.
+  {
+    const fs = require('fs'), css = fs.readFileSync(D + 'os.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''), page = fs.readFileSync(D + 'index.html', 'utf8');
+    ok(/(^|\n)\s*\.sense, \.lanes, \.hub-brief\s*\{\s*overflow-wrap:\s*anywhere;?\s*\}/.test(css),
+      'os.css: a word too long for its line is broken in the Instinct and Muse pane, in the panes of Decide and For Leo and in the Hub\'s headline (overflow-wrap: anywhere), as in the cockpit\'s lane');
+    const paneOf = (name) => { const at = page.indexOf('data-draw="' + name + '"'); return at < 0 ? 'not on the page' : (page.slice(page.lastIndexOf('<div class="pane ', at)).match(/^<div class="([^"]*)"/) || [])[1]; };
+    ok(/<div class="pane sense" id="sense" data-draw="sense"><\/div>/.test(page) && ['dec-list', 'dec-done', 'dec-at', 'leo-list', 'leo-at'].every((n) => paneOf(n) === 'pane lanes') && /<p class="hub-brief" data-draw="hub-brief" hidden><\/p>/.test(page),
+      'index.html: the Instinct and Muse pane is .sense, the lists of Decide and For Leo and the lines under them stand in .lanes, and the headline is .hub-brief: the rule reaches each of them', ['dec-list', 'dec-done', 'dec-at', 'leo-list', 'leo-at'].map(paneOf));
+    const stiff = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter((m) => /\.(lane|sense|dec|leo)-|\.hub-(why|sum|to|note|acts|brief)/.test(m[1]) && /white-space:\s*nowrap|overflow-wrap:\s*normal|word-break:\s*keep-all|text-overflow/.test(m[2])).map((m) => m[1].trim());
+    const chipAt = Math.max(...[...css.matchAll(/(^|\n)\s*\.chip\s*\{/g)].map((m) => m.index)), topic = css.search(/(^|\n)\s*\.lane-topic\s*\{\s*white-space:\s*normal;?\s*\}/);
+    ok(stiff.length === 0 && /\.chip\s*\{[^}]*white-space:\s*nowrap/.test(css) && topic > chipAt && chipAt > 0,
+      'os.css: no part of a card is told to stay on one line or to cut its words; a chip is, and the topic chip of a point for Leo is let off by a rule that comes after the chip\'s (the two weigh the same)', [stiff, chipAt, topic]);
+    // which chips hold a document's words: one long word in every place a document can put one
+    const W = 'Wordthatistoolongforanylineofacardonaphone';
+    sub('hub/instinct')[0](snapOf('hub/instinct', { at: '2026-11-05T07:07:00Z', items: [{ id: 'ins-w', level: W, title: W, why: W, change: { label: W, from: W, to: W }, evidence: [{ label: W, value: W, source: W }], links: [{ label: W, oppId: '006AAAAAAAAAAAA' }], action: { label: W, sends: [{ type: 'slack', body: W }] }, source: W }] }));
+    sub('hub/muse')[0](snapOf('hub/muse', { at: '2026-11-05T07:07:00Z', items: [{ id: 'muse-w', kind: 'challenge', title: W, idea: W, whyNow: W, firstStep: W, challenge: W, evidence: [{ label: W, value: W }] }] }));
+    sub('hub/decisions')[0](snapOf('hub/decisions', { at: '2026-11-05T06:40:00Z', by: W, items: [{ id: 'dec-w', question: W, recommend: 'yes', severity: W, why: W, evidence: [{ label: W, value: W, source: W }], yes: { effect: W, sends: [{ type: 'slack', to: [{ name: W }], channelName: W, subject: W, body: W }] }, no: { effect: W }, source: W }] }));
+    sub('hub/leo')[0](snapOf('hub/leo', { at: '2026-11-05T06:40:00Z', to: { name: W, slackId: 'U0LEO12345' }, items: [{ id: 'leo-w', topic: W, severity: W, headline: W, recommendation: W, evidence: [{ label: W, value: W }], ask: W, message: W, pack: W, en: { message: W, headline: W }, source: W }] }));
+    sub('hub/renewals')[0](snapOf('hub/renewals', { at: '2026-11-05T05:50:40Z', status: 'ok', trial: true, scope: W, items: [{ id: 'rn-w', level: W, title: W, why: W, evidence: [{ label: W, value: W }], action: { label: W, sends: [{ type: 'slack', body: W }] }, source: W }] }));
+    const cards = [draw('sense', 'div'), draw('dec-list', 'ul'), draw('leo-list', 'ul'), draw('ck-lane', 'ul', { ckRoom: 'arr' })].flatMap((el) => find(el, (n) => /(^| )lane-card( |$)/.test(n.className)));
+    const chips = cards.flatMap((c) => find(c, (n) => /(^| )chip( |$)/.test(n.className))), ofDoc = chips.filter((c) => c.textContent.includes(W));
+    ok(cards.length === 5 && cards.every((c) => c.textContent.includes(W)) && chips.length >= 5 && ofDoc.length === 1 && ofDoc[0].className === 'chip lane-topic' && chips.filter((c) => c !== ofDoc[0]).map((c) => c.textContent).sort().join('|') === 'Challenge|Recommended: Yes|Trial|Watch|Watch',
+      'of the chips on a card only the topic of a point for Leo holds a document\'s words, and that one may wrap; every other chip is a fixed word (Watch, Challenge, Recommended: Yes, Trial), so no word of a document stands where it cannot be broken', [cards.length, chips.map((c) => c.className + ': ' + c.textContent.slice(0, 20))]);
+  }
   console.log(`\n${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.log('FAIL crashed', e && e.stack); process.exit(1); });

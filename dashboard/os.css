@@ -483,6 +483,12 @@
   .hub-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .hub-acts a.btn { text-decoration: none; }
   .lanes { padding: var(--cds-pad-md) var(--cds-pad-lg); }
+  /* A word too long for its line (a link, say) is broken: in the cards of Decide, For Leo and the Instinct and Muse
+     pane, in the lines around them, and in the Hub's headline. So nothing a document says makes its pane, and the
+     page with it, wider than the screen. A topic chip that is too long runs over several lines. (The cockpit's lane
+     has the same rule, in os-cockpit.css.) */
+  .sense, .lanes, .hub-brief { overflow-wrap: anywhere; }
+  .lane-topic { white-space: normal; }
   .lane-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--cds-pad-md); }
   .lane-list:empty { display: none; }
   .lane-card { border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-md); display: flex; flex-direction: column; gap: 8px; background: var(--color-panel); }

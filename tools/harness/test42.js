@@ -2,6 +2,9 @@
 //  1. The stored page keeps the type's one-writer rule: every data-draw element in dashboard/index.html is stored empty
 //     (or a single —) and none sits inside another; the cockpit block is where and what the spec says; its styles
 //     keep the rules the page relies on, and the README says of a department agent's document what the page does.
+//     It also keeps the type's rule for hidden (no drawing runs under the hidden attribute, so a drawing cannot show
+//     itself or what it stands under): what is stored hidden is shown by code that is not a drawing, or by an empty
+//     drawing that stands elsewhere. The three tab numbers and the Hub's headline each have one beside them.
 //  2. The store: dashboard/build_store.py, run into a temporary folder, keeps every document under 262,144 bytes, holds
 //     the four cockpit files, and stores index.html with only its indentation removed.
 //  3. The wiring (dashboard/os-cockpit.js) against stand-ins for dash, OS, OSCrew and OSCockpit, on the real markup:
@@ -14,7 +17,8 @@
 //     innerHTML. Then the same wiring with the real model in place of its stand-in.
 //  4. A child run (--real) with the real page scripts and the real model: documents like the ones the agents write, on
 //     a fake database, give the crew, the chips and the words of the spec's own example, the Hub pane's run line
-//     agrees with the Desk chip, and a robot click really changes tab.
+//     agrees with the Desk chip, and a robot click really changes tab. The three tab numbers and the Hub's headline
+//     show, follow what William does, go at nothing and come back, by the type's rule for hidden.
 // Synthetic data only. Nothing here opens the dashboard or a browser.
 const fs = require('fs'), path = require('path'), os = require('os');
 const { execFileSync } = require('child_process');
@@ -53,6 +57,9 @@ const parseSel = (sel) => {
 };
 const scrolled = [], clicks = [];
 let noInk = false; // a browser that gives a canvas no 2D context
+// every change of the hidden attribute on an element, and the drawing that was running when it was made (null: none
+// was; a handler, a timer, a snapshot, or this test)
+const HID = []; let DRAWING = null;
 class Tx { constructor(v) { this.nodeType = 3; this.nodeValue = String(v); this.parentNode = null; } get textContent() { return this.nodeValue; } }
 class El {
   constructor(tag) {
@@ -70,7 +77,8 @@ class El {
   get children() { return this.childNodes.filter((n) => n instanceof El); }
   get id() { return this.attrs.get('id') || ''; }
   get className() { return this.attrs.get('class') || ''; } set className(v) { this.attrs.set('class', String(v)); }
-  get hidden() { return this.attrs.has('hidden'); } set hidden(v) { if (v) this.attrs.set('hidden', ''); else this.attrs.delete('hidden'); }
+  get hidden() { return this.attrs.has('hidden'); }
+  set hidden(v) { const was = this.attrs.has('hidden'); if (v) this.attrs.set('hidden', ''); else this.attrs.delete('hidden'); if (was !== !!v) HID.push({ el: this, to: !!v, by: DRAWING }); }
   get textContent() { return this.childNodes.map((n) => n.textContent).join(''); }
   set textContent(v) { this.replaceChildren(); if (String(v) !== '') this.append(String(v)); }
   get innerHTML() { throw new Error('innerHTML was read'); } set innerHTML(v) { throw new Error('innerHTML was written'); }
@@ -150,6 +158,13 @@ const pipsOf = (id) => doorSlot(id).querySelectorAll('.ck-pip').map((i) => Strin
 const countOf = (id) => doorSlot(id).querySelectorAll('.ck-door-n').map((n) => n.textContent).join('|');
 const saidBy = (n) => (n.nodeType === 3 ? n.nodeValue : n.getAttribute('aria-hidden') === 'true' ? '' : n.childNodes.map(saidBy).join(''));
 const strip = (id) => $$('.ck-strip').find((u) => u.dataset.ckRoom === id), laneOf = (id) => drawings('ck-lane').find((u) => u.dataset.ckRoom === id);
+// The three tab numbers and the Hub's headline. Of each name the page has two elements: an empty drawing (a .msg-slot)
+// and, right after it, the number or the headline, stored hidden. shownOf: what one shows now, or null. (A tab's number
+// is on show when nothing from it upwards is hidden and it has the class its style asks for: os.css, .app-badge:not(.is-on).)
+const FOUR = ['hub-badge', 'dec-badge', 'leo-badge', 'hub-brief'];
+const slotOf = (name) => drawings(name).find((e) => e.classList.contains('msg-slot')), numberOf = (name) => drawings(name).find((e) => !e.classList.contains('msg-slot'));
+const shownOf = (name) => { const el = numberOf(name); return !el || el.closest('[hidden]') || (el.classList.contains('app-badge') && !el.classList.contains('is-on')) ? null : el.textContent; };
+const today0 = () => $$('section').find((s) => s.id === 'today');
 const openRoom = () => [$$('[data-ck-door]').filter((d) => d.getAttribute('aria-pressed') === 'true').map((d) => d.dataset.ckDoor).join(), $$('.ck-strip').filter((u) => !u.hidden).map((u) => u.dataset.ckRoom).join(), $$('.ck-lane').filter((u) => !u.hidden).map((u) => u.dataset.ckRoom).join()];
 
 // ---------- the page's surroundings, shared by both runs ----------
@@ -224,13 +239,27 @@ const TYPE = { reg: {}, mounted: new Map(), thrown: [], again: 'unmount', links:
 TYPE.one = (el) => {
   const name = el.dataset.draw, spec = TYPE.reg[name];
   if (!spec || el.closest('[hidden]')) return false;
-  if (typeof spec === 'function') { try { spec(el); } catch (e) { TYPE.thrown.push(e); } return true; }
-  let rec = TYPE.mounted.get(el);
+  const outer = DRAWING; DRAWING = el; // (who is drawing, for the record of hidden)
   try {
-    if (!rec) { el.replaceChildren(); rec = { name, made: spec.mount(el) }; TYPE.mounted.set(el, rec); }
-    spec.update(el, rec.made);
-  } catch (e) { TYPE.thrown.push(e); TYPE.mounted.delete(el); if (rec) { try { spec.unmount(el, rec.made); } catch (e2) { TYPE.thrown.push(e2); } } }
-  return true;
+    if (typeof spec === 'function') { try { spec(el); } catch (e) { TYPE.thrown.push(e); } return true; }
+    let rec = TYPE.mounted.get(el);
+    try {
+      if (!rec) { el.replaceChildren(); rec = { name, made: spec.mount(el) }; TYPE.mounted.set(el, rec); }
+      spec.update(el, rec.made);
+    } catch (e) { TYPE.thrown.push(e); TYPE.mounted.delete(el); if (rec) { try { spec.unmount(el, rec.made); } catch (e2) { TYPE.thrown.push(e2); } } }
+    return true;
+  } finally { DRAWING = outer; }
+};
+// A pass, as the type makes it: the drawings handed to it, in the page's order; then, for as long as there are any, the
+// drawings on or under an element whose hidden came off during the pass and that the pass has not drawn. So a drawing
+// can show another one, whichever of the two comes first on the page. None can show itself: it is not run while hidden.
+TYPE.pass = (list) => {
+  const done = new Set();
+  for (let x = list, from = HID.length; x.length;) {
+    for (const el of x) if (TYPE.one(el)) done.add(el);
+    const off = HID.slice(from).filter((h) => !h.to && !h.el.hidden && root.contains(h.el)).map((h) => h.el); from = HID.length;
+    x = [...new Set(off.flatMap((t) => (t.attrs.has('data-draw') ? [t] : []).concat(t.querySelectorAll('[data-draw]'))))].filter((el) => !done.has(el) && !!TYPE.reg[el.dataset.draw]);
+  }
 };
 TYPE.draw = (name, spec) => {
   if (spec !== undefined) {
@@ -239,9 +268,9 @@ TYPE.draw = (name, spec) => {
     TYPE.reg[name] = spec; return;
   }
   if (!TYPE.reg[name]) throw new Error('no drawing is registered as ' + name);
-  drawings(name).forEach(TYPE.one);
+  TYPE.pass(drawings(name));
 };
-TYPE.all = () => $$('[data-draw]').forEach(TYPE.one); // after the scripts, and when a hidden tab comes back
+TYPE.all = () => TYPE.pass($$('[data-draw]')); // after the scripts, and when a hidden tab comes back
 TYPE.leave = (el) => { const rec = TYPE.mounted.get(el); if (rec) { TYPE.mounted.delete(el); TYPE.reg[rec.name].unmount(el, rec.made); } };
 const load = (f) => { delete require.cache[require.resolve(D + f)]; require(D + f); };
 // the real model, when the file has the words this page is written against (lead and brief beside lines, overdue)
@@ -270,9 +299,36 @@ const staticChecks = () => {
   const scripts = $$('script').map((s) => s.getAttribute('src'));
   ok(same(scripts.slice(scripts.indexOf('os-draw.js')), ['os-draw.js', 'os-cockpit-model.js', 'os-cockpit-scene.js', 'os-cockpit.js']), 'the three cockpit scripts follow os-draw.js: model, scene, wiring', scripts);
 
+  // What the page stores hidden, and who can show it. The type runs no drawing under the hidden attribute, so a
+  // drawing cannot show itself or anything it stands under. That is for code that is not a drawing (a handler,
+  // dash.onData, a snapshot from the database), or for an empty drawing that stands elsewhere.
+  const hidDraws = all.filter((e) => e.hidden);
+  ok(same(hidDraws.map((e) => e.dataset.draw), ['hub-badge', 'dec-badge', 'leo-badge', 'ck-lane', 'ck-lane', 'ck-lane', 'hub-brief']),
+    'the drawings that are stored hidden themselves are the three tab numbers and the Hub\'s headline (each shown by the empty drawing beside it) and the three lanes (shown by a door\'s click), and no other', hidDraws.map((e) => e.dataset.draw + ' at line ' + e.line));
+  const pairs = FOUR.map((n) => drawings(n));
+  ok(pairs.every((t) => t.length === 2 && t[0].tagName === 'SPAN' && t[0].className === 'msg-slot' && t[0].childNodes.length === 0 && !t[0].closest('[hidden]') && t[1].hidden && t[1].childNodes.length === 0 && t[1].parentNode === t[0].parentNode && t[1].parentNode.childNodes[t[1].parentNode.childNodes.indexOf(t[1]) - 1] === t[0])
+    && same(pairs.map((t) => [t[1].parentNode.id, t[1].tagName, t[1].className]), [['nav-today', 'SPAN', 'app-badge info'], ['nav-decide', 'SPAN', 'app-badge info'], ['nav-leo', 'SPAN', 'app-badge info'], ['hub-today', 'P', 'hub-brief']]),
+    'each of those four names has two elements: an empty drawing (a span.msg-slot, not under hidden) and, right after it, the number or the headline, stored hidden and empty; the numbers in their tabs\' buttons, the headline in the Hub pane', pairs.map((t) => t.map((e) => e.tagName + '.' + e.className + (e.hidden ? ' hidden' : '') + ' at line ' + e.line)));
+  ok(pairs.slice(0, 3).every((t) => !!t[0].closest('nav') && !t[0].closest('[data-page]')) && pairs[3][0].closest('[data-page]') === today0(),
+    'the empty drawings of the three numbers stand in the tab row, outside every tab\'s section, so they run whichever tab is open; the headline\'s stands under Today, with the headline');
+  // (the attributes by which code that is not a drawing finds what it shows: the shell in os-core.js, from a click, a
+  // key or dash.onData; and a room's chips, which a door's click shows in os-cockpit.js)
+  const BY_CODE = ['data-page', 'data-view-panel', 'data-detail', 'data-palette', 'data-scope-pop', 'data-pd-team', 'data-pd-leads', 'data-pd-deals', 'data-pd-act', 'data-pd-act-em', 'data-oo-sec', 'data-oo-note', 'data-cv-note-k', 'data-act-access'];
+  const over = (e) => { const out = []; for (let n = e.parentNode; n instanceof El; n = n.parentNode) if (n.hidden) out.push(n); return out; };
+  const odd = all.flatMap((e) => over(e).filter((n) => !BY_CODE.some((a) => n.attrs.has(a)) && !n.classList.contains('ck-strip')).map((n) => e.dataset.draw + ' at line ' + e.line + ' under ' + n.tagName + ' at line ' + n.line));
+  ok(all.filter((e) => over(e).length > 0).length > 300 && odd.length === 0, 'no drawing stands under anything stored hidden but a tab, a view, a panel, a popup or a note that the page\'s own code shows, or a room\'s chips, which a door\'s click shows', odd.slice(0, 8));
+  const coreJs = fs.readFileSync(D + 'os-core.js', 'utf8'), drawJs = fs.readFileSync(D + 'os-draw.js', 'utf8');
+  const shell = coreJs.slice(coreJs.indexOf('// ---------- App shell ----------'));
+  const unset = BY_CODE.filter((a) => !new RegExp("querySelectorAll\\('[^']*\\[" + a + "\\][^']*'\\)\\.forEach\\(\\((\\w+)\\) => \\{[^}]*\\b\\1\\.hidden = ").test(shell));
+  ok(shell.length > 20000 && unset.length === 0 && /querySelectorAll\('\.ck-strip'\)\.forEach\(\(u\) => \{ u\.hidden = /.test(wiring) && /querySelectorAll\('\.ck-lane'\)\.forEach\(\(u\) => \{ u\.hidden = /.test(wiring) && !BY_CODE.some((a) => drawJs.includes('[' + a + ']')),
+    'each of those is shown and hidden by the page\'s shell (os-core.js, outside every drawing), a room\'s chips and its lane by the cockpit\'s wiring; no drawing in os-draw.js looks for any of them', unset);
+  const sets = [...drawJs.matchAll(/([\w.]+)\.hidden\s*=(?!=)/g)].map((m) => m[1]);
+  ok(same(sets, ['x', 'el', 'a', 'p']) && /if \(showsTwin\(el, name, !!n\)\) return;\n(?:[^\n]*\n){2}  el\.hidden = !n;/.test(drawJs) && /if \(!showsTwin\(el, 'hub-brief', !!h\)\) el\.textContent = h;/.test(drawJs) && !/(remove|toggle|set)Attribute\('hidden'/.test(drawJs),
+    'os-draw.js sets hidden in four places and no more: an empty drawing on the number or headline of its name, on the Hub\'s links and on a list\'s sentences (all elsewhere on the page), and a tab\'s number on itself, after the empty drawing of its name has had its turn', sets);
+
   // the cockpit block: the first thing on Today: the doors, the picture's slot, then each room's chips, the legend,
   // the lanes and the role sentences
-  const today = $$('section').find((s) => s.id === 'today'), ck = today && today.children[0];
+  const today = today0(), ck = today && today.children[0];
   ok(!!ck && ck.id === 'cockpit' && ck.classList.contains('pane') && ck.classList.contains('cockpit') && today.children[1].id === 'sense', 'the cockpit is the first child of the Today section, before the sense pane', today && today.children.slice(0, 2).map((c) => c.id));
   ok(ck.getAttribute('role') === 'group' && ck.getAttribute('aria-label') === 'Cockpit', 'the pane is a group named Cockpit: the picture inside it is for the eye, the chips say the same', [ck.getAttribute('role'), ck.getAttribute('aria-label')]);
   ok(drawings('cockpit').length === 1 && stage().parentNode === ck && stage().childNodes.length === 0 && !stage().closest('[hidden]'), 'one stage, stored quite empty, not under hidden');
@@ -364,6 +420,12 @@ const staticChecks = () => {
   ok(/An agent's cards do not repeat what they share: only its first card in the lane says for what the document was written \(its `scope`\), and a card ends with where its item is from \("From …", its `source`\) only when the card before it, of the same agent, does not name the same source\. First and before are counted among the cards in the lane now: when you handle the first card, the next one says the scope and the source\./.test(readme)
     && /A card is made anew only when what it is made of changed \(whether it carries those two lines is part of that\); every other card is left untouched, so an open draft stays open and the keyboard keeps its place\./.test(readme) && !/says Trial, when and for what the document was written/.test(readme),
     'README: the scope is on an agent\'s first card only and where an item is from is said once; first and before are counted among the cards now in the lane; a card that is made of the same is left untouched');
+  ok(/The Today, Decide and For Leo tabs each show a number while something waits on you: Needs you less what you have handled on this tab; the decisions you have not answered; the points for Leo you have not acted on\. At nothing the number goes\. The brief's headline stands under the four counts while the brief has one\./.test(readme)
+    && /the dashboard type runs no drawing under the `hidden` attribute: a drawing can hide itself, but it is never run again to show itself\. So beside each stands an empty drawing of the same name \(a `\.msg-slot`, in the tab's button or in the Hub pane\) that only sets `hidden` on it; when `hidden` comes off, the type draws it, and it writes its own number or headline\./.test(readme)
+    && /The numbers' empty drawings stand in the tab row, so a number follows whichever tab is open; the headline's stands under Today, so the headline is drawn while Today is open and when it comes back\./.test(readme),
+    'README: what the three tab numbers and the headline show, that each is a drawing stored hidden with an empty drawing of its name beside it to show it, and where those stand');
+  ok(/A word too long for its line \(a long link, say\) is broken: in these cards, in Decide's and For Leo's, in the lines under their lists and in the Hub's headline, as in the cockpit's lane\. A topic chip that is too long runs over several lines\. So nothing a document says makes the page scroll sideways on a phone/.test(readme),
+    'README: a word too long for its line is broken in every list of cards and in the headline, so the page does not scroll sideways');
 
   // ---- 2. the store ----
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'os-store-'));
@@ -1228,6 +1290,7 @@ const realRun = async () => {
   TYPE.all(); // the type draws after the scripts: nothing has arrived yet
   const heldNow = () => scene().crew.length === 0 && drawings('ck-line').every((e) => e.textContent === '—') && $$('[data-ck]').every((c) => stateOf(c).length === 0);
   ok(scenes.length === 1 && heldNow() && TYPE.thrown.length === 0, 'before the first snapshots: an empty room, every chip a —, nothing thrown', [scene().crew, TYPE.thrown.map(String)]);
+  ok(same(FOUR.map(shownOf), [null, null, null, null]) && FOUR.every((n) => !!numberOf(n) && numberOf(n).hidden && numberOf(n).textContent === '' && !!slotOf(n) && !slotOf(n).hidden), 'before the first snapshots no tab shows a number and the Hub pane no headline: the four are hidden, as stored', FOUR.map(shownOf));
   push('hub/today', TODAY);
   push('hub/decisions', { at: '2026-11-24T06:44:12Z', by: 'the decisions task', items: lane(10, 'dec-') });
   push('hub/leo', { at: '2026-11-24T06:44:12Z', to: { name: 'A Colleague', slackId: 'U0AAAAAAA1' }, items: lane(7, 'leo-') });
@@ -1255,6 +1318,8 @@ const realRun = async () => {
     'the doors open on the right counts at once: Data Hygiene 1 (the item he handled is not counted: never 2), his own room 134', [ROOM_IDS.map(countOf), pipsOf('hygiene')]);
   fail(U + 'leo-acts'); push(U + 'leo-acts', null);
   ok(same(crew()[1], ['decide', 'needs', 17]), 'the documents of the spec\'s example: Decide holds 17', crew()[1]);
+  ok(same(FOUR.map(shownOf), ['113', '10', '7', 'A headline.']) && FOUR.slice(0, 3).every((n) => !!numberOf(n) && numberOf(n).classList.contains('is-on')) && FOUR.every((n) => !!slotOf(n) && slotOf(n).childNodes.length === 0 && !slotOf(n).hidden),
+    'the tabs show their numbers (Today 113, Decide 10, For Leo 7) and the Hub pane the brief\'s headline: each was shown by the empty drawing beside it and then drawn, by the type\'s rule; the empty drawings stay empty', FOUR.map(shownOf));
   ok(same(scene().crew.map((a) => [a.name, a.look, a.hue]), window.OSCrew.ROSTER.map((a) => [a.name, a.look, a.hue])) && scene().crew.every((a) => typeof a.bubble === 'string' && typeof a.step === 'string' && Number.isFinite(a.fresh)), 'each member is a full crew entry: name, look, hue, bubble, step, fresh');
   ok(same(IDS.map(lineOf), ['13:15 · 113 for you', '07:44 · 10 decisions, 7 for Leo', '08:30 · 3 for you', '08:30 · 2 for you', 'Mon 07:46 · posted']), 'the chips read as in the spec\'s example, Decide naming its two parts', IDS.map(lineOf));
   ok(same(IDS.map(whatOf), ['113 for you', '10 decisions, 7 for Leo', '3 for you', '2 for you', 'posted']) && IDS.every((id) => whenOf(id) + whatOf(id) === lineOf(id)), 'each line is the model\'s lead, a dot, and its brief; a narrow page keeps the brief', IDS.map(whatOf));
@@ -1289,7 +1354,7 @@ const realRun = async () => {
     if (draft[0]) draft[0].setAttribute('open', ''); // he opens it (the browser sets the attribute; no script of the page does)
     tickNow(); OS.docs.changed(); flush();
     ok(cardsIn('hygiene')[0] === card, 'a redraw with nothing new in the cards keeps the very same card (the keyboard\'s place in it is not lost)');
-    ok(draft.length === 1 && card.querySelectorAll('details')[0] === draft[0] && draft[0].hasAttribute('open') && DB.writes.length === writes, 'the draft he opened is still open after the half-minute tick and a change of documents; opening it wrote nothing');
+    ok(draft.length === 1 && cardsIn('hygiene')[0].querySelectorAll('details')[0] === draft[0] && draft[0].hasAttribute('open') && draft[0].parentNode === cardsIn('hygiene')[0] && DB.writes.length === writes, 'the draft he opened is still open in the lane after the half-minute tick and a change of documents; opening it wrote nothing');
     scrolled.length = 0; const led = scene().opts.onPick('sweeper'); flush();
     ok(led === true && scrolled.length === 1 && scrolled[0].el === card && document.activeElement === card, 'a click on the Sweeper robot, or its chip, scrolls to its card and moves focus there', [led, scrolled.length]);
     const no = scene().opts.onPick('accounts'); flush();
@@ -1372,10 +1437,17 @@ const realRun = async () => {
   ok(tile() === '113' && same(runLine(), ['Worker: last run 13:15 · ok', 'plain']), 'the Hub\'s "Needs you" tile shows the same 113, and its run line is plain', [tile(), runLine()]);
   OS.hub.act('item-3', 'done', 'Item 3'); await tick(); flush();
   ok(tile() === '112' && same(crew()[0], ['desk', 'needs', 112]) && lineOf('desk') === '13:15 · 112 for you', 'Done on a Hub item: the tile and the Desk robot both say 112 at once', [tile(), crew()[0], lineOf('desk')]);
+  const tabDone = shownOf('hub-badge');
   OS.hub.act('item-3', null); await tick(); flush();
+  ok(tabDone === '112' && shownOf('hub-badge') === '113', '... and so does the Today tab\'s number: 112, and 113 again when the item is put back', [tabDone, shownOf('hub-badge')]);
   // William's own answers reach the picture through OS.docs
   OS.lanes.answer('dec-0', 'yes'); await tick(); flush();
   ok(same(crew()[1], ['decide', 'needs', 16]) && lineOf('decide') === '07:44 · 9 decisions, 7 for Leo', 'a decision answered on the Decide tab: Decide now holds 16', [crew()[1], lineOf('decide')]);
+  ok(same(FOUR.map(shownOf), ['113', '9', '7', 'A headline.']), '... and the Decide tab\'s number follows the answer: 9', FOUR.map(shownOf));
+  OS.lanes.leoAct('leo-0', 'done'); await tick(); flush();
+  const leoDone = [shownOf('leo-badge'), crew()[1].join(' ')];
+  OS.lanes.leoAct('leo-0', null); await tick(); flush();
+  ok(same(leoDone, ['6', 'decide needs 15']) && shownOf('leo-badge') === '7' && same(crew()[1], ['decide', 'needs', 16]), 'a point for Leo acted on: the For Leo tab\'s number goes to 6, with the Decide robot\'s count; taken back, it is 7 again', [leoDone, shownOf('leo-badge')]);
   OS.sense.act('ins-0', 'ack'); OS.sense.act('ins-1', 'notuseful'); OS.sense.act('ins-2', 'ack'); await tick(); flush();
   ok(same(crew()[2], ['instinct', 'idle', 0]) && lineOf('instinct') === '08:30 · all clear', 'every Instinct signal handled: Instinct goes idle, "all clear"', [crew()[2], lineOf('instinct')]);
   // a heartbeat: Desk shows as working while its run is under way, with its step
@@ -1424,6 +1496,7 @@ const realRun = async () => {
   for (let i = 1; i < 10; i++) OS.lanes.answer('dec-' + i, i % 2 ? 'yes' : 'no');
   await tick(); flush();
   ok(same(crew()[1], ['decide', 'needs', 7]) && lineOf('decide') === '07:44 · 7 for Leo', 'every decision answered, seven items for Leo: the chip reads "07:44 · 7 for Leo"', [crew()[1], lineOf('decide')]);
+  ok(same(FOUR.map(shownOf), ['113', null, '7', 'A headline.']) && numberOf('dec-badge').hidden === true, '... and the Decide tab shows no number: hidden at nothing, while Today and For Leo keep theirs', FOUR.map(shownOf));
   scene().opts.onPick('decide'); flush();
   ok(shown() === 'leo' && TYPE.links[TYPE.links.length - 1] === 'leo', '... and a click on the Decide robot now opens For Leo, not an empty Decide tab', [shown(), TYPE.links.slice(-2)]);
   $$('[data-nav-item]').find((b) => b.dataset.nav === 'today').click(); TYPE.all();
@@ -1452,6 +1525,36 @@ const realRun = async () => {
     push('hub/sweeper', SWEEP); door('mine').click();
   }
 
+  // The tab numbers and the Hub's headline across a change of tab. The numbers' empty drawings stand in the tab row,
+  // which is never hidden: a number follows whichever tab is open. The headline and its empty drawing stand under
+  // Today: neither is drawn while another tab is open, and the headline is right when Today comes back.
+  {
+    const tab = (id) => { $$('[data-nav-item]').find((b) => b.dataset.nav === id).click(); flush(); };
+    const now = () => FOUR.map(shownOf), head = numberOf('hub-brief') || new El('p');
+    OS.lanes.answer('dec-1', null); await tick(); flush();
+    ok(same(now(), ['113', '1', '7', 'A headline.']), 'one answer taken back: the Decide tab\'s number, which was hidden, shows again: 1', now());
+    tab('decide'); push('hub/today', { ...TODAY, counts: { ...TODAY.counts, waiting: 5 }, brief: { headline: 'Another headline.' } });
+    const away = [shownOf('hub-badge'), head.textContent, head.hidden];
+    tab('today'); TYPE.all();
+    ok(same(away, ['5', 'A headline.', false]) && same(now(), ['5', '1', '7', 'Another headline.']), 'a new summary arrives while Decide is open: the Today tab\'s number follows at once (5), the headline under the hidden Today is not drawn; back on Today it is the new headline', [away, now()]);
+    tab('leo'); push('hub/today', { ...TODAY, counts: { ...TODAY.counts, waiting: 0 }, brief: {} });
+    const none = shownOf('hub-badge');
+    tab('today'); TYPE.all();
+    ok(none === null && same(now(), [null, '1', '7', null]) && head.hidden === true, 'a summary with nothing waiting and no headline arrives while For Leo is open: the Today tab\'s number goes at once; back on Today the headline is hidden', [none, now()]);
+    tab('decide'); push('hub/today', TODAY);
+    const back = shownOf('hub-badge');
+    tab('today'); TYPE.all();
+    ok(back === '113' && same(now(), ['113', '1', '7', 'A headline.']) && head.hidden === false, 'the first summary again, arrived while Decide was open: the number is back at once and, on Today again, so is the headline (what was hidden comes back)', [back, now()]);
+    // the order of the two on the page does not matter: the type draws what a drawing has just shown
+    const slot = slotOf('hub-badge'), num = numberOf('hub-badge'), both = !!slot && !!num && slot !== num;
+    if (both) slot.parentNode.insertBefore(num, slot);
+    push('hub/today', { ...TODAY, counts: { ...TODAY.counts, waiting: 0 } }); const gone = [shownOf('hub-badge'), !!num && num.hidden];
+    push('hub/today', TODAY);
+    ok(both && same(gone, [null, true]) && shownOf('hub-badge') === '113' && TYPE.thrown.length === 0, 'with the number moved before its empty drawing it still goes at nothing and comes back', [both, gone, shownOf('hub-badge')]);
+    if (both) slot.parentNode.insertBefore(slot, num);
+    OS.lanes.answer('dec-1', 'yes'); await tick(); flush();
+  }
+
   // the dashboard runs every script again when a file changes
   const n = scenes.length, DOCS = ['hub/today', 'hub/decisions', 'hub/leo', 'hub/instinct', 'hub/muse', 'hub/weekly', 'hub/pulse', U + 'hub-actions', U + 'sense-acts', U + 'decisions', U + 'leo-acts', U + 'os-done'].concat(DEPT_DOCS.map((id) => 'hub/' + id));
   ok(DOCS.length === 17 && DOCS.every((p) => live(p).length === 1), 'one live subscription to each of the seventeen documents: the twelve, and one for each department agent that writes a document', DOCS.map((p) => live(p).length));
@@ -1471,6 +1574,7 @@ const realRun = async () => {
   ok(timers.size === 1 && alive().length === 1 && scenes.length === n + 1, '... one timer and one scene', [timers.size, alive().length]);
   ok($$('[data-ck]').every((c) => c.heard('click') === 1 && c.heard('focus') === 1) && $$('[data-ck-door]').every((d) => d.heard('click') === 1) && docHeard('keydown') === 2 && winOn.length === 0, '... and still one cockpit listener of each kind, on the doors too (the document\'s two keydowns are the page\'s and the cockpit\'s)', [docHeard('keydown'), winOn.length]);
   ok(same(crew(), [['desk', 'needs', 113], ['decide', 'needs', 17], ['instinct', 'needs', 3], ['muse', 'needs', 2], ['review', 'idle', 0]]) && TYPE.thrown.length === 0, '... and the picture follows the documents as before', [crew(), TYPE.thrown.map(String)]);
+  ok(same(FOUR.map(shownOf), ['113', '10', '7', 'A headline.']), '... and so do the tab numbers and the headline; the Decide one, hidden before the scripts ran again, shows 10', FOUR.map(shownOf));
   // His reactions to Instinct, Muse and the departments' items answer later than the 2.5 seconds the first crew is
   // held (every script is run once more). His own room is then shown with what is known. A department's room waits
   // on: its lane shows no card before his reactions, so its chips and its door do not count meanwhile (they would
@@ -1488,6 +1592,12 @@ const realRun = async () => {
   ok(OS.sense.items('sweeper').length === 2 && same(waitsOn, ['—|—', 0, '', ',', 'Data Hygiene, 2 agents', 0, false]) && same(mineShown, ['135', 'is-needs,is-needs,is-needs,is-needs,is-idle'])
     && same(lateRoom(), ['Mon 06:50 · trial · 1 for you|not run yet', 1, '1', 'is-needs,is-unknown', 'Data Hygiene, 2 agents, 1 waiting on you', 2, true]) && TYPE.thrown.length === 0,
     'his reactions answer later than the 2.5 seconds: his own door then counts what is known, while Data Hygiene, open, stays empty (chips at their dash, a bare door, no card); when they answer, Sweeper has its one card and counts 1, never 2', [waitsOn, mineShown, lateRoom()]);
+  // What the drawings did to hidden in all of the above (every change was noted with the drawing that made it). A
+  // drawing may hide its own element, but it is never run again to show it: each that did has an empty drawing of its
+  // name to do that. None set hidden on an element it stands under.
+  const byDraw = HID.filter((h) => h.by), own = byDraw.filter((h) => h.el === h.by), above = byDraw.filter((h) => h.el !== h.by && h.el.contains(h.by));
+  ok(byDraw.length > 20 && own.length > 0 && above.length === 0 && own.every((h) => h.to && FOUR.includes(h.by.dataset.draw) && !!slotOf(h.by.dataset.draw)),
+    'in this whole run no drawing set hidden on an element it stands under, and the only drawings that hid their own element are tab numbers, each of which has the empty drawing of its name to show it again', [byDraw.length, own.map((h) => h.by.dataset.draw), above.map((h) => h.by.dataset.draw)]);
   ok(same([...unsupported].filter((s) => !/\s/.test(s)), []), 'no selector the stand-in document could not read was needed by this run', [...unsupported]);
 };
 

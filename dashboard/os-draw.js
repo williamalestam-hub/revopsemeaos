@@ -1090,13 +1090,30 @@ dash.draw('hub-count', (el) => {
   el.textContent = typeof v === 'number' && Number.isFinite(v) ? OS.num(v) : '—';
   el.classList.toggle('os-bad', el.dataset.field === 'critical' && typeof v === 'number' && v > 0);
 });
+// A drawing can hide itself, but it can never show itself again: under the hidden attribute the dashboard type runs
+// no drawing (its one-writer.md, "Hidden"). The three tab numbers and the Hub's headline hid themselves at nothing,
+// and so never showed. Each is still a drawing, stored hidden, and still writes its own text (text written outside a
+// drawing is a fault to the type). Beside each stands an empty drawing of the same name, a .msg-slot as hub-links is:
+// it is never under hidden while its tab row or its pane shows, and it only sets hidden on the other. When hidden
+// comes off, the type draws what stands under it, and the number or the headline is written by its own drawing.
+const showsTwin = (el, name, on) => {
+  if (!el.classList.contains('msg-slot')) return false;
+  document.querySelectorAll('[data-draw="' + name + '"]').forEach((x) => { if (x !== el) x.hidden = !on; });
+  return true;
+};
+// a tab's number: n when something waits, nothing at zero. A badge is shown by its class (os.css: .app-badge:not(.is-on)).
+// (Drawn where no empty drawing stands beside it, it still hides itself at zero.)
+const tabBadge = (el, name, n) => {
+  if (showsTwin(el, name, !!n)) return;
+  el.textContent = n ? OS.num(n) : '';
+  el.classList.toggle('is-on', !!n);
+  el.hidden = !n;
+};
 // the Today tab's badge: how many items wait for you
 dash.draw('hub-badge', (el) => {
   const c = OS.hub.counts();
   const acted = OS.hub.top().filter((it) => OS.hub.acted(it.id) && (it.status === 'new' || it.status === 'waiting')).length;
-  const n = c && typeof c.waiting === 'number' && c.waiting - acted > 0 ? c.waiting - acted : 0;
-  el.textContent = n ? OS.num(n) : '';
-  el.hidden = !n;
+  tabBadge(el, 'hub-badge', c && typeof c.waiting === 'number' && c.waiting - acted > 0 ? c.waiting - acted : 0);
 });
 // Each item opens in place: why it matters, the prepared draft (editable here), and what can be done from this tab.
 // Sending goes through Claude beside the page with the exact text and recipient, and Claude waits for William's OK
@@ -1194,11 +1211,11 @@ dash.draw('hub-top', (ul) => {
     return li;
   }));
 });
+// the brief's headline: shown, and hidden when there is none, by the empty drawing beside it (see showsTwin)
 dash.draw('hub-brief', (el) => {
   const d = OS.hub.doc();
   const h = d && d.brief && typeof d.brief.headline === 'string' ? d.brief.headline.trim() : '';
-  el.textContent = h;
-  el.hidden = !h;
+  if (!showsTwin(el, 'hub-brief', !!h)) el.textContent = h;
 });
 // The worker's last run: red when it failed; amber for anything else that is not ok (partial, a run still marked
 // running, an unknown word), so a stuck run never looks healthy. Whether a run is missing is the schedule's to say, not
@@ -1326,7 +1343,7 @@ const decCard = (d, done) => {
 };
 dash.draw('dec-list', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).map((d) => decCard(d, null))); });
 dash.draw('dec-done', (ul) => { ul.replaceChildren(...OS.lanes.items('decisions').filter((d) => OS.lanes.answered(d.id)).map((d) => decCard(d, OS.lanes.answered(d.id)))); });
-dash.draw('dec-badge', (el) => { const n = OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length; el.textContent = n ? OS.num(n) : ''; el.hidden = !n; });
+dash.draw('dec-badge', (el) => tabBadge(el, 'dec-badge', OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length));
 dash.draw('dec-note', () => {
   const s = OS.lanes.state('decisions'); const open = OS.lanes.items('decisions').filter((d) => !OS.lanes.answered(d.id)).length;
   pickNote('dec', noteOf(s, s === 'missing' || (s === 'ok' && !open)));
@@ -1380,7 +1397,7 @@ dash.draw('leo-list', (ul) => {
     return li;
   }));
 });
-dash.draw('leo-badge', (el) => { const n = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length; el.textContent = n ? OS.num(n) : ''; el.hidden = !n; });
+dash.draw('leo-badge', (el) => tabBadge(el, 'leo-badge', OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length));
 dash.draw('leo-pack-n', (el) => { el.textContent = OS.num(OS.lanes.packSize()); });
 dash.draw('leo-note', () => {
   const s = OS.lanes.state('leo'); const open = OS.lanes.items('leo').filter((x) => !OS.lanes.leoActed(x.id)).length;

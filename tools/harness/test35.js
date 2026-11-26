@@ -7,6 +7,10 @@
 // The fixed sentences and the two kinds of Hub link (Open the Hub, Chat) are stored in the HTML, not drawn: one empty
 // drawing beside each group (hub-note, hub-links) only sets hidden on them, so the test hands the drawings the stored
 // elements through document.querySelectorAll and reads their hidden.
+// The Today tab's number and the brief's headline are drawings stored hidden. The dashboard type runs no drawing under
+// the hidden attribute (its one-writer.md, "Hidden"), so neither can show itself: an empty drawing of the same name
+// beside each takes hidden off it, and the type then draws it. The test keeps that rule (typeDraws): the stored
+// elements are drawn as the type would draw them, and a drawing that is hidden is not run.
 const { Node } = require('./fakedom.js');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
@@ -42,7 +46,7 @@ for (const f of ['os-core.js', 'os-calcs.js', 'os-calcs-leads.js', 'os-calcs-act
 let fails = 0, passes = 0; const ok = (c, l, x) => { if (!c) fails++; else passes++; console.log(c ? 'ok  ' : 'FAIL', l, c ? '' : (x === undefined ? '' : JSON.stringify(x))); };
 const walk = (n, f) => { f(n); for (const c of n.children || []) walk(c, f); };
 const nodes = (el, pick) => { const out = []; walk(el, (n) => { if (pick(n)) out.push(n); }); return out; };
-const draw = (name, tag = 'div', ds = {}) => { const el = new Node(tag); el.dataset.draw = name; Object.assign(el.dataset, ds); draws[name](el); return el; };
+const draw = (name, tag = 'div', ds = {}) => { if (/^hub-(badge|brief)$/.test(name)) throw new Error(name + ' is stored hidden: draw it as the type does (typeDraws)'); const el = new Node(tag); el.dataset.draw = name; Object.assign(el.dataset, ds); draws[name](el); return el; };
 const count = (field) => draw('hub-count', 'b', { field });
 // the Hub's three sentences after its one drawing ran: which of them show
 const notes = () => { draw('hub-note', 'span'); const shown = (k) => PAGE['[data-note-for]'].some((p) => p.dataset.noteFor === 'hub' && p.dataset.note === k && !p.hidden); return { empty: shown('empty'), nodb: shown('nodb'), error: shown('error') }; };
@@ -56,6 +60,25 @@ const html = fs.readFileSync(D + 'index.html', 'utf8');
 const core = fs.readFileSync(D + 'os-core.js', 'utf8');
 for (const m of html.matchAll(/<p class="os-empty" data-note-for="([a-z]+)" data-note="([a-z]+)" hidden>/g)) { const p = new Node('p'); p.dataset.noteFor = m[1]; p.dataset.note = m[2]; p.hidden = true; PAGE['[data-note-for]'].push(p); }
 for (const m of html.matchAll(/<a class="[^"]*" data-hub-link href="([^"]+)"[^>]*hidden>/g)) { const a = new Node('a'); a.setAttribute('href', m[1]); a.hidden = true; PAGE['[data-hub-link]'].push(a); }
+// The two drawings that are stored hidden (hub-badge, hub-brief), each with the empty drawing of its name beside it, as
+// the page stores them. typeDraws(name) is the type's pass over the elements of one name: an element under hidden is
+// not drawn; one whose hidden came off during the pass is drawn in the same pass. It returns the number or headline
+// (not the empty drawing). draw() refuses these names: on an element of its own making it would run a drawing the
+// type never runs.
+const STORED = {}, RAN = {};
+for (const m of html.matchAll(/<(span|p) class="([^"]*)" data-draw="(hub-badge|hub-brief)"( hidden)?><\/\1>/g)) {
+  const el = new Node(m[1]); el.className = m[2]; el.dataset.draw = m[3]; el.hidden = !!m[4];
+  (STORED[m[3]] = STORED[m[3]] || []).push(el); (PAGE['[data-draw="' + m[3] + '"]'] = PAGE['[data-draw="' + m[3] + '"]'] || []).push(el);
+}
+const isSlot = (el) => el.classList.contains('msg-slot');
+const typeDraws = (name, els = STORED[name] || []) => {
+  const drawn = new Set();
+  for (let more = true; more;) { more = false; for (const el of els) if (!el.hidden && !drawn.has(el)) { draws[name](el); drawn.add(el); RAN[name] = (RAN[name] || 0) + (isSlot(el) ? 0 : 1); more = true; } }
+  return els.filter((el) => !isSlot(el));
+};
+const badge = () => typeDraws('hub-badge')[0], brief = () => typeDraws('hub-brief')[0];
+// a badge is on show when it is not hidden and carries the class its style asks for (os.css: .app-badge:not(.is-on))
+const badgeShows = (b) => !b.hidden && b.classList.contains('is-on');
 // the Hub's address is fixed in the page's links; a document that names any other address shows none of them
 const HUB_URL = (PAGE['[data-hub-link]'].map((a) => a.getAttribute('href')).find((h) => !/#/.test(h)) || '');
 const OTHER_HUB = 'https://claude.ai/artifact/hubTestOnly123';
@@ -96,8 +119,15 @@ const home = html.slice(html.indexOf('data-page="home"'), html.indexOf('data-pag
   ok(/<a class="btn btn-primary" data-hub-link href="https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+" target="_blank" rel="noopener" hidden>Open the Hub</.test(today) && (today.match(/>Open the Hub</g) || []).length === 1, 'one Open the Hub link with the Hub\'s address fixed in the HTML, a new tab, hidden until hub/today names that Hub');
   ok(!/data-draw="hub-(open|chat)"/.test(html) && (html.match(/data-draw="hub-links"/g) || []).length === 1 && /<span class="msg-slot" data-draw="hub-links"><\/span>/.test(html.slice(0, html.indexOf('<nav class="app-tabs"'))), 'the links are not drawings: one empty drawing in the header (never under a hidden tab) shows or hides them');
   ok(/^https:\/\/claude\.ai\/artifact\/[A-Za-z0-9]+$/.test(HUB_URL) && PAGE['[data-hub-link]'].length === 2 && PAGE['[data-hub-link]'].every((a) => a.getAttribute('href').split('#')[0] === HUB_URL), 'the two Hub links carry one claude.ai address', PAGE['[data-hub-link]'].map((a) => a.getAttribute('href')));
-  ok(/<ul class="ilist" data-draw="hub-top"><\/ul>/.test(today) && /data-draw="hub-brief" hidden/.test(today) && /data-draw="hub-run"/.test(today), 'the top items list, the brief headline and the last run have their slots');
-  ok(/data-draw="hub-badge" hidden/.test(html.slice(0, html.indexOf('data-page="today"'))), 'the Today tab carries a badge slot');
+  ok(/<ul class="ilist" data-draw="hub-top"><\/ul>/.test(today) && /<\/div>\n\s*<span class="msg-slot" data-draw="hub-brief"><\/span><p class="hub-brief" data-draw="hub-brief" hidden><\/p>\n\s*<ul class="ilist" data-draw="hub-top"><\/ul>/.test(today) && (html.match(/data-draw="hub-brief"/g) || []).length === 2 && /data-draw="hub-run"/.test(today),
+    'the top items list, the brief headline and the last run have their slots; the headline is stored hidden and empty, right after the empty drawing of its name, between the tiles and the list');
+  ok(/<button class="app-tab" type="button" data-nav="today" data-nav-item id="nav-today" aria-current="page">\s*<svg [^\n]*<\/svg>\s*<span>Today<\/span>\s*<span class="msg-slot" data-draw="hub-badge"><\/span><span class="app-badge info" data-draw="hub-badge" hidden><\/span>\s*<\/button>/.test(html.slice(0, html.indexOf('data-page="today"'))) && (html.match(/data-draw="hub-badge"/g) || []).length === 2,
+    'the Today tab carries a badge slot: stored hidden and empty, right after the empty drawing of its name, in the tab\'s button');
+  ok(STORED['hub-badge'].length === 2 && STORED['hub-brief'].length === 2 && ['hub-badge', 'hub-brief'].every((n) => isSlot(STORED[n][0]) && !STORED[n][0].hidden && !isSlot(STORED[n][1]) && STORED[n][1].hidden === true),
+    'of each of the two names the page stores two elements: the empty drawing, not hidden, and then the number or the headline, hidden');
+  const pageCss = fs.readFileSync(D + 'os.css', 'utf8');
+  ok(/\.app-badge:not\(\.is-on\)\s*\{\s*display:\s*none;?\s*\}/.test(pageCss) && /\.msg-slot\s*\{\s*display:\s*none;?\s*\}/.test(pageCss) && /\.app \[hidden\]\s*\{\s*display:\s*none !important;?\s*\}/.test(pageCss),
+    'os.css: a tab\'s number shows only with the class is-on, an empty drawing takes no room, and what is hidden is not displayed');
   ok(!/data-draw="hub-[a-z]+"[^>]*data-source=/.test(today), 'no Hub element names a dataset: the Hub block reads the database only');
   const hubJs = fs.readFileSync(D + 'os-draw.js', 'utf8').slice(fs.readFileSync(D + 'os-draw.js', 'utf8').indexOf("TODAY: THE HUB'S SUMMARY"), fs.readFileSync(D + 'os-draw.js', 'utf8').indexOf('HOME HERO'));
   const hubCore = core.slice(core.indexOf("The Hub's summary (Today tab)"), core.indexOf('App shell'));
@@ -109,7 +139,8 @@ ok(DB.subs.filter((x) => x.p === 'hub/today').length === 1 && DB.subs[0].p === '
 ok(OS.hub.state() === 'loading', 'before the first snapshot the state is loading', OS.hub.state());
 ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'loading: the four tiles show —', counts());
 ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: false }), 'loading: no sentence shows yet', notes());
-ok(openLink().hidden === true && draw('hub-run', 'p').textContent === '' && draw('hub-badge', 'span').hidden === true, 'loading: no Open button, no run line, no badge');
+ok(openLink().hidden === true && draw('hub-run', 'p').textContent === '' && badge().hidden === true, 'loading: no Open button, no run line, no badge');
+ok(brief().hidden === true && !RAN['hub-badge'] && !RAN['hub-brief'] && badge().textContent === '' && !badgeShows(badge()), 'loading: the number and the headline stay hidden as stored, and their own drawings are not run (the type runs none under hidden)', RAN);
 const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
 
 // ---- 4. the empty state: the document is missing ----
@@ -123,7 +154,7 @@ const push = (data) => DB.subs[0].next(snapOf('hub/today', data));
   ok(JSON.stringify(chatShown()) === '[false]', 'missing: Chat hidden (no URL known)', chatShown());
   const run = draw('hub-run', 'p');
   ok(run.textContent === 'Worker: has not run yet' && !run.classList.contains('os-bad'), 'missing: the run line says the worker has not run yet', run.textContent);
-  ok(draw('hub-brief', 'p').hidden === true && draw('hub-badge', 'span').hidden === true, 'missing: no headline, no badge');
+  ok(brief().hidden === true && badge().hidden === true, 'missing: no headline, no badge');
   // a document seeded with the Hub's URL only (before the first run): still the empty state, now with the Open button
   push({ hubUrl: HUB_URL });
   ok(OS.hub.state() === 'missing' && notes().empty === true, 'a document with only hubUrl: still "The Hub has not run yet."', [OS.hub.state(), notes()]);
@@ -171,10 +202,29 @@ const DOC = {
   ok(a.hidden === false && a.getAttribute('href') === HUB_URL, 'Open the Hub: shown, its href is the hubUrl the document names', [a.hidden, a.getAttribute('href')]);
   const run = draw('hub-run', 'p');
   ok(run.classList.contains('os-bad') && /^Worker: last run 09:00 · failed$/.test(run.textContent), 'last run failed an hour ago: red, with its time and status', [run.className, run.textContent]);
-  const brief = draw('hub-brief', 'p');
-  ok(brief.hidden === false && brief.textContent === DOC.brief.headline, 'the brief headline shows', [brief.hidden, brief.textContent]);
-  const badge = draw('hub-badge', 'span');
-  ok(badge.hidden === false && badge.textContent === '3', 'the Today tab badge shows how many need you', [badge.hidden, badge.textContent]);
+  const head = brief();
+  ok(head.hidden === false && head.textContent === DOC.brief.headline, 'the brief headline shows', [head.hidden, head.textContent]);
+  const tab = badge();
+  ok(tab.hidden === false && tab.textContent === '3', 'the Today tab badge shows how many need you', [tab.hidden, tab.textContent]);
+  ok(badgeShows(tab) && RAN['hub-badge'] === 1 && RAN['hub-brief'] === 1 && STORED['hub-badge'][0].textContent === '' && STORED['hub-brief'][0].textContent === '',
+    'each was shown by the empty drawing beside it and then drawn once, by the type\'s rule: the number carries the class that shows a badge, and the empty drawings stay empty', [tab.className, RAN]);
+  // the fault this guards against: without the empty drawing beside it (as the page was stored before), a drawing that is
+  // stored hidden is never run, so nothing ever shows
+  const alone = (name, tag, cls) => { const el = new Node(tag); el.className = cls; el.dataset.draw = name; el.hidden = true; typeDraws(name, [el]); return [el.hidden, el.textContent]; };
+  ok(JSON.stringify([alone('hub-badge', 'span', 'app-badge info'), alone('hub-brief', 'p', 'hub-brief')]) === JSON.stringify([[true, ''], [true, '']]),
+    'a number or a headline that stands alone, stored hidden with no empty drawing beside it, never shows: its drawing is not run under hidden', [alone('hub-badge', 'span', 'app-badge info'), alone('hub-brief', 'p', 'hub-brief')]);
+  // the number follows the document, down to nothing and back
+  const tabNow = () => { const b = badge(); return [badgeShows(b), b.hidden ? '' : b.textContent]; };
+  const seen = [5, 0, 12, -3, 'many', 1234].map((waiting) => { push({ ...DOC, counts: { ...DOC.counts, waiting } }); return tabNow(); });
+  ok(JSON.stringify(seen) === JSON.stringify([[true, '5'], [false, ''], [true, '12'], [false, ''], [false, ''], [true, '1,234']]),
+    'the tab\'s number follows the count: 5; hidden at zero; back at 12 (a number that was hidden shows again); nothing for a count below zero or one that is no number', seen);
+  // the headline follows the document, to nothing and back
+  const headNow = () => { const h = brief(); return h.hidden ? null : h.textContent; };
+  const said = [{ headline: 'A second headline.' }, { headline: '' }, { headline: '  Back again.  ' }, null, { headline: 7 }, { headline: 'Last one.' }].map((b) => { push({ ...DOC, brief: b }); return headNow(); });
+  ok(JSON.stringify(said) === JSON.stringify(['A second headline.', null, 'Back again.', null, null, 'Last one.']),
+    'the headline follows the brief: a new one; hidden when there is none; back when there is one again (trimmed); hidden for a brief that is missing or whose headline is no text', said);
+  push(DOC);
+  ok(JSON.stringify([tabNow(), headNow()]) === JSON.stringify([[true, '3'], DOC.brief.headline]), 'with the first document back the tab reads 3 and the headline is the first one again', [tabNow(), headNow()]);
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: false }), 'ok: no sentence shows', notes());
 }
 
@@ -247,7 +297,7 @@ const DOC = {
   push({ ...DOC, top: 'nope', counts: { waiting: 'many', critical: null }, brief: { headline: '   ' }, hubUrl: 'javascript:alert(1)' });
   ok(nodes(draw('hub-top', 'ul'), (n) => n.tagName === 'LI').length === 0, 'top not a list: no rows, no crash');
   ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']), 'counts that are not numbers show —', counts());
-  ok(draw('hub-brief', 'p').hidden === true, 'a blank headline hides the line');
+  ok(brief().hidden === true, 'a blank headline hides the line');
   ok(openLink().hidden === true && openLink().getAttribute('href') === HUB_URL, 'a hubUrl that is not the Hub\'s address hides Open the Hub and never reaches its href');
   ok(JSON.stringify(chatShown()) === '[false]' && links().chat.every((c) => c.getAttribute('href') === HUB_URL + '#chat'), 'Chat follows no hubUrl from the document either');
   push({ ...DOC, hubUrl: 'https://example.com/claude.ai/' });
@@ -273,7 +323,8 @@ const DOC = {
   DB.subs[0].error({ code: 'unavailable', message: 'bridge gone' });
   ok(OS.hub.state() === 'error', 'an error on the subscription: state error', OS.hub.state());
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: true }), 'error: only the "couldn\'t be read" sentence shows', notes());
-  ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']) && openLink().hidden === true && draw('hub-badge', 'span').hidden === true, 'error: tiles —, no Open button, no badge');
+  ok(JSON.stringify(counts()) === JSON.stringify(['—', '—', '—', '—']) && openLink().hidden === true && badge().hidden === true, 'error: tiles —, no Open button, no badge');
+  ok(!badgeShows(badge()) && brief().hidden === true, 'error: the tab\'s number and the headline, which showed a moment ago, are hidden again');
   ok(DB.subs.filter((x) => x.p === 'hub/today').length === 1, 'no second subscription to hub/today was opened along the way', DB.subs.map((x) => x.p));
 }
 
