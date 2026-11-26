@@ -105,15 +105,23 @@ The OS's own page can't run Claude (its dashboard type has no in-page model acce
 `#chat`. Both links carry the Hub's address in `index.html` and show only while `hub/today` names that same address
 (compared without `?…`, `#…` and a trailing slash).
 **Instinct and Muse** sit at the top of Today, in two columns. The scheduled task *RevOps Instinct, Muse and done-check*
-(`trig_01XkowHJQs8VXTURGsuve4Bp`, bound to its own session; instructions in `hub/sense-worker.md`) runs weekdays every two
-hours from 08:07 to 16:07 Stockholm.
-- *Done-check* (every run): for each open task or ask in the Hub, it looks for clear evidence you have done it since it was
-  created (your reply in the thread, a sent email, the message posted, the record changed). Clear evidence: the item is
-  set to done with that evidence in its log, and Today drops it and moves it into Done today. Unclear: it stays, and if it
-  looks likely, Instinct shows "Looks done: ..." so you can press Done yourself. It never reopens or changes a closed item.
-- *Instinct* (every run): up to 6 signals worth acting on now (deals slipping out of the quarter, losses, pipegen pace,
-  wins), each with its change, the evidence and Salesforce links. It compares with its last snapshot
-  (`hub/instinct-state`) so it only speaks when something moved.
+(`trig_01JXaAP7KF4ii6cgDz8KH1Jq`, bound to its own session) runs weekdays every two hours from 08:07 to 16:07 Stockholm. Each run is handed
+to a new subagent with no memory of earlier runs, which pulls this repo and follows `hub/sense-worker.md` from beginning
+to end. **That file is the running instruction**: a commit that changes it changes the job at its next run, so a change
+to it is shown to William first.
+- *Done-check* (every run): the open items at the top of Today (at most 12), and in the first run of the day also every
+  task or ask created in the last seven days. It looks for clear evidence that you have dealt with it: your reply as the
+  last word in the thread, a mail you sent, the message posted where the draft was to go. Clear evidence: the item is
+  set to done with that evidence in its log, and Today drops it and moves it into Done today. Unclear: it stays, and if
+  it looks likely, Instinct shows "Looks done: ..." so you can press Done yourself. An item you have already pressed on
+  Today is left alone. It never reopens or changes a closed item.
+- *Instinct* (every run): the same eleven Salesforce questions each time, counted from the start of the last working day
+  in Stockholm (never with a Salesforce date word: those follow the connector user's time zone). The signals: order-form
+  ARR cut by a quarter or more, close dates that moved, asks from your key people that are over a day old, Commit or
+  Likely deals with no activity for 14 days, deals lost, stages that went back, and wins and pipegen against last month.
+  A signal's id changes only when there is something new to see, so a Got it holds until then.
+- Each run writes its record to `hub/instinct-state`: when it ran, what it read, checked and counted, the signals it
+  wrote and any error. Nothing reads it but you and whoever looks into a run.
 - *Muse* (first run of the day): 2 or 3 data-backed ideas, logged in `hub/muse-log` so it doesn't repeat itself.
 - Each card can be sent on through Claude (on your OK), sent to Leo, or marked Got it / Keep / Not useful (kept in your
   private `data/users/<you>/sense-acts`). `tools/harness/test38.js` covers the panel.
