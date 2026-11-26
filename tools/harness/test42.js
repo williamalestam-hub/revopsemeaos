@@ -60,6 +60,11 @@ let noInk = false; // a browser that gives a canvas no 2D context
 // every change of the hidden attribute on an element, and the drawing that was running when it was made (null: none
 // was; a handler, a timer, a snapshot, or this test)
 const HID = []; let DRAWING = null;
+// every write of words or elements that a drawing made outside its own element, on an element that stands on the page.
+// The type calls it a stray write: a fault, after which it no longer lets the page be edited by hand. (An element a
+// drawing is still building is not on the page; hidden, class, style and aria-* may be set anywhere.)
+const STRAY = [];
+const noteWrite = (el) => { if (DRAWING && el instanceof El && el !== DRAWING && !DRAWING.contains(el) && root.contains(el)) STRAY.push({ by: DRAWING, on: el }); };
 class Tx { constructor(v) { this.nodeType = 3; this.nodeValue = String(v); this.parentNode = null; } get textContent() { return this.nodeValue; } }
 class El {
   constructor(tag) {
@@ -82,15 +87,15 @@ class El {
   get textContent() { return this.childNodes.map((n) => n.textContent).join(''); }
   set textContent(v) { this.replaceChildren(); if (String(v) !== '') this.append(String(v)); }
   get innerHTML() { throw new Error('innerHTML was read'); } set innerHTML(v) { throw new Error('innerHTML was written'); }
-  append(...nodes) { for (const x of nodes) { const n = x instanceof El || x instanceof Tx ? x : new Tx(x); if (n.parentNode) n.parentNode.childNodes.splice(n.parentNode.childNodes.indexOf(n), 1); n.parentNode = this; this.childNodes.push(n); } }
+  append(...nodes) { noteWrite(this); for (const x of nodes) { const n = x instanceof El || x instanceof Tx ? x : new Tx(x); if (n.parentNode) n.parentNode.childNodes.splice(n.parentNode.childNodes.indexOf(n), 1); n.parentNode = this; this.childNodes.push(n); } }
   appendChild(n) { this.append(n); return n; }
   // (as in a browser, an element that is taken out of its parent loses the keyboard: so does one that is taken out and put back)
   _left() { this.parentNode = null; if (document.activeElement instanceof El && this.contains(document.activeElement)) document.activeElement = null; }
-  remove() { if (this.parentNode) { const i = this.parentNode.childNodes.indexOf(this); if (i >= 0) this.parentNode.childNodes.splice(i, 1); this._left(); } }
+  remove() { if (this.parentNode) { noteWrite(this.parentNode); const i = this.parentNode.childNodes.indexOf(this); if (i >= 0) this.parentNode.childNodes.splice(i, 1); this._left(); } }
   // one child taken out, one put in before another (a node that has a parent is moved), as the lane's drawing does
   removeChild(n) { if (!n || n.parentNode !== this) throw new Error('removeChild: not a child'); n.remove(); return n; }
-  insertBefore(n, ref) { if (ref != null && ref.parentNode !== this) throw new Error('insertBefore: the reference is not a child'); n.remove(); n.parentNode = this; this.childNodes.splice(ref == null ? this.childNodes.length : this.childNodes.indexOf(ref), 0, n); return n; }
-  replaceChildren(...nodes) { for (const c of this.childNodes) { if (c instanceof El) c._left(); else c.parentNode = null; } this.childNodes = []; this.append(...nodes.filter((n) => n != null)); }
+  insertBefore(n, ref) { if (ref != null && ref.parentNode !== this) throw new Error('insertBefore: the reference is not a child'); noteWrite(this); n.remove(); n.parentNode = this; this.childNodes.splice(ref == null ? this.childNodes.length : this.childNodes.indexOf(ref), 0, n); return n; }
+  replaceChildren(...nodes) { noteWrite(this); for (const c of this.childNodes) { if (c instanceof El) c._left(); else c.parentNode = null; } this.childNodes = []; this.append(...nodes.filter((n) => n != null)); }
   setAttribute(k, v) { this.attrs.set(k, String(v)); } getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; }
   removeAttribute(k) { this.attrs.delete(k); } hasAttribute(k) { return this.attrs.has(k); }
   matches(sel) { return parseSel(sel).some((t) => t(this)); }
@@ -1598,6 +1603,8 @@ const realRun = async () => {
   const byDraw = HID.filter((h) => h.by), own = byDraw.filter((h) => h.el === h.by), above = byDraw.filter((h) => h.el !== h.by && h.el.contains(h.by));
   ok(byDraw.length > 20 && own.length > 0 && above.length === 0 && own.every((h) => h.to && FOUR.includes(h.by.dataset.draw) && !!slotOf(h.by.dataset.draw)),
     'in this whole run no drawing set hidden on an element it stands under, and the only drawings that hid their own element are tab numbers, each of which has the empty drawing of its name to show it again', [byDraw.length, own.map((h) => h.by.dataset.draw), above.map((h) => h.by.dataset.draw)]);
+  ok(byDraw.length > 20 && STRAY.length === 0, 'in this whole run no drawing wrote words or elements outside its own element (the type counts that as a fault and then no longer lets the page be edited by hand): a tab\'s number and the headline are written by their own drawings, not by the empty ones that show them',
+    STRAY.slice(0, 6).map((w) => w.by.dataset.draw + ' wrote on ' + w.on.tagName + '.' + w.on.className));
   ok(same([...unsupported].filter((s) => !/\s/.test(s)), []), 'no selector the stand-in document could not read was needed by this run', [...unsupported]);
 };
 
