@@ -511,7 +511,9 @@
   .lane-sub { font-size: 1em; margin: var(--cds-pad-lg) 0 var(--cds-pad-sm); color: var(--color-fg-muted); }
   .leo-rec b, .leo-ask b { font-weight: var(--cds-font-weight-medium); }
   .hub-acts .btn.on { border-color: var(--color-fg-muted); }
-  .sense { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: var(--cds-pad-lg); padding: var(--cds-pad-md) var(--cds-pad-lg); margin-bottom: var(--cds-pad-lg); }
+  /* two columns where each has twenty rem, else one; a column is never wider than the pane, so on a narrow phone the
+     cards fit it whatever the font size (with a plain 20rem they stood out of the pane and the page scrolled sideways) */
+  .sense { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--cds-pad-lg); padding: var(--cds-pad-md) var(--cds-pad-lg); margin-bottom: var(--cds-pad-lg); }
   .sense-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .sense-col > .pane-note { margin: 0; }
   .sense-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--color-warn); align-self: center; }
