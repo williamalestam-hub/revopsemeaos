@@ -15,10 +15,11 @@ Every check is one query of this form (the row with no role is the EMEA total):
 BASE = `IsClosed = false AND RecordType.Name IN ('New Business','Upsell') AND Owner.UserRole.Name IN ('AE-EMEA-FR','AE-EMEA-DACH','AE-EMEA-SOUTH','AE-EMEA-CEE','AE-EMEA-BENELUX','AE-EMEA-MEA','AE-EMEA-IBERIA-LATAM','AE-EMEA-NORDICS','SMB-EMEA','EM-EMEA','EM-EMEA-LATAM','BDR-EMEA','DIR-SALES-EMEA','MGR-SALES-EMEA','VP-SALES-EMEA','DIR-EM-EMEA','DIR-BDR-EMEA')`
 
 Teams: add the roles of a team together. AE-EMEA-FR is France; AE-EMEA-DACH is DACH; AE-EMEA-SOUTH is Southern Europe; AE-EMEA-IBERIA-LATAM is Iberia & LATAM; AE-EMEA-BENELUX is Benelux; AE-EMEA-NORDICS is Nordics; AE-EMEA-CEE is CEE; AE-EMEA-MEA is MEA; SMB-EMEA is SMB; EM-EMEA, EM-EMEA-LATAM and DIR-EM-EMEA are Engagement; BDR-EMEA and DIR-BDR-EMEA are BDR; DIR-SALES-EMEA, MGR-SALES-EMEA and VP-SALES-EMEA are Leadership.
-No number about one person: a team's number is written only when at least 3 owners stand behind it (add `owners` over the team's roles). A team with fewer goes into the one line "Smaller teams". The EMEA total is always written. Amounts are written as $1.2M or $340K.
+No number about one person: a team's number is written only when at least 3 owners stand behind it (add `owners` over the team's roles). For a team's flags over all seven checks, the owners behind the number are the most that any one check has. A team with fewer goes into the one line "Smaller teams". The EMEA total is always written. Amounts are written as $1.2M or $340K.
 
 ## 1. Count (every run)
 
+Every run counts afresh in Salesforce: never reuse a number an earlier run in this conversation counted.
 The seven checks, `id` Label: RULE.
 - `stage0-met` Stage 0 after a recorded meeting: `StageName LIKE '0%' AND Id IN (SELECT Gong__Related_Entity_ID__c FROM Gong__Related_Opportunity__c WHERE Gong__Gong_Interaction__r.Gong__Scope__c = 'External' AND Gong__Gong_Interaction__r.Gong__Call_Start__c < TODAY)`
 - `pilot-end` Pilot end date passed, still in stage 3: `Pilot_End_Date__c < TODAY AND StageName LIKE '3%'`
@@ -52,10 +53,11 @@ An `ask` run:
 4. `sw-<week>-rules`, only while TRIAL is yes: level watch. Title "Four rules to set before Sweeper goes live". Why: "Your answers decide what counts. Until then these are counted but not flagged." Evidence: "No next step: no date <no-step-date>, date passed <step-late>, neither text nor date <no-step>"; "No activity in 10 days: <quiet-10> (can be a mail-sync gap: a deal to check, not a fault)"; "Pilot end passed: <pilot-end> today; give it days of grace?"; "Left out: renewals, and EMEA deals owned outside the EMEA sales roles".
 Then `set` `hub/sweeper-state` to `{ week, at: now, checks: { <id>: { n, arr } } for the seven checks and the notes, teams: { <team>: flags } }`.
 
-A `progress` run (when the state's week is this week; otherwise make it an `ask` run and say so in `errors`):
+A `progress` run (when the state's week is this week; otherwise make it an `ask` run and say so in one line of `errors`, which does not change the status):
+ASKDAY is the Stockholm weekday of the state's `at` (`TZ=Europe/Stockholm date -d <state.at> +%A`): a Monday, unless that week's ask ran on another day. "Then" is the state's number.
 For each of the seven checks also count the deals created since the ask: the same query with `AND CreatedDate >= <state.at>` (a datetime literal, no quotes).
-1. `sw-<week>-progress`, level good when the total of the seven is lower than on Monday, else watch. Title "<total now> flags, <total on Monday> on Monday". Why: "A deal leaves the list when it is fixed, closed or moved to another owner, or when its date is pushed: leaving is not the same as fixed." Evidence: one row per check: value = "<Monday n> then <n now>, <created since> on new deals". Action: `{ label: 'Post where we stand', sends: [{ type: 'slack', body }] }`: the same voice; Monday's numbers against now per check, the flags by team now, and thanks where the number fell. Never the word "fixed" for a difference of two counts.
-2. `sw-<week>-teams`, level watch. Title "Flags by team, Monday and now". Evidence: the 7 teams with the most flags now: value = "<Monday> then <now>", and one row "All other teams".
+1. `sw-<week>-progress`, level good when the total of the seven is lower than then, else watch. Title "<total now> flags, <total then> on <ASKDAY>". Why: "A deal leaves the list when it is fixed, closed or moved to another owner, or when its date is pushed: leaving is not the same as fixed." Evidence: one row per check: value = "<n then> then <n now>, <created since> on new deals". Action: `{ label: 'Post where we stand', sends: [{ type: 'slack', body }] }`: the same voice; the numbers of <ASKDAY> against now per check, the flags by team now, and thanks where the number fell. Never the word "fixed" for a difference of two counts.
+2. `sw-<week>-progress-teams`, level watch. Title "Flags by team, <ASKDAY> and now". Evidence: the teams the state names (not "Smaller teams") that may still be written now, at most 7, most flags now first: value = "<then> then <now>"; and one row "All other teams": what is left of the total then and of the total now.
 The state is left as the ask run wrote it.
 
 Then `set` `hub/sweeper` (if_version when it exists) to `{ at: now, status: ok|partial|error, trial: true|false, run: 'ask'|'progress', week, scope: 'All EMEA · New Business and Upsell · owners in EMEA sales roles', total: <the sum of the seven checks>, items, errors: [string] }`.
