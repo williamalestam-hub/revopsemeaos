@@ -1311,7 +1311,8 @@ const realRun = async () => {
     ok(after.length === 3 && same(after.map(topOf), [['Sweeper', '06:50 · All EMEA · New Business and Upsell'], ['Sweeper', '06:50'], ['Sweeper', '06:50']]) && !btn(after[0], 'Post the ask via Claude') && /Open the Claude chat beside this page to send from here\./.test(after[0].textContent) && lineOf('sweeper') === '06:50 · 3 for you' && same(crew()[0], ['sweeper', 'needs', 3]),
       'off trial, a new run with six items: the first four count and show (one of them handled: three cards, "3 for you"), no Trial mark, the scope on the first card only, and the usual note where Claude is not beside the page', [after.length, lineOf('sweeper'), after.map(topOf)]);
     // the lane on the real page, drawn through the page's own dash.draw: a card that stays is the very same element
-    { const SAID = 'From Salesforce, counted Monday 06:50 Stockholm', off = after.length ? after[0].querySelectorAll('details') : [];
+    // (with three cards, as the check above holds; with another number these checks are not run, and that one is red)
+    if (after.length === 3) { const SAID = 'From Salesforce, counted Monday 06:50 Stockholm', off = after[0].querySelectorAll('details');
       ok(same(after.map(fromOf), [[SAID], [], []]) && off.length === 1 && !off[0].hasAttribute('open') && off[0].querySelectorAll('pre')[0].textContent === 'Team, this week\'s ask.' && after.slice(1).every((x) => x.querySelectorAll('details').length === 0),
         'off trial the first card says where it is from and lets him read the draft (closed); the second, whose item names the same source, does not say it again; the cards with nothing to send have no draft', after.map(fromOf));
       if (off[0]) off[0].setAttribute('open', ''); // he opens the draft on the first card, and tabs to a button on the second

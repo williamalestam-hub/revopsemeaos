@@ -300,9 +300,9 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
       await fresh(); }
     // every message of the action, each with what it is, to whom, and its subject; one without a body is no message
     const MAIL = { type: 'email', to: [{ name: 'Karl Stein', email: 'karl@example.com' }], subject: 'Your roll-up for Friday', body: 'Karl,\n  could you send your roll-up today?' };
-    const DM = { type: 'slack', to: [{ name: 'Karl Stein', slackId: 'U0KARL1234' }, { name: 'Ada Berg' }], channelName: 'emea-revops', body: 'Hello both.' };
+    const DM = { type: 'slack', to: [{ name: 'Karl Stein', slackId: 'U0KARL1234' }, { name: 'A Colleague' }], channelName: 'emea-revops', body: 'Hello both.' };
     const many = draftOf(sweep(doc([SRC], {}, { action: { label: 'Send them', sends: [MAIL, { type: 'slack', body: '  \n ' }, DM, null, { type: 'memo', body: 'A note.' }] } }))[0])[0];
-    ok(!!many && many.children[1].children.map((c) => c.tagName + ':' + c.textContent).join(' | ') === ['P:Email to Karl Stein · Your roll-up for Friday', 'PRE:' + MAIL.body, 'P:Slack message to Karl Stein, Ada Berg in #emea-revops', 'PRE:Hello both.', 'P:Message', 'PRE:A note.'].join(' | '),
+    ok(!!many && many.children[1].children.map((c) => c.tagName + ':' + c.textContent).join(' | ') === ['P:Email to Karl Stein · Your roll-up for Friday', 'PRE:' + MAIL.body, 'P:Slack message to Karl Stein, A Colleague in #emea-revops', 'PRE:Hello both.', 'P:Message', 'PRE:A note.'].join(' | '),
       'the draft holds every message of the action in order: what it is, to whom when the document names someone, where, its subject, then its body; an entry without a body is no message', many && many.children[1].children.map((c) => c.textContent));
     const none = [{ action: { label: 'Post', sends: [] } }, { action: { label: 'Post', sends: [{ type: 'slack', body: '   ' }] } }, { action: { label: 'Post' } }, { message: 'Leo, a line for you.' }, {}].map((first) => sweep(doc([SRC], {}, first))[0]);
     ok(none.every((c) => draftOf(c).length === 0 && !/Read the draft/.test(c.textContent)), 'an action without a message (no list, an empty one, only empty bodies), a line for Leo alone, or no action at all: no draft', none.map((c) => draftOf(c).length));
