@@ -76,7 +76,10 @@ const typeDraws = (name, els = STORED[name] || []) => {
   for (let more = true; more;) { more = false; for (const el of els) if (!el.hidden && !drawn.has(el)) { draws[name](el); drawn.add(el); RAN[name] = (RAN[name] || 0) + (isSlot(el) ? 0 : 1); more = true; } }
   return els.filter((el) => !isSlot(el));
 };
-const badge = () => typeDraws('hub-badge')[0], brief = () => typeDraws('hub-brief')[0];
+// (GONE stands in for a number or a headline the page no longer has: a hidden, empty element, so that the checks that
+// expect one on show go red and the run does not crash)
+const GONE = Object.assign(new Node('i'), { hidden: true });
+const badge = () => typeDraws('hub-badge')[0] || GONE, brief = () => typeDraws('hub-brief')[0] || GONE;
 // a badge is on show when it is not hidden and carries the class its style asks for (os.css: .app-badge:not(.is-on))
 const badgeShows = (b) => !b.hidden && b.classList.contains('is-on');
 // the Hub's address is fixed in the page's links; a document that names any other address shows none of them
@@ -123,7 +126,7 @@ const home = html.slice(html.indexOf('data-page="home"'), html.indexOf('data-pag
     'the top items list, the brief headline and the last run have their slots; the headline is stored hidden and empty, right after the empty drawing of its name, between the tiles and the list');
   ok(/<button class="app-tab" type="button" data-nav="today" data-nav-item id="nav-today" aria-current="page">\s*<svg [^\n]*<\/svg>\s*<span>Today<\/span>\s*<span class="msg-slot" data-draw="hub-badge"><\/span><span class="app-badge info" data-draw="hub-badge" hidden><\/span>\s*<\/button>/.test(html.slice(0, html.indexOf('data-page="today"'))) && (html.match(/data-draw="hub-badge"/g) || []).length === 2,
     'the Today tab carries a badge slot: stored hidden and empty, right after the empty drawing of its name, in the tab\'s button');
-  ok(STORED['hub-badge'].length === 2 && STORED['hub-brief'].length === 2 && ['hub-badge', 'hub-brief'].every((n) => isSlot(STORED[n][0]) && !STORED[n][0].hidden && !isSlot(STORED[n][1]) && STORED[n][1].hidden === true),
+  ok(['hub-badge', 'hub-brief'].every((n) => (STORED[n] || []).length === 2 && isSlot(STORED[n][0]) && !STORED[n][0].hidden && !isSlot(STORED[n][1]) && STORED[n][1].hidden === true),
     'of each of the two names the page stores two elements: the empty drawing, not hidden, and then the number or the headline, hidden');
   const pageCss = fs.readFileSync(D + 'os.css', 'utf8');
   ok(/\.app-badge:not\(\.is-on\)\s*\{\s*display:\s*none;?\s*\}/.test(pageCss) && /\.msg-slot\s*\{\s*display:\s*none;?\s*\}/.test(pageCss) && /\.app \[hidden\]\s*\{\s*display:\s*none !important;?\s*\}/.test(pageCss),
@@ -206,7 +209,7 @@ const DOC = {
   ok(head.hidden === false && head.textContent === DOC.brief.headline, 'the brief headline shows', [head.hidden, head.textContent]);
   const tab = badge();
   ok(tab.hidden === false && tab.textContent === '3', 'the Today tab badge shows how many need you', [tab.hidden, tab.textContent]);
-  ok(badgeShows(tab) && RAN['hub-badge'] === 1 && RAN['hub-brief'] === 1 && STORED['hub-badge'][0].textContent === '' && STORED['hub-brief'][0].textContent === '',
+  ok(badgeShows(tab) && RAN['hub-badge'] === 1 && RAN['hub-brief'] === 1 && ['hub-badge', 'hub-brief'].every((n) => (STORED[n] || []).filter(isSlot).length === 1 && (STORED[n] || []).filter(isSlot).every((el) => el.textContent === '')),
     'each was shown by the empty drawing beside it and then drawn once, by the type\'s rule: the number carries the class that shows a badge, and the empty drawings stay empty', [tab.className, RAN]);
   // the fault this guards against: without the empty drawing beside it (as the page was stored before), a drawing that is
   // stored hidden is never run, so nothing ever shows
