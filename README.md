@@ -65,7 +65,7 @@ them; **Undo** puts an item back until then. `tools/harness/test36.js` covers th
   groups: **Send in English…** and **Pack in English…** hand Claude the English text and Claude asks where to send it. Send one through Claude, or tick several and send them as one pack;
   Done and Not now are kept in `data/users/<you>/leo-acts`. `tools/harness/test37.js` covers both tabs.
 - The OS page (`files/index.html`) is stored without its indentation (`build_store.py` strips each line's leading
-  whitespace in the stored copy only), which leaves about 22 KB under the store's 256 KB limit per document. The build
+  whitespace in the stored copy only), which leaves about 19 KB under the store's 256 KB limit per document. The build
   prints every document's size and fails when one is over. To compare the stored page with the repo, strip the
   source's indentation first.
 
@@ -123,17 +123,65 @@ while they last.) With reduced motion nothing takes turns: the agent at the lowe
 at. The room stays empty for a moment after the page opens, until every document and your own reactions to it have
 answered (2.5 seconds at most), so that no robot sets off with a count that is about to drop.
 
+**Rooms and doors.** Above the picture is a row of doors: *Your agents* (the five above), then one door per
+department: *Data Hygiene* (Sweeper, Accounts), *ARR* (Pacing, Forecast, Renewals) and *Executive* (Rundown, Prep). A
+door shows one small dot per agent of its room, in the colour of that agent's chip (hollow: no data; faint for the
+moment before anything is known), and the number that waits on you in that room. A click on a door shows its room on
+the same canvas: the scene is handed that room's crew, the chips under the picture are that room's, and under the
+chips stand the cards of what its agents prepared. The page always opens on your own agents; the open room is not
+remembered. The doors are right while their room is closed, and the empty room at page load waits for the
+departments' documents too, so no door shows a count that is about to drop. A robot stands only for an agent that
+really runs and reports. An agent whose document does not exist is an empty chair: its chip reads "not run yet", it
+is never due or late whatever its schedule says, and it is promised no next run. Pacing and Rundown run today and
+post by themselves, but leave nothing the cockpit can read: theirs read "not linked yet". Their tasks are for the
+last quarter of 2026: they run in November and December, and their own instructions tell them to post nothing after
+31 December. The model carries that end (`until` on the two agents in `os-cockpit-model.js`): from 1 January 2027
+their tooltips say only "Not linked to the cockpit yet". "Runs today and posts by itself" is gone, and so is the
+sentence on what the agent does (its role sentence in `index.html`, which says that it posts): the model marks the
+agent as stopped and the page leaves the sentence out. Before then, either renew the two tasks (then move `until`,
+and reword Pacing's role sentence in `index.html`, which says "Q4") or take the two chairs out of the rooms.
+
+**A department agent's document.** Each department agent that reports writes one document in the OS database under its
+own id: `hub/sweeper` first, later `hub/accounts`, `hub/forecast`, `hub/renewals` and `hub/prep`. The shape is `{ at,
+status: 'ok' | 'partial' | 'error', trial: true | false, run, scope, items }`, with `at` in UTC as the heartbeat below
+writes it and up to 4 `items` shaped like Instinct's (`id`, `level`, `title`, `why`, `evidence`, an optional `action`
+with its `sends`, `source`). The page reads these five where it reads Instinct and Muse (`OS.sense`), so an agent's
+robot appears with its first document and no page change. What waits on you from such an agent is its items you have
+not reacted to; Got it and Not useful are kept in your private `data/users/<you>/sense-acts`, with your reactions to
+Instinct and Muse. They are kept by item id, so an item that says something new needs an id of its own, also within
+one week: a reaction to an old item hides a new one that reuses its id. An item whose `id` is empty is left out: it is
+not counted and gets no card, since a reaction to it could not be kept. A run that ended with status `error` shows as
+failed, also when it left no items. Every other result has to list its `items` (an empty list when it has none, which
+reads as nothing waiting); one where `items` is left out or is not a list reads "no data". A document that says
+neither when nor how a run ended (`at`, `status`) and lists no `items` is a placeholder: its agent still reads "not
+run yet". While `trial` is true the agent is on trial: its chip says "trial" beside its last result (not while a run
+is due, late, under way or failed), its tooltip says "On trial: nothing it prepared can be sent" in all of those
+states, and on its cards every send is off: the action's button is shown but off, there is no button for a line to Leo
+(an item's `message`), and the card says "Trial week: nothing can be sent."; Got it and Not useful still work, and
+take the card away at once. Off trial a card sends as an Instinct card does (an email with its subject, a `message` to
+Leo once `hub/leo` names him). A card names its agent, says Trial, when and for what the document was written, then
+the item as an Instinct card shows it, with the evidence as small pills. When a document can no longer be read its
+cards go with its count. A chip of an agent with cards, or a click on its robot, scrolls to its first card; one with
+nothing to show opens nothing and shows its tooltip.
+
 Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
 chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide
 its tab, or For Leo when nothing is left to decide and something is there for Leo. Review's chip opens nothing: it only
 shows its tooltip. Pointing at a robot or a chip, or tabbing to a chip, shows the tooltip: what the agent is for, what
 it is doing, its last result and its next run. The picture itself is hidden from screen readers; the chips and the
-tooltip say all of it. The cockpit makes no connector call, asks nothing of Claude and writes nothing: it reads the
-documents Today already reads (`hub/today`, `hub/decisions`, `hub/leo`, `hub/instinct`, `hub/muse`), plus `hub/weekly`
-and the optional `hub/pulse`.
+tooltip say all of it, the doors are a group of buttons named Rooms, and each door says its room, how many agents it
+has and what waits ("Data Hygiene, 2 agents, 1 waiting on you"), then the runs that failed and those that left no
+result ("1 failed", "1 with no result yet"): "nothing waiting" is said only when none of that is so. Each room's
+chips are a labelled list ("Data Hygiene agents"), and so are its cards ("Data Hygiene: prepared for you"). The
+cockpit makes no connector call, asks nothing of Claude and writes nothing: it reads the documents Today already
+reads (`hub/today`, `hub/decisions`, `hub/leo`, `hub/instinct`, `hub/muse`), plus `hub/weekly`, the optional
+`hub/pulse` and the departments' documents. (The cards under a department's chips are the page's own Instinct cards,
+not the cockpit's: what a button on them does is said above.)
 
-- `dashboard/os-cockpit-model.js` (`OSCrew`): the agents and their schedules (`ROSTER`, Stockholm time), and the rules that
-  turn a few facts into a state and a few words. `tools/harness/test40.js`.
+- `dashboard/os-cockpit-model.js` (`OSCrew`): the agents and their schedules (`ROSTER`, your five; `ROOMS`, every room
+  with its agents; Stockholm time), and the rules that turn a few facts into a state and a few words, for one room at
+  a time. No look or hue comes twice in a room, no department robot looks like one of your five, and a room has at
+  most five agents (a sixth makes the picture taller on a phone). `tools/harness/test40.js`.
 - `dashboard/os-cockpit-scene.js` (`OSCockpit`): the picture, drawn from scratch with canvas calls (no images, fonts or
   network). `node tools/harness/test41.js` checks it against its contract. A picture that stands still would look
   current, so if a frame ever throws the scene wipes its canvas and stops, the wiring folds the stage away, and the
@@ -144,17 +192,25 @@ and the optional `hub/pulse`.
   somebody has just stepped out of stays open for the one walking to it), and those on their way walk on from where
   they are, or from the nearest open floor. Two that meet on their way while a new change arrives can walk on each
   other for about half a second; two that a turn of the phone puts side by side on their way, for up to a second.
-- `dashboard/os-cockpit.js` and `os-cockpit.css`: the wiring (facts from `OS.hub`, `OS.sense`, `OS.lanes`, the chips, the
-  tooltip, a redraw every 30 seconds and whenever a document changes) and the styles. The agents' names, their role
-  sentences and the legend are in `index.html`. A click on a robot is a click on its chip, and the wiring answers the
-  scene whether that led somewhere: on a phone the tap is then over and nothing stays lit. `tools/harness/test42.js`.
-- **Preview the scene** alone, with the made-up crews of `tools/cockpit-preview/fixtures.js`:
+- `dashboard/os-cockpit.js` and `os-cockpit.css`: the wiring (facts from `OS.hub`, `OS.sense`, `OS.lanes`, the doors,
+  the chips, the tooltip, a redraw every 30 seconds and whenever a document changes) and the styles. The doors, the
+  agents' names, their role sentences and the legend are in `index.html`. A click on a robot is a click on its chip,
+  and the wiring answers the scene whether that led somewhere: on a phone the tap is then over and nothing stays
+  lit. If the picture folds away, the doors and the chips carry on without it. `tools/harness/test42.js`.
+- The cards under a department's chips are drawn by `dashboard/os-draw.js` (the `ck-lane` drawing, with the Instinct
+  card), from the documents `dashboard/os-core.js` reads (`OS.sense`). Which of an agent's items are cards is the
+  reader's rule (`OS.sense.cards`): the lane draws them, and the cockpit marks the chip that leads to them by the same
+  rule, so the two agree whichever is drawn first (back on Today from another tab, the chips are drawn before the
+  lane). `tools/harness/test38.js` covers the cards, `test39.js` the fifteen documents the page subscribes to.
+- **Preview the scene** alone, with the made-up crews of `tools/cockpit-preview/fixtures.js` (the departments' rooms
+  are `hygiene`, `arr` and `exec`; `doors` walks through all four rooms on one canvas):
   `node tools/cockpit-preview/shoot.js --out <dir> [--fx morning,trouble] [--widths 400,888,1280]` saves one PNG per
   crew and width (frames stacked top to bottom); `tools/cockpit-preview/preview.html?fx=morning&w=888` in a browser plays
   one live. Neither opens the dashboard or reads its data.
 - **Heartbeat (optional)**: an agent may `update` the document `hub/pulse` in the OS database when a run starts, with
   `{ agents: { <id>: { state: 'running', startedAt: <time>, finishedAt: null, step: 'Reading Slack' } } }` (ids `desk`,
-  `decide`, `instinct`, `muse`, `review`; `update` merges, so the other agents' entries stay; `set` it once if it does not
+  `decide`, `instinct`, `muse`, `review`, or a department agent's own id once its document exists; `update` merges, so
+  the other agents' entries stay; `set` it once if it does not
   exist yet), change `step` (at most 24 characters) as it goes, and set `state` to `'ok'` or `'error'` with `finishedAt`
   when it ends. Times are UTC, written as `date -u +%Y-%m-%dT%H:%M:%SZ` gives them (`2026-11-24T12:13:05Z`): a time
   without its zone is not read. While an agent is `running` and started less than 45 minutes ago, its robot types at its

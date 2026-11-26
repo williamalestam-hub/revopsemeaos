@@ -1,27 +1,60 @@
-/* The cockpit, the first pane of Today: a picture of the agents at work (one canvas, drawn by os-cockpit-scene.js)
-   and under it one row of small chips, one per agent. Every selector starts with .cockpit or .ck-. Colours are the
-   page's own tokens, so light and dark both hold; the picture itself has its own palette and is not styled here. */
+/* The cockpit, the first pane of Today: a row of doors (one per room: his own agents, then the departments), a
+   picture of the open room's agents at work (one canvas, drawn by os-cockpit-scene.js), under it one row of small
+   chips, one per agent of that room, and under those the cards of what a department's agents prepared. Every selector
+   starts with .cockpit or .ck-. Colours are the page's own tokens, so light and dark both hold; the picture itself has
+   its own palette and is not styled here. */
 
-/* the stage: full width, the pane's rounded corners at the top (the pane has a 1px border). min-width and overflow
-   let it shrink with the pane whatever width the canvas still has from the last draw. Where there is nothing to draw
-   on (no canvas), the wiring marks it .ck-off and it folds away. */
-.ck-stage { position: relative; min-width: 0; min-height: 120px; overflow: hidden; border-radius: calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0; background: color-mix(in srgb, var(--color-fg) 7%, var(--color-panel)); }
+/* the doors: one wrapping row above the picture. It is where the pane's rounded top corners are (the pane has a 1px
+   border); with no background of its own the row paints nothing there today, so the corners matter only if it is
+   ever given one. The open door is filled. A door's dots are its room's agents, in the colours of the chips' dots
+   (faint while nothing is known of them yet); its number is what waits on William there. */
+.ck-doors { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; padding: var(--cds-pad-sm) var(--cds-pad-md); border-bottom: 1px solid var(--line); border-radius: calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0; }
+.ck-door { display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; max-width: 100%; min-height: 1.75rem; padding: 2px 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--color-fg); font: inherit; font-size: var(--cds-font-size-caption); font-weight: var(--cds-font-weight-medium); line-height: 1.3; white-space: nowrap; cursor: pointer; }
+.ck-door:hover { border-color: color-mix(in srgb, var(--color-fg) 35%, var(--line)); }
+.ck-door[aria-pressed="true"] { border-color: var(--color-fg); background: var(--color-fg); color: var(--color-panel); }
+.ck-door > span { display: inline-flex; align-items: center; gap: 8px; }
+.ck-door > span:empty { display: none; }
+.ck-pips { display: inline-flex; align-items: center; gap: 3px; }
+.ck-pip { flex: none; box-sizing: border-box; width: .5rem; height: .5rem; border-radius: 50%; background: color-mix(in srgb, var(--color-fg-muted) 22%, transparent); }
+.ck-pip.is-idle { background: color-mix(in srgb, var(--color-fg-muted) 55%, transparent); }
+.ck-pip.is-working { background: var(--color-ok); }
+.ck-pip.is-due, .ck-pip.is-late { background: var(--color-warn); }
+.ck-pip.is-error { background: var(--color-bad); }
+.ck-pip.is-needs { background: var(--acc, var(--color-fg)); }
+.ck-pip.is-unknown { background: transparent; box-shadow: inset 0 0 0 1.5px var(--color-fg-muted); }
+/* on the filled door the dots are lightened towards the door's own text colour, so they still read */
+.ck-door[aria-pressed="true"] .ck-pip { background: color-mix(in srgb, var(--color-panel) 18%, transparent); }
+.ck-door[aria-pressed="true"] .ck-pip.is-idle { background: color-mix(in srgb, var(--color-panel) 45%, transparent); }
+.ck-door[aria-pressed="true"] .ck-pip.is-working { background: color-mix(in srgb, var(--color-ok) 60%, var(--color-panel)); }
+.ck-door[aria-pressed="true"] .ck-pip.is-due, .ck-door[aria-pressed="true"] .ck-pip.is-late { background: color-mix(in srgb, var(--color-warn) 60%, var(--color-panel)); }
+.ck-door[aria-pressed="true"] .ck-pip.is-error { background: color-mix(in srgb, var(--color-bad) 60%, var(--color-panel)); }
+.ck-door[aria-pressed="true"] .ck-pip.is-needs { background: color-mix(in srgb, var(--acc, var(--color-panel)) 55%, var(--color-panel)); }
+.ck-door[aria-pressed="true"] .ck-pip.is-unknown { background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-panel) 60%, transparent); }
+.ck-door-n { box-sizing: border-box; min-width: 1.1rem; padding: 0 5px; border-radius: 999px; background: var(--acc, var(--color-fg)); color: var(--color-bg); font-size: .92em; font-variant-numeric: tabular-nums; line-height: 1.1rem; text-align: center; }
+/* said, not shown: the rest of a door's name for a screen reader (how many agents, what waits) */
+.ck-sr { position: absolute; width: .1rem; height: .1rem; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* the stage: full width, under the doors. min-width and overflow let it shrink with the pane whatever width the
+   canvas still has from the last draw. Where there is nothing to draw on (no canvas), the wiring marks it .ck-off and
+   it folds away. */
+.ck-stage { position: relative; min-width: 0; min-height: 120px; overflow: hidden; background: color-mix(in srgb, var(--color-fg) 7%, var(--color-panel)); }
 .ck-stage.ck-off { display: none; }
 .ck-canvas { display: block; }
 
 /* the tooltip over a robot: placed by the wiring, never in the pointer's way */
 .ck-tip { position: absolute; left: 0; top: 0; z-index: 1; box-sizing: border-box; display: grid; gap: 1px; width: max-content; max-width: min(17rem, calc(100% - 8px)); padding: 6px 10px; border: 1px solid var(--cds-border, var(--line)); border-radius: var(--cds-radius); background: var(--cds-surface-popover, var(--color-panel)); box-shadow: var(--cds-shadow-popover); color: var(--color-fg); font-size: var(--cds-font-size-caption); line-height: 1.35; pointer-events: none; }
-.ck-tip[hidden], .ck-legend[hidden], .ck-roles[hidden] { display: none; }
+.ck-tip[hidden], .ck-legend[hidden], .ck-roles[hidden], .ck-strip[hidden], .ck-lane[hidden] { display: none; }
 .ck-tip-name { font-weight: var(--cds-font-weight-medium); }
 .ck-tip-role, .ck-tip-when { color: var(--color-fg-muted); }
 .ck-tip-when { display: flex; flex-wrap: wrap; gap: 0 .9em; }
 
-/* the chips: one wrapping row, then the "?" that opens the legend */
+/* the chips: one wrapping row (the open room's; the other rooms' rows are hidden), then the "?" that opens the legend */
 .ck-bar { display: flex; align-items: flex-start; gap: var(--cds-gap-sm); padding: var(--cds-pad-sm) var(--cds-pad-md); min-width: 0; }
 .ck-strip { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
 .ck-strip > li { min-width: 0; max-width: 100%; }
 .ck-chip { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; max-width: 100%; min-height: 1.75rem; padding: 2px 10px 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--color-fg) 4%, transparent); color: var(--color-fg); font: inherit; font-size: var(--cds-font-size-caption); line-height: 1.3; text-align: left; white-space: nowrap; cursor: pointer; }
 .ck-chip:not([data-nav]):not([data-ck-go]) { cursor: default; }
+.ck-chip.ck-leads:not([data-nav]) { cursor: pointer; }
 .ck-chip:hover { border-color: color-mix(in srgb, var(--color-fg) 35%, var(--line)); }
 .ck-chip b { font-weight: var(--cds-font-weight-medium); }
 .ck-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
@@ -38,15 +71,35 @@
 .ck-chip.is-unknown b { color: var(--color-fg-muted); }
 .ck-help { flex: none; display: inline-grid; place-items: center; box-sizing: border-box; width: 1.75rem; height: 1.75rem; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--color-fg-muted); font: inherit; font-size: var(--cds-font-size-caption); line-height: 1; cursor: pointer; }
 .ck-help:hover, .ck-help[aria-expanded="true"] { color: var(--color-fg); border-color: color-mix(in srgb, var(--color-fg) 35%, var(--line)); }
-.ck-chip:focus-visible, .ck-help:focus-visible { outline: 2px solid var(--acc, var(--color-fg)); outline-offset: 2px; }
+.ck-chip:focus-visible, .ck-help:focus-visible, .ck-door:focus-visible { outline: 2px solid var(--acc, var(--color-fg)); outline-offset: 2px; }
 .ck-legend { margin: 0; padding: 0 var(--cds-pad-md) var(--cds-pad-sm); max-width: 80ch; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+/* the lane: what the open department's agents prepared, as the page's own cards (os.css: .lane-list, .lane-card).
+   Empty, it takes no room. Like the doors, the stage and the bar it may be narrower than what it holds (min-width),
+   and a word too long for a card (a link, say) is broken: nothing in a card makes the pane, and the picture with it,
+   wider than the page. A card opens with whose it is; its evidence is a row of small pills, the number first
+   (in a narrow pill the words go under the number, and neither is broken in the middle while it fits on a line). */
+.ck-lane { min-width: 0; margin: 0 var(--cds-pad-md) var(--cds-pad-md); }
+.ck-lane:empty { display: none; }
+.ck-lane .lane-card { overflow-wrap: anywhere; }
+.ck-of { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.ck-of b { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+.ck-lane .lane-ev { display: flex; flex-wrap: wrap; gap: 5px 6px; }
+.ck-lane .lane-ev li { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 5px; box-sizing: border-box; max-width: 100%; padding: 2px 8px; }
+.ck-lane .lane-ev-v { order: -1; font: inherit; font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; }
+.ck-lane .lane-ev-v:empty { display: none; }
+.ck-lane .lane-ev-l { font-size: inherit; color: var(--color-fg); }
+/* a send that is off (its agent is on trial): flat and grey, with no glow and no lift, so that it does not ask to be pressed */
+.ck-lane .btn:disabled, .ck-lane .btn:disabled:hover { border-color: transparent; background: color-mix(in srgb, var(--color-fg-muted) 55%, var(--color-panel)); color: var(--color-panel); box-shadow: none; transform: none; opacity: 1; }
 @media (prefers-reduced-motion: no-preference) {
-  .ck-chip, .ck-help { transition: border-color var(--cds-dur-slow) var(--cds-ease-out), color var(--cds-dur-slow) var(--cds-ease-out); }
+  .ck-chip, .ck-help, .ck-door { transition: border-color var(--cds-dur-slow) var(--cds-ease-out), color var(--cds-dur-slow) var(--cds-ease-out); }
 }
 /* narrow (about 400px beside a chat): a chip says what, not when (the time is in its tooltip), so the chips stay
    small pills and two or three fit on a row. They run on like words, over the bar's whole width, and the "?" sits at
    the end of their last row instead of taking a column of its own. The tooltip may use the stage's whole width. */
 @container main (max-width: 30rem) {
+  .ck-doors { gap: 4px; }
+  .ck-door { min-height: 1.5rem; padding: 1px 9px; gap: 6px; }
+  .ck-lane { margin: 0 var(--cds-pad-sm) var(--cds-pad-sm); }
   .ck-bar { display: flow-root; padding-bottom: calc(var(--cds-pad-sm) - 4px); }
   .ck-strip { display: inline; font-size: 0; }
   .ck-strip > li { display: inline-block; vertical-align: top; margin: 0 4px 4px 0; }

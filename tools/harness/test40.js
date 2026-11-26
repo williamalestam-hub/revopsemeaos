@@ -23,7 +23,7 @@ ok(new Date(2026, 10, 24, 14, 8).getTime() === T('2026-11-24T13:08:00Z') && new 
   'this process tells Stockholm time, winter and summer', iso(new Date(2026, 10, 24, 14, 8).getTime()));
 
 // ---------- what it exports ----------
-eq(Object.keys(C).sort(), ['ROSTER', 'TZ', 'derive', 'overdue', 'runsAround', 'when'], 'exports TZ, ROSTER, derive, runsAround, when and overdue');
+eq(Object.keys(C).sort(), ['ROOMS', 'ROSTER', 'TZ', 'derive', 'overdue', 'runsAround', 'when'], 'exports TZ, ROSTER, ROOMS, derive, runsAround, when and overdue');
 ok(C.TZ === 'Europe/Stockholm', 'the schedule is kept in Europe/Stockholm', C.TZ);
 eq(C.ROSTER, [
   { id: 'desk', name: 'Desk', look: 'headset', hue: 'teal', days: [1, 2, 3, 4, 5], at: ['07:13', '13:13'], graceMin: 45, idleWord: 'all clear' },
@@ -392,6 +392,7 @@ const SLOTS = {
   'src': (v) => [{ ...REAL, desk: { ...REAL.desk, src: v } }, NOW],
   'at': (v) => [{ ...REAL, desk: { ...REAL.desk, at: v } }, NOW],
   'status': (v) => [{ ...REAL, desk: { ...REAL.desk, status: v } }, NOW],
+  'trial': (v) => [{ ...REAL, desk: { ...REAL.desk, trial: v }, review: { ...REAL.review, trial: v } }, NOW],
   'waiting': (v) => [{ ...REAL, desk: { ...REAL.desk, waiting: v }, decide: { ...REAL.decide, waiting: v } }, NOW],
   'waiting, while a run is due': (v) => [{ ...EARLY, desk: { ...EARLY.desk, waiting: v } }, DUE],
   'parts': (v) => [{ ...REAL, decide: { ...REAL.decide, parts: v } }, NOW],
@@ -449,6 +450,123 @@ each(['running', 42, [], [LIVE], { desk: 'running' }, { desk: null }, { desk: [L
 const frozen = JSON.stringify(MIXED), roster = JSON.stringify(C.ROSTER);
 const first = JSON.stringify(C.derive(MIXED, T('2026-11-24T07:20:00Z')));
 ok(first === JSON.stringify(C.derive(MIXED, T('2026-11-24T07:20:00Z'))) && JSON.stringify(MIXED) === frozen && JSON.stringify(C.ROSTER) === roster, 'the same facts and clock give the same answer, and neither the facts nor the roster are changed');
+
+// ---------- the rooms: his five, and one room per department ----------
+eq(C.ROOMS.map((r) => [r.id, r.name, r.agents.map((a) => a.id)]), [['mine', 'Your agents', IDS], ['hygiene', 'Data Hygiene', ['sweeper', 'accounts']], ['arr', 'ARR', ['pacing', 'forecast', 'renewals']], ['exec', 'Executive', ['rundown', 'prep']]], 'four rooms: his own five, Data Hygiene, ARR and Executive, each with its agents in desk order');
+ok(C.ROOMS[0].agents === C.ROSTER, 'the first room is the roster itself, not a copy of it');
+const LINK = ['not linked yet', 'Runs today and posts by itself. Not linked to the cockpit yet', 'Not linked to the cockpit yet'], YEAR_END = '2027-01-01T00:00+01:00';
+eq(C.ROOMS.slice(1).flatMap((r) => r.agents), [
+  { id: 'sweeper', name: 'Sweeper', look: 'plain', hue: 'green', days: [1, 5], at: ['06:50'], graceMin: 45, idleWord: 'all clear' },
+  { id: 'accounts', name: 'Accounts', look: 'headset', hue: 'violet', days: [3], at: ['06:50'], graceMin: 45, idleWord: 'all clear' },
+  { id: 'pacing', name: 'Pacing', look: 'gavel', hue: 'teal', days: [1, 2, 3, 4, 5], at: ['07:45'], graceMin: 45, idleWord: 'posted', missing: LINK, until: YEAR_END },
+  { id: 'forecast', name: 'Forecast', look: 'bulb', hue: 'rose', days: [5], at: ['12:10'], graceMin: 45, idleWord: 'all clear' },
+  { id: 'renewals', name: 'Renewals', look: 'clipboard', hue: 'amber', days: [4], at: ['06:50'], graceMin: 45, idleWord: 'all clear' },
+  { id: 'rundown', name: 'Rundown', look: 'antenna', hue: 'green', days: [1, 2, 3, 4, 5, 6, 7], at: ['20:01'], graceMin: 45, idleWord: 'posted', missing: LINK, until: YEAR_END },
+  { id: 'prep', name: 'Prep', look: 'plain', hue: 'blue', days: [5], at: ['12:40'], graceMin: 45, idleWord: 'all clear' },
+], 'the seven department agents: Sweeper Monday and Friday 06:50, Accounts Wednesday, Pacing on weekdays 07:45, Forecast Friday 12:10, Renewals Thursday, Rundown every day 20:01, Prep Friday 12:40; 45 minutes of grace each; Pacing and Rundown say for themselves why nothing of them can be read, until the year ends');
+const EVERY = C.ROOMS.flatMap((r) => r.agents), DEPT = C.ROOMS.slice(1), SEVEN = DEPT.flatMap((r) => r.agents);
+const twice = (list) => list.filter((x, i) => list.indexOf(x) !== i);
+eq([twice(EVERY.map((a) => a.id)), twice(C.ROOMS.map((r) => r.id))], [[], []], 'an agent\'s id is its own in every room, and so is a room\'s');
+eq(C.ROOMS.map((r) => [twice(r.agents.map((a) => a.look)), twice(r.agents.map((a) => a.hue))]), C.ROOMS.map(() => [[], []]), 'no look and no hue comes twice in a room');
+eq(SEVEN.filter((a) => C.ROSTER.some((b) => b.look === a.look && b.hue === a.hue)).map((a) => a.id), [], 'no department robot has the look and the hue of one of his five');
+ok(EVERY.every((a) => ['headset', 'gavel', 'antenna', 'bulb', 'clipboard', 'plain'].includes(a.look) && ['teal', 'amber', 'rose', 'violet', 'blue', 'green'].includes(a.hue)), 'every look and hue is one the scene can draw');
+ok(C.ROOMS.every((r) => r.agents.length >= 1 && r.agents.length <= 5) && EVERY.every((a) => a.name.length <= 12 && /^[a-z]+$/.test(a.id)), 'a room has one to five agents (a sixth makes the picture taller on a phone); names fit in 12 characters');
+// their schedules, on Stockholm's clock
+eq(SEVEN.map((a) => runs(a, '2026-11-24T13:08:00Z')), [['2026-11-23T05:50Z', '2026-11-27T05:50Z'], ['2026-11-18T05:50Z', '2026-11-25T05:50Z'], ['2026-11-24T06:45Z', '2026-11-25T06:45Z'], ['2026-11-20T11:10Z', '2026-11-27T11:10Z'], ['2026-11-19T05:50Z', '2026-11-26T05:50Z'], ['2026-11-23T19:01Z', '2026-11-24T19:01Z'], ['2026-11-20T11:40Z', '2026-11-27T11:40Z']],
+  'Tuesday 14:08: Sweeper ran on Monday and runs next on Friday, Accounts tomorrow, Pacing this morning, Forecast and Prep last Friday, Renewals last Thursday, Rundown last night');
+const DEPT_GAPS = { sweeper: [71, 72, 73, 96], accounts: [167, 168, 169], pacing: [24, 71, 72, 73], forecast: [167, 168, 169], renewals: [167, 168, 169], rundown: [23, 24, 25], prep: [167, 168, 169] };
+for (const agent of SEVEN) {
+  const seen = new Set();
+  for (let t = T('2026-01-01T00:00:00Z'); t < T('2028-01-01T00:00:00Z'); t += 367 * MIN) { const r = C.runsAround(agent, t); seen.add(agent.days.includes(onClock(r.prev).day) && agent.at.includes(onClock(r.prev).hm) && r.prev <= t && t < r.next ? (r.next - r.prev) / HOUR : 'wrong'); }
+  eq([...seen].sort((a, b) => a - b), DEPT_GAPS[agent.id], `${agent.id}: through 2026 and 2027 its runs are its own times on its own days, ${DEPT_GAPS[agent.id].join(', ')} hours apart`);
+}
+// derive for a room: the same rules, for that room's agents only
+const [MINE, HYG, ARR, EXEC] = C.ROOMS;
+eq([C.derive(REAL, NOW, undefined, C.ROSTER), C.derive(MIXED, T('2026-11-24T07:20:00Z'), { desk: '  Front  desk ' }, MINE.agents)], [real, C.derive(MIXED, T('2026-11-24T07:20:00Z'), { desk: '  Front  desk ' })], 'handed the roster itself, derive gives what it gives without one');
+each([undefined, null, 0, 'x', {}, 7, true, () => 1], (v) => C.derive(REAL, NOW, undefined, v), real, 'a roster that is not a list is his five');
+eq([[], [null, 3, 'x', {}, { id: 7 }, { id: '' }]].map((v) => C.derive(REAL, NOW, undefined, v)), [1, 2].map(() => ({ crew: [], lines: {}, lead: {}, brief: {}, tips: {}, aria: '', total: 0 })), 'an empty room, or a list with no agent in it, is nobody: nothing thrown');
+// one department agent on its own, as `see` does for his five
+const seeIn = (room, id, fact, now, pulse) => {
+  const r = C.derive({ [id]: fact, pulse: pulse ? { [id]: pulse } : null }, now, null, room.agents), i = room.agents.findIndex((a) => a.id === id);
+  return { ...r.crew[i], line: r.lines[id], lead: r.lead[id], brief: r.brief[id], tip: r.tips[id], said: r.aria.split('. ')[i].replace(/\.$/, '').replace(/^.*?: /, ''), total: r.total };
+};
+const MONDAY = T('2026-11-30T08:12:00Z'); // Monday 30 November, 09:12 here
+const SW = { src: 'ok', at: '2026-11-30T05:50:40Z', status: 'ok', waiting: 1, trial: true }; // Sweeper's first run, on trial
+const firstWeek = C.derive({ sweeper: SW, accounts: { src: 'missing', at: null, status: '', waiting: 0 }, desk: REAL.desk }, MONDAY, null, HYG.agents);
+eq(firstWeek, {
+  crew: [{ id: 'sweeper', name: 'Sweeper', look: 'plain', hue: 'green', state: 'needs', waiting: 1, step: '', bubble: '1 for you', fresh: T(SW.at) }, { id: 'accounts', name: 'Accounts', look: 'headset', hue: 'violet', state: 'unknown', waiting: 0, step: '', bubble: '', fresh: 0 }],
+  lines: { sweeper: '06:50 · trial · 1 for you', accounts: 'not run yet' }, lead: { sweeper: '06:50', accounts: '' }, brief: { sweeper: 'trial · 1 for you', accounts: 'not run yet' },
+  tips: { sweeper: { state: '1 waiting on you. On trial: nothing it prepared can be sent', last: 'Last result 06:50', next: 'Next run Fri 06:50' }, accounts: { state: 'Has not run yet', last: '', next: '' } },
+  aria: 'Sweeper: 1 waiting on you, on trial. Accounts: has not run yet.', total: 1,
+}, 'Data Hygiene in the first week: Sweeper on trial with one thing for you, Accounts an empty chair that has not run yet; his own Desk is not in this room, nor in its total');
+eq(C.derive({ sweeper: SW }, MONDAY, { sweeper: '  The  sweeper ', accounts: 7 }, HYG.agents).crew.map((a) => a.name), ['The sweeper', 'Accounts'], 'a name from the page wins in a room too');
+// an agent whose result does not exist: an empty chair, in its own words, and never a word from its schedule
+const NONE = { src: 'missing', at: null, status: '', waiting: 3 };
+eq(SEVEN.map((a) => { const x = seeIn(C.ROOMS.find((r) => r.agents.includes(a)), a.id, NONE, NOW); return [x.state, x.line, x.lead, x.tip.state, x.tip.last, x.tip.next, x.said, x.bubble, x.total].join('|'); }),
+  SEVEN.map((a) => (a.missing ? 'unknown|not linked yet||Runs today and posts by itself. Not linked to the cockpit yet|||not linked yet||0' : 'unknown|not run yet||Has not run yet|||has not run yet||0')),
+  'nothing written yet: "not run yet", and for Pacing and Rundown, which run and post by themselves, "not linked yet"; no last result, no next run, nothing counted');
+// Pacing's and Rundown's tasks stop with the year, by their own instructions: from then on nothing says that they run
+const EVE = T('2026-12-31T22:59:59Z'), NEW_YEAR = T('2026-12-31T23:00:00Z'); // 23:59:59 on 31 December and the midnight after it, in Stockholm
+eq(['pacing', 'rundown'].map((id) => [EVE, NEW_YEAR, T('2027-06-01T10:00:00Z')].map((t) => { const x = seeIn(C.ROOMS.find((r) => r.agents.some((a) => a.id === id)), id, NONE, t); return [x.state, x.line, x.tip.state, x.tip.next, x.said].join('|'); })),
+  [1, 2].map(() => ['unknown|not linked yet|Runs today and posts by itself. Not linked to the cockpit yet||not linked yet', 'unknown|not linked yet|Not linked to the cockpit yet||not linked yet', 'unknown|not linked yet|Not linked to the cockpit yet||not linked yet']),
+  'Pacing and Rundown up to the last second of 31 December 2026: "Runs today and posts by itself"; from midnight on only "Not linked to the cockpit yet", on the chip as before');
+const tipOf = (missing, until, t) => seeIn({ agents: [{ id: 'x', name: 'X', look: 'plain', hue: 'green', days: [1], at: ['06:50'], graceMin: 45, idleWord: 'all clear', missing, until }] }, 'x', NONE, t).tip.state;
+eq([tipOf(['a', 'B. C', 'C'], YEAR_END, EVE), tipOf(['a', 'B. C', 'C'], YEAR_END, NEW_YEAR), tipOf(['a', 'B. C'], YEAR_END, NEW_YEAR), tipOf(['a', 'B. C', 'C'], undefined, NEW_YEAR), tipOf(['a', 'B. C', '  '], YEAR_END, NEW_YEAR), tipOf(undefined, YEAR_END, NEW_YEAR), tipOf(['a'], YEAR_END, NEW_YEAR)],
+  ['B. C', 'C', 'B. C', 'B. C', 'B. C', 'Has not run yet', 'Has not run yet'], 'the sentence changes only from `until` on and only when the entry has a third one; without own words an agent has not run yet, whatever its `until`');
+each(['2027-01-01', '2027-01-01T00:00', 'soon', 0, 1, NEW_YEAR, null, {}, [], true, NaN], (v) => tipOf(['a', 'B. C', 'C'], v, T('2030-01-01T00:00:00Z')), 'B. C', 'an `until` that is not a time with its zone ends nothing');
+// from `until` on the agent's tooltip entry is marked as stopped: the page then leaves out its sentence on what the
+// agent does, which reads as if it still ran (Pacing's and Rundown's say that they post)
+const roomWith = (id) => C.ROOMS.find((r) => r.agents.some((a) => a.id === id)), YEARS_ON = T('2030-01-01T00:00:00Z');
+eq(['pacing', 'rundown'].map((id) => [EVE, NEW_YEAR].map((t) => seeIn(roomWith(id), id, NONE, t).tip)),
+  [1, 2].map(() => [{ state: 'Runs today and posts by itself. Not linked to the cockpit yet', last: '', next: '' }, { state: 'Not linked to the cockpit yet', last: '', next: '', stopped: true }]),
+  'up to the last second of 31 December 2026 the tooltip entry of Pacing and of Rundown has its three lines and no more; from midnight on it is marked as stopped');
+each(['loading', 'nodb', 'error', 'missing', 'ok'], (src) => [EVE, NEW_YEAR].map((t) => seeIn(ARR, 'pacing', { src, at: '2026-12-30T06:47:00Z', waiting: 0 }, t).tip.stopped), [undefined, true], 'stopped is said from `until` on whatever can be read of the agent, and is not there at all before');
+eq(C.ROOMS.map((r) => { const o = C.derive({}, YEARS_ON, null, r.agents); return r.agents.filter((a) => Object.keys(o.tips[a.id]).join() !== 'state,last,next').map((a) => a.id + ': ' + Object.keys(o.tips[a.id]).join()); }), [[], [], ['pacing: state,last,next,stopped'], ['rundown: state,last,next,stopped']],
+  'years on, only the two agents with an `until` are marked as stopped: every other agent\'s entry is its three lines, his five\'s among them');
+each(['2027-01-01', '2027-01-01T00:00', 'soon', 0, 1, NEW_YEAR, null, {}, [], true, NaN, undefined], (v) => Object.keys(seeIn({ agents: [{ id: 'x', name: 'X', look: 'plain', hue: 'green', days: [1], at: ['06:50'], graceMin: 45, idleWord: 'all clear', missing: ['a', 'B. C', 'C'], until: v }] }, 'x', NONE, YEARS_ON).tip).join(), 'state,last,next', 'an `until` that is not a time with its zone stops nothing');
+let schedWords = 0, looked = 0;
+for (let t = T('2026-11-20T00:00:00Z'); t < T('2026-12-05T00:00:00Z'); t += 37 * MIN) {
+  for (const r of DEPT) { const o = C.derive(Object.fromEntries(r.agents.map((a) => [a.id, NONE])), t, null, r.agents); looked++; if (o.crew.some((a) => a.state !== 'unknown') || /due|no result|Next run|failed/.test(JSON.stringify(o)) || o.total !== 0) schedWords++; }
+}
+ok(schedWords === 0 && looked > 1500, 'through fifteen days, an agent with nothing written is never due, late or failed, and is promised no run', [schedWords, looked]);
+for (const [src, line, tip] of [['loading', '', 'No data yet'], ['nodb', 'no data', 'Can\'t read the database here'], ['error', 'no data', 'Can\'t read the database here']]) {
+  const p = seeIn(ARR, 'pacing', { src }, NOW), f = seeIn(ARR, 'forecast', { src }, NOW);
+  eq([p.state, p.line, p.tip, f.line, f.tip], ['unknown', line, { state: tip, last: '', next: '' }, line, { state: tip, last: '', next: '' }], `source ${src} in a department: the usual words (an agent's own words are for "missing" only), and no next run either`);
+}
+eq([see('review', { src: 'missing' }, NOW).tip.next, see('desk', { src: 'nodb' }, NOW).tip.next], ['Next run Mon 07:37', 'Next run 07:13 tomorrow'], 'his own five are still told their next run when nothing can be read: they have run for as long as the cockpit has stood');
+const linked = seeIn(ARR, 'pacing', { src: 'ok', at: '2026-11-24T06:47:00Z', waiting: 0 }, NOW);
+eq([linked.state, linked.line, linked.tip], ['idle', '07:47 · posted', { state: 'Nothing waiting on you', last: 'Last result 07:47', next: 'Next run 07:45 tomorrow' }], 'once Pacing can be read it is an agent like any other: idle, "posted", and its next run');
+// on trial: said where the last result is shown, as "partial" is
+const trial = seeIn(HYG, 'sweeper', SW, MONDAY), trialClear = seeIn(HYG, 'sweeper', { ...SW, waiting: 0 }, MONDAY);
+eq([trial.state, trial.line, trial.lead, trial.brief, trial.bubble, trial.tip, trial.said], ['needs', '06:50 · trial · 1 for you', '06:50', 'trial · 1 for you', '1 for you', { state: '1 waiting on you. On trial: nothing it prepared can be sent', last: 'Last result 06:50', next: 'Next run Fri 06:50' }, '1 waiting on you, on trial'], 'on trial with something waiting: "trial" before the count, and the tooltip says what the trial means');
+eq([trialClear.state, trialClear.line, trialClear.brief, trialClear.tip.state, trialClear.said], ['idle', '06:50 · trial', 'trial', 'Nothing waiting on you. On trial: nothing it prepared can be sent', 'nothing waiting, on trial'], 'on trial with nothing waiting: "trial" in place of "all clear"');
+eq([seeIn(HYG, 'sweeper', { ...SW, status: 'partial' }, MONDAY).line, seeIn(HYG, 'sweeper', { ...SW, status: 'partial', waiting: 0 }, MONDAY).line, seeIn(HYG, 'sweeper', { ...SW, status: 'partial' }, MONDAY).said], ['06:50 · partial · trial · 1 for you', '06:50 · partial · trial', '1 waiting on you, last run partial, on trial'], 'partial and on trial: both are said, partial first');
+const trialDue = seeIn(HYG, 'sweeper', SW, T('2026-12-04T05:55:00Z')), trialLate = seeIn(HYG, 'sweeper', SW, T('2026-12-04T07:00:00Z')), trialBusy = seeIn(HYG, 'sweeper', SW, MONDAY, beat('running', MONDAY - 2 * MIN, { step: 'Counting deals' })), trialFailed = seeIn(HYG, 'sweeper', { ...SW, status: 'failed' }, MONDAY);
+eq([trialDue.line, trialDue.tip.state, trialLate.line, trialLate.tip.state, trialBusy.line, trialBusy.tip.state, trialFailed.line, trialFailed.tip.state],
+  ['due 06:50 · 1 for you', 'A run was due at 06:50. No result yet. 1 still waiting on you. On trial: nothing it prepared can be sent', 'no result 06:50 · 1 for you', 'No result from the 06:50 run. 1 still waiting on you. On trial: nothing it prepared can be sent',
+    'working · Counting deals', 'Working now: Counting deals. 1 still waiting on you. On trial: nothing it prepared can be sent', 'failed 06:50 · 1 for you', 'The last run failed. 1 still waiting on you. On trial: nothing it prepared can be sent'],
+  'Friday 06:55 and 08:00 with Monday\'s result only: Sweeper is due, then has no result, like any agent whose result exists; while due, late, working or failed the chip does not say "trial", the tooltip still does');
+each(['true', 1, 'yes', {}, [true], null, undefined, false], (v) => { const a = seeIn(HYG, 'sweeper', { ...SW, trial: v }, MONDAY); return [a.line, a.tip.state, a.said]; }, ['06:50 · 1 for you', '1 waiting on you', '1 waiting on you'], 'only the value true itself marks a trial');
+each(['loading', 'nodb', 'error', 'missing'], (src) => /trial/i.test(JSON.stringify(seeIn(HYG, 'sweeper', { ...SW, src }, MONDAY))), false, 'a result that could not be read says nothing of a trial');
+const deskTrial = see('desk', { ...FRESH, trial: true }, NOW);
+eq([deskTrial.line, deskTrial.tip.state, flaws(C.derive({ ...REAL, desk: { ...REAL.desk, trial: true } }, NOW))], ['13:15 · trial · 113 for you', '113 waiting on you. On trial: nothing it prepared can be sent', []], 'the rule is the same for any agent: one of his five on trial would say so too');
+// a room's total is its own; nothing is kept or changed
+const everything = { ...REAL, sweeper: SW, forecast: { src: 'ok', at: '2026-11-27T11:10:30Z', waiting: 2 }, prep: { src: 'ok', at: '2026-11-27T11:40:30Z', waiting: 4 } };
+eq(C.ROOMS.map((r) => C.derive(everything, MONDAY, null, r.agents).total), [135, 1, 2, 4], 'each room counts what waits at its own agents');
+eq(C.ROOMS.map((r) => { const o = C.derive(everything, MONDAY, null, r.agents); return [o.crew.map((a) => a.id), Object.keys(o.lines), Object.keys(o.lead), Object.keys(o.brief), Object.keys(o.tips), o.aria.split('. ').length]; }), C.ROOMS.map((r) => { const ids = r.agents.map((a) => a.id); return [ids, ids, ids, ids, ids, ids.length]; }), 'a room\'s crew, lines, tooltips and sentence are its own agents\', in desk order');
+const rooms = JSON.stringify(C.ROOMS);
+C.ROOMS.forEach((r) => C.derive(everything, MONDAY, { sweeper: 'x' }, r.agents));
+ok(JSON.stringify(C.ROOMS) === rooms, 'derive leaves the rooms as they are');
+each(SEVEN.map((a) => a.id), (id) => C.overdue(id, null, NOW), null, 'overdue stays his five\'s: it is what the Hub pane\'s run line asks about Desk');
+ok(page.window.OSCrew.ROOMS.length === 4 && page.window.OSCrew.ROOMS[0].agents === page.window.OSCrew.ROSTER, 'as a plain script in a page it has the rooms too');
+// junk for a department's facts: the same promise as for his five
+const tameRoom = (r, v) => {
+  try {
+    const o = C.derive({ [r.agents[0].id]: v, [r.agents[1].id]: { src: v, at: v, status: v, waiting: v, trial: v, parts: v }, pulse: { [r.agents[0].id]: v } }, NOW, v, r.agents);
+    return o.crew.length === r.agents.length && o.crew.every((a, i) => a.id === r.agents[i].id && STATES.includes(a.state) && Number.isInteger(a.waiting)) && Number.isInteger(o.total) && !LEAK.test(JSON.stringify([o.lines, o.lead, o.brief, o.tips, o.aria]));
+  } catch (e) { return false; }
+};
+eq(DEPT.map((r) => JUNK.filter((v) => !tameRoom(r, v)).map(show)), [[], [], []], 'junk for a department agent\'s entry, for each of its fields, its heartbeat and the names: nothing thrown, every agent in place, no stray word');
 
 // ---------- browsers that are not this one ----------
 // a fresh copy of the model, loaded and used while Intl.DateTimeFormat is replaced by a stand-in

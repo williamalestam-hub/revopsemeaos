@@ -1,6 +1,7 @@
 // The cockpit on the page (Contract 4 of the cockpit spec): the stored page, the store, and the wiring.
 //  1. The stored page keeps the type's one-writer rule: every data-draw element in dashboard/index.html is stored empty
-//     (or a single —) and none sits inside another; the cockpit block is where and what the spec says.
+//     (or a single —) and none sits inside another; the cockpit block is where and what the spec says; its styles
+//     keep the rules the page relies on, and the README says of a department agent's document what the page does.
 //  2. The store: dashboard/build_store.py, run into a temporary folder, keeps every document under 262,144 bytes, holds
 //     the four cockpit files, and stores index.html with only its indentation removed.
 //  3. The wiring (dashboard/os-cockpit.js) against stand-ins for dash, OS, OSCrew and OSCockpit, on the real markup:
@@ -134,6 +135,17 @@ const lineOf = (id) => lineEl(id).textContent; // the chip's whole line, as a wi
 const whatOf = (id) => lineEl(id).children.filter((c) => c.classList.contains('ck-what')).map((c) => c.textContent).join('|'); // what a narrow page keeps
 const whenOf = (id) => lineEl(id).children.filter((c) => c.classList.contains('ck-when')).map((c) => c.textContent).join('|');
 const IDS = ['desk', 'decide', 'instinct', 'muse', 'review'];
+// the departments' rooms and their agents, as the model's ROOMS and the page's markup must have them
+const DEPT = { hygiene: ['sweeper', 'accounts'], arr: ['pacing', 'forecast', 'renewals'], exec: ['rundown', 'prep'] };
+const DEPT_IDS = Object.values(DEPT).flat(), ROOM_IDS = ['mine'].concat(Object.keys(DEPT));
+const door = (id) => $$('[data-ck-door]').find((d) => d.dataset.ckDoor === id);
+const doorSlot = (id) => drawings('ck-door').find((e) => e.dataset.ckRoom === id);
+// a door as drawn: the state class of each of its dots, its number, and the name a screen reader says for it
+const pipsOf = (id) => doorSlot(id).querySelectorAll('.ck-pip').map((i) => String(i.className).split(/\s+/).filter((k) => /^is-/.test(k)).join());
+const countOf = (id) => doorSlot(id).querySelectorAll('.ck-door-n').map((n) => n.textContent).join('|');
+const saidBy = (n) => (n.nodeType === 3 ? n.nodeValue : n.getAttribute('aria-hidden') === 'true' ? '' : n.childNodes.map(saidBy).join(''));
+const strip = (id) => $$('.ck-strip').find((u) => u.dataset.ckRoom === id), laneOf = (id) => drawings('ck-lane').find((u) => u.dataset.ckRoom === id);
+const openRoom = () => [$$('[data-ck-door]').filter((d) => d.getAttribute('aria-pressed') === 'true').map((d) => d.dataset.ckDoor).join(), $$('.ck-strip').filter((u) => !u.hidden).map((u) => u.dataset.ckRoom).join(), $$('.ck-lane').filter((u) => !u.hidden).map((u) => u.dataset.ckRoom).join()];
 
 // ---------- the page's surroundings, shared by both runs ----------
 const timers = new Map(), timeouts = new Map(); let timerId = 0;
@@ -253,24 +265,42 @@ const staticChecks = () => {
   const scripts = $$('script').map((s) => s.getAttribute('src'));
   ok(same(scripts.slice(scripts.indexOf('os-draw.js')), ['os-draw.js', 'os-cockpit-model.js', 'os-cockpit-scene.js', 'os-cockpit.js']), 'the three cockpit scripts follow os-draw.js: model, scene, wiring', scripts);
 
-  // the cockpit block: the first thing on Today, the picture's slot, then the chips, the legend and the role sentences
+  // the cockpit block: the first thing on Today: the doors, the picture's slot, then each room's chips, the legend,
+  // the lanes and the role sentences
   const today = $$('section').find((s) => s.id === 'today'), ck = today && today.children[0];
   ok(!!ck && ck.id === 'cockpit' && ck.classList.contains('pane') && ck.classList.contains('cockpit') && today.children[1].id === 'sense', 'the cockpit is the first child of the Today section, before the sense pane', today && today.children.slice(0, 2).map((c) => c.id));
   ok(ck.getAttribute('role') === 'group' && ck.getAttribute('aria-label') === 'Cockpit', 'the pane is a group named Cockpit: the picture inside it is for the eye, the chips say the same', [ck.getAttribute('role'), ck.getAttribute('aria-label')]);
   ok(drawings('cockpit').length === 1 && stage().parentNode === ck && stage().childNodes.length === 0 && !stage().closest('[hidden]'), 'one stage, stored quite empty, not under hidden');
-  const chipEls = $$('[data-ck]');
-  ok(same(chipEls.map((c) => c.dataset.ck), IDS) && chipEls.every((c) => c.tagName === 'BUTTON' && c.getAttribute('type') === 'button' && ck.contains(c)), 'five chips, one per agent, in desk order, each a button', chipEls.map((c) => c.dataset.ck));
+  const chipEls = $$('[data-ck]'), strips = $$('.ck-strip'), inStrip = (id) => (strip(id) ? strip(id).querySelectorAll('[data-ck]') : []);
+  ok(same(inStrip('mine').map((c) => c.dataset.ck), IDS) && chipEls.every((c) => c.tagName === 'BUTTON' && c.getAttribute('type') === 'button' && ck.contains(c)), 'his own room: five chips, one per agent, in desk order, each a button', chipEls.map((c) => c.dataset.ck));
+  ok(same(Object.keys(DEPT).map((r) => inStrip(r).map((c) => c.dataset.ck)), Object.values(DEPT)) && same(chipEls.map((c) => c.dataset.ck), IDS.concat(DEPT_IDS)), 'each department\'s room: its chips, one per agent, in desk order (two, three and two); twelve chips in all, his five first, no agent twice', chipEls.map((c) => c.dataset.ck));
   ok(chipEls.every((c) => c.children.filter((x) => x.tagName === 'B').length === 1 && c.children.find((x) => x.tagName === 'B').textContent.trim().length > 0 && c.children.find((x) => x.tagName === 'B').textContent.trim().length <= 12), 'each chip holds its agent\'s name in one <b>, at most 12 characters', chipEls.map((c) => c.textContent));
   ok(chipEls.every((c) => { const l = c.querySelectorAll('[data-draw]'); return l.length === 1 && l[0].dataset.draw === 'ck-line' && l[0].dataset.ckId === c.dataset.ck && l[0].textContent === '—'; }), 'each chip holds one ck-line drawing for its own agent, stored as —');
   const SCREENS = $$('[data-nav-item]').map((b) => b.dataset.nav);
   ok(chipEls.every((c) => !c.dataset.nav || SCREENS.includes(c.dataset.nav)) && chipEls.every((c) => !c.dataset.ckGo || (today.querySelectorAll('[id="' + c.dataset.ckGo + '"]').length === 1 && c.dataset.nav === 'today')), 'a chip\'s data-nav is a tab, and its data-ck-go an element of Today', chipEls.map((c) => [c.dataset.nav, c.dataset.ckGo]));
   ok(same(chipEls.filter((c) => c.dataset.ckAlt).map((c) => [c.dataset.ck, c.dataset.nav, c.dataset.ckAlt]), [['decide', 'decide', 'leo']]) && $$('[id="nav-leo"]').length === 1 && $$('[id="nav-leo"]')[0].dataset.nav === 'leo', 'the Decide chip names its other tab (data-ck-alt="leo"), and that tab\'s button is #nav-leo');
+  ok(DEPT_IDS.every((id) => !chip(id).dataset.nav && !chip(id).dataset.ckGo && !chip(id).dataset.ckAlt), 'a department\'s chip names no tab and no element: a press goes to its agent\'s cards in the lane, or shows its tooltip');
   const roles = $$('[data-ck-role]');
-  ok(same(roles.map((r) => r.dataset.ckRole), IDS) && roles.every((r) => r.textContent.trim().length > 10 && r.closest('[hidden]') && ck.contains(r) && !r.closest('[data-draw]')), 'one role sentence per agent, in the HTML, kept hidden', roles.map((r) => r.dataset.ckRole));
+  ok(same(roles.slice(0, 5).map((r) => r.dataset.ckRole), IDS) && roles.every((r) => r.textContent.trim().length > 10 && r.closest('[hidden]') && ck.contains(r) && !r.closest('[data-draw]')), 'one role sentence per agent of his own room, in the HTML, kept hidden', roles.map((r) => r.dataset.ckRole));
+  ok(same(roles.slice(5).map((r) => r.dataset.ckRole), DEPT_IDS) && roles.slice(5).every((r) => r.textContent.length <= 70 && r.textContent === r.textContent.trim() && !/[—→]/.test(r.textContent)) && ['pacing', 'rundown'].every((id) => /by itself\.$/.test(roles.find((r) => r.dataset.ckRole === id).textContent)),
+    'and one per department agent after them, each at most 70 characters; Pacing\'s and Rundown\'s say that they post by themselves', roles.slice(5).map((r) => [r.dataset.ckRole, r.textContent.length]));
   const help = $$('[data-ck-help]'), legend = help.length === 1 ? $$('[id="' + help[0].getAttribute('aria-controls') + '"]') : [];
   ok(help.length === 1 && help[0].getAttribute('aria-expanded') === 'false' && !!help[0].getAttribute('aria-label') && legend.length === 1 && legend[0].hidden && ck.contains(legend[0]), 'the ? button controls one legend, stored hidden');
-  ok(legend[0].textContent === 'At its desk: a run is under way or due; amber means no result yet, red means it failed. At your desk: waiting on you. By the coffee: nothing needs you. An empty chair: no data.', 'the legend names every place and both lamp colours', legend[0].textContent);
-  ok($$('.ck-strip').length === 1 && !!$$('.ck-strip')[0].getAttribute('aria-label'), 'the chips are one labelled list');
+  ok(legend[0].textContent === 'At its desk: a run is under way or due; amber means no result yet, red means it failed. At your desk: waiting on you. By the coffee: nothing needs you. An empty chair: no data. A door shows another room: one dot per agent, hollow when it has no data.', 'the legend names every place and both lamp colours, and says what a door and a hollow dot are', legend[0].textContent);
+  ok(strips.filter((u) => !u.hidden).length === 1 && strips[0] === strip('mine') && !strips[0].hidden && !!strips[0].getAttribute('aria-label'), 'the chips on show are one labelled list: his own room\'s');
+  ok(same(strips.map((u) => [u.dataset.ckRoom, u.getAttribute('aria-label'), u.hidden, u.tagName, u.parentNode === strips[0].parentNode]), [['mine', 'Agents', false, 'UL', true], ['hygiene', 'Data Hygiene agents', true, 'UL', true], ['arr', 'ARR agents', true, 'UL', true], ['exec', 'Executive agents', true, 'UL', true]]),
+    'one labelled list per room, side by side in the bar; a department\'s is named after it and stored hidden', strips.map((u) => [u.dataset.ckRoom, u.getAttribute('aria-label'), u.hidden]));
+  // the doors: a labelled group of buttons above the picture, one per room, the first one open
+  const doorEls = $$('[data-ck-door]'), row = doorEls.length ? doorEls[0].parentNode : null;
+  ok(!!row && ck.children[0] === row && ck.children[1] === stage() && row.getAttribute('role') === 'group' && row.getAttribute('aria-label') === 'Rooms' && row.children.length === 4, 'the doors are a group named Rooms, the first thing in the pane, right above the picture', row && [...row.attrs]);
+  ok(same(doorEls.map((d) => [d.dataset.ckDoor, d.tagName, d.getAttribute('type'), d.getAttribute('aria-pressed'), d.childNodes[0].nodeValue]), [['mine', 'BUTTON', 'button', 'true', 'Your agents'], ['hygiene', 'BUTTON', 'button', 'false', 'Data Hygiene'], ['arr', 'BUTTON', 'button', 'false', 'ARR'], ['exec', 'BUTTON', 'button', 'false', 'Executive']]),
+    'four doors, each a button that opens with its room\'s name; "Your agents" is stored as the open one', doorEls.map((d) => [d.dataset.ckDoor, d.getAttribute('aria-pressed'), d.textContent]));
+  ok(doorEls.every((d) => { const l = d.querySelectorAll('[data-draw]'); return d.children.length === 1 && l.length === 1 && l[0].dataset.draw === 'ck-door' && l[0].dataset.ckRoom === d.dataset.ckDoor && l[0].childNodes.length === 0 && d.getAttribute('aria-label') === null; }), 'each door holds one ck-door drawing for its own room, stored quite empty, and has no label of its own: its words are its name');
+  // the lanes: one list per department under the chips, for the cards of what its agents prepared
+  const lanes = drawings('ck-lane');
+  ok(same(lanes.map((u) => [u.dataset.ckRoom, u.tagName, u.hidden, u.childNodes.length, u.parentNode === ck, u.classList.contains('ck-lane') && u.classList.contains('lane-list')]), Object.keys(DEPT).map((r) => [r, 'UL', true, 0, true, true])) && ck.children.indexOf(lanes[0]) > ck.children.indexOf(strips[0].parentNode)
+    && same(lanes.map((u) => u.getAttribute('aria-label')), ['Data Hygiene: prepared for you', 'ARR: prepared for you', 'Executive: prepared for you']),
+    'three lanes, one per department, each a list stored hidden and quite empty, in the pane under the chips, and named for a screen reader after its room', lanes.map((u) => [u.dataset.ckRoom, u.hidden, u.getAttribute('aria-label')]));
 
   // the styles: the cockpit's own selectors, the page's own tokens, nothing that needs a fixed width
   const selectors = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@(?:media|container)[^{]*\{/g, '').split('}').map((r) => r.split('{')[0].trim()).filter(Boolean).flatMap((s) => s.split(',').map((x) => x.trim()));
@@ -280,9 +310,32 @@ const staticChecks = () => {
   const narrow = (css.match(/@container main \(max-width: 30rem\) \{([\s\S]*?)\n\}/) || [])[1] || '';
   ok(/\.ck-when\s*\{\s*display:\s*none;?\s*\}/.test(narrow) && !/border-color:\s*transparent|background:\s*none/.test(narrow) && !/\.ck-when\s*\{[^}]*display:\s*none/.test(css.replace(narrow, '')), 'os-cockpit.css: a narrow page hides only the chip\'s time (.ck-when); the chips stay pills');
   ok(/\.ck-stage\.ck-off\s*\{\s*display:\s*none/.test(css), 'os-cockpit.css: a stage with nothing to draw on folds away');
+  // (the hollow dot has two rules, one for a closed door and one for the open, filled one: each is looked for from the
+  // start of its own line, so that one cannot stand in for the other)
+  ok(/\.ck-doors\s*\{[^}]*flex-wrap:\s*wrap/.test(css) && /\.ck-door\[aria-pressed="true"\]\s*\{[^}]*background:\s*var\(--color-fg\)/.test(css) && /\.ck-door:focus-visible/.test(css)
+    && /(^|\n)\.ck-pip\.is-unknown\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*inset/.test(css) && /(^|\n)\.ck-door\[aria-pressed="true"\] \.ck-pip\.is-unknown\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*inset/.test(css),
+    'os-cockpit.css: the doors wrap, the open one is filled, focus shows on a door, and the dot of an agent with no data is hollow (no fill, a ring), on a closed door and on the open one');
+  ok(/\.ck-strip\[hidden\]/.test(css) && /\.ck-lane\[hidden\]/.test(css) && /\.ck-lane:empty\s*\{\s*display:\s*none/.test(css) && /\.ck-sr\s*\{[^}]*clip-path:\s*inset\(50%\)/.test(css), 'os-cockpit.css: a hidden strip or lane takes no room, nor does an empty lane; what is only said (.ck-sr) is clipped away');
+  const faint = +(css.match(/\.ck-pip\s*\{[^}]*var\(--color-fg-muted\) (\d+)%, transparent\)/) || [])[1], idle = +(css.match(/\.ck-pip\.is-idle\s*\{[^}]*var\(--color-fg-muted\) (\d+)%, transparent\)/) || [])[1];
+  ok(faint > 0 && faint < idle && /\.ck-door\[aria-pressed="true"\] \.ck-pip\.is-idle\s*\{/.test(css), 'os-cockpit.css: a door\'s dot with no state yet (while the first crew is held) is fainter than an idle one, so that it does not read as "nothing waiting"', [faint, idle]);
+  const plainAt = css.search(/(^|\n)\.ck-chip:not\(\[data-nav\]\):not\(\[data-ck-go\]\)\s*\{[^}]*cursor:\s*default/), leadsAt = css.search(/(^|\n)\.ck-chip\.ck-leads:not\(\[data-nav\]\)\s*\{[^}]*cursor:\s*pointer/);
+  ok(plainAt >= 0 && leadsAt > plainAt, 'os-cockpit.css: a chip that names no tab and no element has the plain cursor; one marked as leading to its cards (ck-leads) has the pointer again, by a rule that comes after (the two weigh the same)', [plainAt, leadsAt]);
+  ok(/(^|\n)\.ck-lane\s*\{[^}]*min-width:\s*0/.test(css.replace(narrow, '')) && /(^|\n)\.ck-lane \.lane-card\s*\{[^}]*overflow-wrap:\s*anywhere/.test(css.replace(narrow, '')),
+    'os-cockpit.css: the lane may be narrower than what it holds, and a word too long for a card is broken: a long link in a card does not make the pane, and the picture with it, wider than the page');
+  ok(/\.ck-lane \.btn:disabled, \.ck-lane \.btn:disabled:hover\s*\{[^}]*box-shadow:\s*none;[^}]*transform:\s*none;[^}]*opacity:\s*1/.test(css), 'os-cockpit.css: a send button that is off (its agent is on trial) is flat: no glow, no lift on hover, not see-through');
+  ok(/\.ck-lane \.lane-ev li\s*\{[^}]*flex-direction:\s*row;[^}]*flex-wrap:\s*wrap/.test(css) && /\.ck-lane \.lane-ev-v\s*\{[^}]*order:\s*-1/.test(css), 'os-cockpit.css: in the lane the evidence is a row of pills with the number first; in a narrow pill the words go under the number');
   ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\.html\(|createContextualFragment|DOMParser|eval\(|new Function/.test(wiring), 'os-cockpit.js writes no HTML: no innerHTML, outerHTML, insertAdjacentHTML, document.write');
   ok(!/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|import\(|\bawait\b(?![^\n]*\buse\('db'\))/.test(wiring.replace(/\/\/[^\n]*/g, '')), 'os-cockpit.js keeps nothing in the browser and calls no other host; its one await is claude.use(\'db\')');
   ok(!/setAttribute\('(role|aria-label)'/.test(wiring.replace(/setAttribute\('role', 'tooltip'\)/, '')) && /setAttribute\('aria-hidden', 'true'\)/.test(wiring), 'os-cockpit.js gives the canvas no role and no label: it is hidden from assistive technology');
+
+  // what the README says of the cockpit, where a writer of an agent's document or a reader of a chip would be misled
+  const readme = fs.readFileSync(path.join(D, '..', 'README.md'), 'utf8').replace(/\s+/g, ' ');
+  ok(/its chip says "trial" beside its last result \(not while a run is due, late, under way or failed\), its tooltip says "On trial: nothing it prepared can be sent" in all of those states/.test(readme) && !/its chip says "trial", its tooltip/.test(readme),
+    'README: an agent on trial says "trial" on its chip beside its last result only, as "partial" is said (the model\'s rule, pinned in test40); its tooltip says it in those states too');
+  ok(/from 1 January 2027 their tooltips say only "Not linked to the cockpit yet"\. "Runs today and posts by itself" is gone, and so is the sentence on what the agent does/.test(readme) && !/their tooltips no longer say "Runs today and posts by itself", only/.test(readme),
+    'README: from 1 January 2027 the tooltips of Pacing and Rundown say only that they are not linked; the sentence on what the agent does is left out as well');
+  ok(/Every other result has to list its `items` \(an empty list when it has none, which reads as nothing waiting\); one where `items` is left out or is not a list reads "no data"/.test(readme) && /An item whose `id` is empty is left out: it is not counted and gets no card/.test(readme),
+    'README: a result has to list its items (else "no data"), and an item needs an id that is not empty (else it is left out)');
 
   // ---- 2. the store ----
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'os-store-'));
@@ -319,25 +372,28 @@ const staticChecks = () => {
 const standIns = async () => {
   // the page's modules, as the wiring reads them: nothing has answered yet
   const H = { state: 'loading', doc: null, acted: {}, ready: false };
-  const SN = { state: { instinct: 'loading', muse: 'loading' }, docs: { instinct: null, muse: null }, acted: {}, ready: false };
+  const SN = { state: { instinct: 'loading', muse: 'loading' }, docs: { instinct: null, muse: null }, acted: {}, ready: false, cards: {} }; // cards: what the reader says the lane shows of an agent
   const LN = { state: { decisions: 'loading', leo: 'loading' }, docs: { decisions: null, leo: null }, answered: {}, leoActed: {}, ready: false };
   // OS.docs: fire() is one change; changed() is a change and then the end of its burst
   const bus = (() => { const fns = new Set(), fire = () => [...fns].forEach((fn) => fn()); return { on: (fn) => { fns.add(fn); return () => { fns.delete(fn); }; }, fire, changed: () => { fire(); flush(); }, size: () => fns.size }; })();
   const items = (d) => (d && Array.isArray(d.items) ? d.items : []);
   const osStandIn = {
     hub: { state: () => H.state, doc: () => H.doc, counts: () => (H.doc && H.doc.counts && typeof H.doc.counts === 'object' ? H.doc.counts : null), top: () => (H.doc && Array.isArray(H.doc.top) ? H.doc.top : []), acted: (id) => H.acted[id] || null, ready: () => H.ready },
-    sense: { state: (k) => SN.state[k], doc: (k) => SN.docs[k], items: (k) => items(SN.docs[k]), acted: (id) => SN.acted[id] || null, ready: () => SN.ready },
+    sense: { state: (k) => SN.state[k], doc: (k) => SN.docs[k], items: (k) => items(SN.docs[k]), cards: (k) => SN.cards[k] || [], acted: (id) => SN.acted[id] || null, ready: () => SN.ready },
     lanes: { state: (k) => LN.state[k], doc: (k) => LN.docs[k], items: (k) => items(LN.docs[k]), answered: (id) => LN.answered[id] || null, leoActed: (id) => LN.leoActed[id] || null, ready: () => LN.ready },
     docs: bus,
   };
   // The model: says what it was handed, and answers something that follows the facts, in the shape the real one has:
   // lines[id] is lead[id] (a time, when the line is about the last result), ' · ', and brief[id].
+  // It has the rooms: his own (asked for without a roster, as ever) and the departments' (asked for with the room's agents).
   const model = { calls: [], outs: [], fail: false };
-  const modelStandIn = { overdue: () => null, when: () => '', derive(facts, now, names) {
-    model.calls.push({ facts: JSON.parse(JSON.stringify(facts)), now, names: { ...names } });
+  const STAND_ROOMS = [{ id: 'mine', name: 'Your agents', agents: IDS.map((id) => ({ id })) }].concat(Object.entries(DEPT).map(([id, ids]) => ({ id, name: id, agents: ids.map((x) => ({ id: x })) })));
+  const modelStandIn = { ROOMS: STAND_ROOMS, overdue: () => null, when: () => '', derive(facts, now, names, roster) {
+    const room = arguments.length < 4 ? STAND_ROOMS[0] : STAND_ROOMS.find((r) => r.agents === roster) || { id: 'not a room of the model', agents: [] };
+    model.calls.push({ facts: JSON.parse(JSON.stringify(facts)), now, names: { ...names }, room: room.id, args: arguments.length });
     if (model.fail) throw new Error('the model threw');
     const out = { crew: [], lines: {}, lead: {}, brief: {}, tips: {}, aria: '', total: 0 };
-    for (const id of IDS) {
+    for (const id of room.agents.map((a) => a.id)) {
       const f = facts[id] || {}, p = (facts.pulse || {})[id];
       const state = f.src !== 'ok' ? 'unknown' : p && p.state === 'running' ? 'working' : f.status === 'failed' ? 'error' : f.waiting > 0 ? 'needs' : 'idle';
       out.crew.push({ id, name: names[id] || id, look: 'plain', hue: 'teal', state, waiting: f.waiting || 0, step: (p && p.step) || '', bubble: '', fresh: 0 });
@@ -348,10 +404,12 @@ const standIns = async () => {
       if (state !== 'unknown') out.total += f.waiting || 0;
     }
     out.aria = out.crew.map((a) => a.name + ': ' + a.state + '.').join(' ');
-    model.last = out; model.outs.push(out);
+    if (room.id === 'mine') model.last = out; // (model.last: what it last made of his own five)
+    model.outs.push(out);
     return out;
   } };
   const facts = () => model.calls[model.calls.length - 1].facts;
+  const mineCall = () => model.calls.filter((c) => c.room === 'mine').pop(); // the last time his own room was asked for
   const shell = []; // the page's own click handler, as far as the cockpit needs it: it sees which tab a click asks for
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-nav]'); shell.push(t ? t.dataset.nav : null); });
 
@@ -363,7 +421,7 @@ const standIns = async () => {
       global[k] = undefined;
       let threw = null; try { load('os-cockpit.js'); } catch (e) { threw = e; }
       await tick();
-      if (threw || Object.keys(TYPE.reg).length || timers.size || timeouts.size || DB.subs.length || winOn.length || docHeard('keydown') || $$('[data-ck]').some((c) => c._on.length) || bus.size()) quiet.push(k + (threw ? ': ' + threw.message : ''));
+      if (threw || Object.keys(TYPE.reg).length || timers.size || timeouts.size || DB.subs.length || winOn.length || docHeard('keydown') || $$('[data-ck]').some((c) => c._on.length) || $$('[data-ck-door]').some((d) => d._on.length) || bus.size()) quiet.push(k + (threw ? ': ' + threw.message : ''));
       global[k] = parts[k];
     }
     ok(quiet.length === 0, 'without dash, OS, OSCrew or OSCockpit the script leaves quietly: no throw, drawing, timer, subscription or listener', quiet);
@@ -372,13 +430,15 @@ const standIns = async () => {
   // ---- the first run ----
   load('os-cockpit.js');
   ok(typeof TYPE.reg.cockpit === 'object' && ['mount', 'update', 'unmount'].every((k) => typeof TYPE.reg.cockpit[k] === 'function') && typeof TYPE.reg['ck-line'] === 'function', 'registers the cockpit drawing as { mount, update, unmount } and ck-line as a function', Object.keys(TYPE.reg));
+  ok(typeof TYPE.reg['ck-door'] === 'function' && same(Object.keys(TYPE.reg).sort(), ['ck-door', 'ck-line', 'cockpit']), '... and ck-door as a function, and no other: the lane\'s cards are drawn by the page (os-draw.js)', Object.keys(TYPE.reg));
+  ok(same(openRoom(), ['mine', 'mine', '']), 'the page stands in his own room: that door pressed, that strip on show, every lane hidden', openRoom());
   ok(timers.size === 1 && [...timers.values()][0].every === 30000 && scenes.length === 0, 'the script itself starts the one 30-second timer (the chips keep time without the picture), and no scene', [...timers.values()].map((t) => t.every));
   ok(timeouts.size === 1 && [...timeouts.values()][0].ms === 2500, '... and one timeout: the longest the first crew is held', [...timeouts.values()].map((t) => t.ms));
   await tick(); await tick();
   ok(DB.uses === 1 && same(DB.subs.map((s) => s.p).sort(), ['hub/pulse', 'hub/weekly']) && DB.subs.every((s) => s.live && typeof s.error === 'function'), 'one claude.use(\'db\'), one subscription to hub/weekly and one to hub/pulse, each with an error callback', [DB.uses, DB.subs.map((s) => s.p)]);
   ok(bus.size() === 1, 'listens once on OS.docs', bus.size());
-  const heardOnce = () => $$('[data-ck]').every((c) => ['mouseenter', 'mouseleave', 'focus', 'blur', 'click'].every((t) => c.heard(t) === 1)) && $$('[data-ck-help]').every((b) => b.heard('click') === 1) && docHeard('keydown') === 1 && winOn.length === 0;
-  ok(heardOnce(), 'one listener of each kind on each chip and on the ? button, one keydown on the document, none on the window (a scroll leaves the tooltip be)');
+  const heardOnce = () => $$('[data-ck]').length === 12 && $$('[data-ck]').every((c) => ['mouseenter', 'mouseleave', 'focus', 'blur', 'click'].every((t) => c.heard(t) === 1)) && $$('[data-ck-help]').every((b) => b.heard('click') === 1) && $$('[data-ck-door]').length === 4 && $$('[data-ck-door]').every((d) => d.heard('click') === 1 && d._on.length === 1) && docHeard('keydown') === 1 && winOn.length === 0;
+  ok(heardOnce(), 'one listener of each kind on each chip (a department\'s too) and on the ? button, one click on each door, one keydown on the document, none on the window (a scroll leaves the tooltip be)');
 
   // ---- the first second: the crew is held until every document, and William's reactions, have answered ----
   const held = () => scene().crew.length === 0 && IDS.every((id) => lineOf(id) === '—' && lineEl(id).children.length === 0 && stateOf(chip(id)).length === 0);
@@ -386,6 +446,8 @@ const standIns = async () => {
   const s1 = scene(), st = stage();
   ok(TYPE.thrown.length === 0 && scenes.length === 1 && same(s1.log, ['setCrew', 'resize 600', 'start']), 'the drawing runs without a throw: one scene, handed a crew, then its width, then started (the order it is previewed in)', [TYPE.thrown.map(String), s1.log]);
   ok(held() && model.calls.length === 0, 'nothing has answered yet: an empty room, every chip at its dash with no state, and the model is not asked', [s1.crew, IDS.map(lineOf)]);
+  const bare = () => same(ROOM_IDS.map(pipsOf), [['', '', '', '', ''], ['', ''], ['', '', ''], ['', '']]) && ROOM_IDS.every((r) => countOf(r) === '') && same(ROOM_IDS.map((r) => saidBy(door(r))), ['Your agents, 5 agents', 'Data Hygiene, 2 agents', 'ARR, 3 agents', 'Executive, 2 agents']);
+  ok(bare(), 'while the crew is held a door has one dot per agent of its room with no state (drawn faint) and no number, and says only how many agents it has: nothing is claimed yet', [ROOM_IDS.map(pipsOf), ROOM_IDS.map(countOf), ROOM_IDS.map((r) => saidBy(door(r)))]);
   H.state = 'ok'; H.doc = { at: '2026-11-24T12:16:30Z', lastRun: { at: '2026-11-24T12:15:58Z', status: 'ok' }, counts: { waiting: 113, critical: 1 }, top: [{ id: 'a', status: 'waiting' }, { id: 'b', status: 'new' }, { id: 'c', status: 'prepared' }] };
   bus.changed();
   ok(held() && model.calls.length === 0, 'one document has answered: still held (no robot sets off alone)');
@@ -397,9 +459,9 @@ const standIns = async () => {
   push('hub/weekly', { at: '2026-11-23T06:46:19Z', week: '2026-11-23', parent: 'words the page never shows', slack: { channel: 'D0AAAAAAAA', ts: '1.2' } });
   ok(held() && model.calls.length === 0, 'every document has answered, William\'s reactions to them have not: still held (a count would be too high)');
   H.ready = SN.ready = true; bus.changed();
-  ok(held(), 'two of the three modules say their reactions have answered: still held');
+  ok(held() && bare(), 'two of the three modules say their reactions have answered: still held, the doors too');
   LN.ready = true; bus.fire();
-  ok(s1.crew.length === 5 && model.calls.length === 6 && timeouts.size === 0 && lineOf('desk') === '12:15 · needs 113', 'the last answer releases the crew at once: the scene gets all five, the chips their lines, and the hold\'s timeout is let go', [s1.crew.length, model.calls.length, timeouts.size, lineOf('desk')]);
+  ok(s1.crew.length === 5 && model.calls.length === 10 && timeouts.size === 0 && lineOf('desk') === '12:15 · needs 113', 'the last answer releases the crew at once: the scene gets all five, the chips their lines, the doors their dots, and the hold\'s timeout is let go', [s1.crew.length, model.calls.length, timeouts.size, lineOf('desk')]);
   ok(same(s1.log, ['setCrew', 'resize 600', 'start', 'setCrew']) && s1.crews[0].length === 0, 'while it was held the scene was left alone: one empty crew, then the real one', s1.log);
 
   // ---- what mount made ----
@@ -407,7 +469,27 @@ const standIns = async () => {
   ok(st.children.length === 2 && !!canvas && s1.canvas === canvas && canvas.getAttribute('aria-hidden') === 'true' && canvas.getAttribute('role') === null && canvas.getAttribute('aria-label') === null, 'mount puts one canvas in the stage and gives it to the scene; it is aria-hidden, with no role and no label (the chips say it all)', [...canvas.attrs]);
   ok(!!tip && tip.hidden === true && tip.parentNode === st && tip.getAttribute('role') === 'tooltip' && tip.id === 'ck-tip', 'mount puts the tooltip inside the stage too: hidden, role="tooltip", with an id', tip && [...tip.attrs]);
   ok(typeof s1.opts.now === 'function' && s1.opts.now() === NOW && Number.isFinite(s1.opts.seed) && s1.opts.reducedMotion === false && typeof s1.opts.onHover === 'function' && typeof s1.opts.onPick === 'function', 'the scene gets now(), a numeric seed, reducedMotion and the two callbacks', Object.keys(s1.opts));
-  ok(s1.crew.length === 5 && s1.crew.every((a, i) => a === model.outs[0].crew[i]) && model.outs.length === 6, 'update hands the scene the very crew the model derived (one derive for the stage, one for each chip line)', model.outs.length);
+  ok(s1.crew.length === 5 && s1.crew.every((a, i) => a === model.outs[0].crew[i]) && model.outs.length === 10, 'update hands the scene the very crew the model derived (one derive for the stage, one for each chip line on show, one for each door)', model.outs.length);
+  ok(same(model.calls.map((c) => [c.room, c.args]), [['mine', 3], ['mine', 3], ['mine', 3], ['mine', 3], ['mine', 3], ['mine', 3], ['mine', 3], ['hygiene', 4], ['arr', 4], ['exec', 4]]) && same(model.calls.slice(7).map((c) => Object.keys(c.names)), Object.values(DEPT)),
+    'his own room is asked for as it always was (three arguments, the model\'s own five); a department\'s with its agents as the fourth, and the names from its own chips', model.calls.map((c) => [c.room, c.args, Object.keys(c.names).length]));
+  // the doors: a dot per agent in its state's colour, the number that waits in the room, and the name that is said
+  ok(same(ROOM_IDS.map(pipsOf), [['is-needs', 'is-needs', 'is-needs', 'is-unknown', 'is-idle'], ['is-unknown', 'is-unknown'], ['is-unknown', 'is-unknown', 'is-unknown'], ['is-unknown', 'is-unknown']]) && same(ROOM_IDS.map(countOf), ['132', '', '', '']), 'each door is drawn, open or not: one dot per agent with its state, and the model\'s total for the room (no number when nothing waits)', [ROOM_IDS.map(pipsOf), ROOM_IDS.map(countOf)]);
+  ok(same(ROOM_IDS.map((r) => saidBy(door(r))), ['Your agents, 5 agents, 132 waiting on you', 'Data Hygiene, 2 agents, no data', 'ARR, 3 agents, no data', 'Executive, 2 agents, no data']) && ROOM_IDS.every((r) => doorSlot(r).querySelectorAll('.ck-pips')[0].getAttribute('aria-hidden') === 'true' && doorSlot(r).querySelectorAll('.ck-door-n').every((n) => n.getAttribute('aria-hidden') === 'true')),
+    'a door\'s name, as it is said: the room, how many agents, and what waits; the dots and the number are for the eye only', ROOM_IDS.map((r) => saidBy(door(r))));
+  ok(doorSlot('mine').children.every((c) => c.tagName === 'SPAN') && doorSlot('mine').querySelectorAll('.ck-pip').every((i) => i.tagName === 'I' && i.childNodes.length === 0) && door('mine').children.length === 1 && door('mine').childNodes[0].nodeValue === 'Your agents', 'the ck-door drawing writes in its own element and nothing else in the door');
+  // What a door says is what its dots show. A run that failed, or one that left no result, is said: "nothing waiting"
+  // is said only when neither is so and an agent has data, "no data" when none has.
+  { const real = modelStandIn.derive;
+    const hygieneAs = (states, total) => {
+      modelStandIn.derive = (...a) => { const o = real(...a); if (o.crew.length === 2 && o.crew[0].id === 'sweeper') { o.crew.forEach((c, i) => { c.state = states[i]; }); o.total = total; } return o; };
+      bus.changed();
+      return saidBy(door('hygiene')) + ' [' + pipsOf('hygiene').join(' ') + (countOf('hygiene') ? ' #' + countOf('hygiene') : '') + ']';
+    };
+    ok(same([hygieneAs(['error', 'unknown'], 0), hygieneAs(['late', 'needs'], 2), hygieneAs(['due', 'error'], 0), hygieneAs(['error', 'late'], 4), hygieneAs(['needs', 'idle'], 3), hygieneAs(['idle', 'unknown'], 0), hygieneAs(['working', 'idle'], 0), hygieneAs(['unknown', 'unknown'], 0), hygieneAs(['asleep', 'unknown'], 0)],
+      ['Data Hygiene, 2 agents, 1 failed [is-error is-unknown]', 'Data Hygiene, 2 agents, 2 waiting on you, 1 with no result yet [is-late is-needs #2]', 'Data Hygiene, 2 agents, 1 failed, 1 with no result yet [is-due is-error]', 'Data Hygiene, 2 agents, 4 waiting on you, 1 failed, 1 with no result yet [is-error is-late #4]',
+        'Data Hygiene, 2 agents, 3 waiting on you [is-needs is-idle #3]', 'Data Hygiene, 2 agents, nothing waiting [is-idle is-unknown]', 'Data Hygiene, 2 agents, nothing waiting [is-working is-idle]', 'Data Hygiene, 2 agents, no data [is-unknown is-unknown]', 'Data Hygiene, 2 agents, no data [is-unknown is-unknown]']),
+      'a door says what its dots show: what waits, then how many runs failed (red) and how many left no result yet (amber); "nothing waiting" only when none of that is so and an agent has data; "no data" when none has; a state it does not know is no data');
+    modelStandIn.derive = real; bus.changed(); }
   ok(model.calls.every((c) => c.now === NOW) && same(model.calls[0].names, { desk: 'Desk', decide: 'Decide', instinct: 'Instinct', muse: 'Muse', review: 'Review' }), 'derive gets the clock and the names read from the chips', model.calls[0].names);
 
   // ---- the chips: when, what, and one class ----
@@ -418,7 +500,7 @@ const standIns = async () => {
   SN.state.muse = 'loading'; bus.changed();
   ok(lineOf('muse') === '—' && lineEl('muse').children.length === 0 && same(stateOf(chip('muse')), ['is-unknown']), 'after the release, an agent with no line (its document loading again) shows the dash and reads unknown', [lineOf('muse'), stateOf(chip('muse'))]);
   SN.state.muse = 'error'; bus.changed();
-  { const real = modelStandIn.derive; modelStandIn.derive = (f, n, m) => { const o = real(f, n, m); delete o.lead; delete o.brief; return o; }; bus.changed();
+  { const real = modelStandIn.derive; modelStandIn.derive = (...a) => { const o = real(...a); delete o.lead; delete o.brief; return o; }; bus.changed();
     ok(lineOf('desk') === '12:15 · needs 113' && lineEl('desk').children.length === 1 && whatOf('desk') === '12:15 · needs 113', 'a model without lead and brief still fills the chip: the whole line is the one span', lineEl('desk').children.map((c) => [c.className, c.textContent]));
     modelStandIn.derive = real; bus.changed(); }
 
@@ -459,6 +541,27 @@ const standIns = async () => {
     'decide: the worse of its two documents decides (can\'t be read, then still loading)');
   ok(same(facts().instinct, { src: 'ok', at: '2026-11-24T07:30:00Z', status: '', waiting: 2 }) && same(facts().muse, { src: 'error', at: null, status: '', waiting: 0 }), 'instinct and muse: their state, their time, and the items William has not reacted to', [facts().instinct, facts().muse]);
 
+  // ---- the departments' agents: one document each, under the agent's own id, read by OS.sense ----
+  ok(DEPT_IDS.every((id) => same(facts()[id], { src: 'missing', at: null, status: '', waiting: 0 })), 'a department agent whose document the page does not read is missing: no time, nothing waiting', DEPT_IDS.map((id) => facts()[id]));
+  {
+    const acted = SN.acted, DOC = { at: '2026-11-23T05:50:40Z', status: 'ok', trial: true, run: 'ask', scope: 'All EMEA', items: [{ id: 's1' }, { id: 's2' }, { id: 's3' }] };
+    const sweeperWith = (state, doc) => { SN.state.sweeper = state; SN.docs.sweeper = doc; bus.changed(); return facts().sweeper; };
+    SN.acted = { ...acted, s2: { action: 'notuseful' } };
+    ok(same(sweeperWith('ok', DOC), { src: 'ok', at: '2026-11-23T05:50:40Z', status: 'ok', waiting: 2, trial: true }), 'sweeper: its document\'s state, time and status, the items William has not reacted to, and that it is on trial', facts().sweeper);
+    ok(same(['error', 'failed', 'partial', 'ok', undefined, 7].map((status) => sweeperWith('ok', { ...DOC, status }).status), ['failed', 'failed', 'partial', 'ok', '', '']), 'sweeper: a run that ended in an error is a failed one to the model; partial and ok are passed on; no status is none');
+    ok(same([true, false, 'true', 1, undefined].map((trial) => sweeperWith('ok', { ...DOC, trial }).trial), [true, false, false, false, false]), 'sweeper: only trial: true is a trial');
+    ok(same(sweeperWith('ok', { at: '2026-11-23T05:50:40Z', status: 'error' }), { src: 'ok', at: '2026-11-23T05:50:40Z', status: 'failed', waiting: 0, trial: false }), 'sweeper: a document without items (a run that failed) is still a result');
+    ok(same([{ 0: { id: 's1' }, 1: { id: 's3' } }, 'two things', null, undefined, 7].map((list) => sweeperWith('ok', { ...DOC, items: list })), Array(5).fill({ src: 'error', at: '2026-11-23T05:50:40Z', status: 'ok', waiting: 0, trial: true }))
+      && same(sweeperWith('ok', { at: '2026-11-23T05:50:40Z' }), { src: 'error', at: '2026-11-23T05:50:40Z', status: '', waiting: 0, trial: false }) && sweeperWith('ok', { ...DOC, status: 'partial', items: 'none' }).src === 'error' && sweeperWith('ok', null).src === 'error',
+      'sweeper: a result that lists no items (the field is left out, or is not a list) is no data (error), not zero and "all clear", as a summary without a count is for Desk', sweeperWith('ok', { ...DOC, items: 'two things' }));
+    ok(same(sweeperWith('ok', { ...DOC, items: [] }), { src: 'ok', at: '2026-11-23T05:50:40Z', status: 'ok', waiting: 0, trial: true }) && same(['error', 'failed'].map((status) => { const f = sweeperWith('ok', { ...DOC, status, items: 'none' }); return [f.src, f.status]; }), [['ok', 'failed'], ['ok', 'failed']]),
+      'sweeper: an empty list is a result with nothing waiting; and only a run that failed may list nothing: it still reads as failed', sweeperWith('ok', { ...DOC, items: [] }));
+    ok(same(['loading', 'nodb', 'error', 'missing'].map((s) => sweeperWith(s, null)), ['loading', 'nodb', 'error', 'missing'].map((src) => ({ src, at: null, status: '', waiting: 0, trial: false }))), 'sweeper: loading, no database, an error and a document never written are passed on as they are');
+    const state = osStandIn.sense.state; osStandIn.sense.state = (k) => { if (k === 'sweeper') throw new Error('no reader'); return state(k); }; bus.changed();
+    ok(same(facts().sweeper, { src: 'error', at: null, status: '', waiting: 0 }) && same(facts().instinct, { src: 'ok', at: '2026-11-24T07:30:00Z', status: '', waiting: 2 }) && TYPE.thrown.length === 0, 'sweeper: a reader that throws is no data for that agent only', facts().sweeper);
+    osStandIn.sense.state = state; delete SN.state.sweeper; delete SN.docs.sweeper; SN.acted = acted; bus.changed();
+  }
+
   // ---- review and pulse: the wiring's own two subscriptions ----
   ok(same(facts().review, { src: 'ok', at: '2026-11-23T06:46:19Z', status: '', waiting: 0 }) && whatOf('review') === 'idle 0', 'review: from hub/weekly, its time; posted to Slack, so no status', facts().review);
   push('hub/weekly', { at: '2026-11-23T06:46:19Z', week: '2026-11-23', slack: null, error: 'channel_not_found' });
@@ -480,24 +583,135 @@ const standIns = async () => {
   push('hub/pulse', undefined);
   ok(facts().pulse === null && same(stateOf(chip('desk')), ['is-needs']), 'pulse: the document may not exist', facts().pulse);
 
+  // ---- the doors: another room on the same canvas ----
+  {
+    const tipEl = st.children.find((x) => x.tagName !== 'CANVAS'), described = () => $$('[data-ck]').filter((x) => x.getAttribute('aria-describedby') !== null).map((x) => x.dataset.ck);
+    // a closed room's door follows its documents: Sweeper has run (on trial), with one thing for William
+    SN.state.sweeper = 'ok'; SN.docs.sweeper = { at: '2026-11-23T05:50:40Z', status: 'ok', trial: true, items: [{ id: 's1' }] }; bus.changed();
+    ok(same(pipsOf('hygiene'), ['is-needs', 'is-unknown']) && countOf('hygiene') === '1' && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, 1 waiting on you' && same(openRoom(), ['mine', 'mine', '']) && lineOf('sweeper') === '—',
+      'a closed room\'s door follows its agents: Sweeper\'s dot and the room\'s count are right before the door is ever opened (its chips, under hidden, are not drawn)', [pipsOf('hygiene'), countOf('hygiene'), saidBy(door('hygiene'))]);
+    // a chip's line is its own agent's wherever the chip is on show (a person may move one, or unhide a strip): it is
+    // derived for the agent's room, not for the room that is open
+    strip('hygiene').hidden = false; DEPT.hygiene.forEach((id) => TYPE.one(lineEl(id)));
+    ok(lineOf('sweeper') === '05:50 · needs 1' && same(stateOf(chip('sweeper')), ['is-needs']) && lineOf('accounts') === 'unknown 0' && same(openRoom().slice(0, 1), ['mine']) && same(s1.crew.map((a) => a.id), IDS),
+      'a chip line is derived for its own agent\'s room, not for the room that is open: a department\'s chip on show beside his five reads its own line', DEPT.hygiene.map(lineOf));
+    strip('hygiene').hidden = true;
+    s1.anchors.desk = { x: 300, y: 100 }; s1.opts.onHover('desk'); chip('desk').fire('mouseenter');
+    const n = model.calls.length, c = s1.crews.length, deskLine = lineOf('desk'); s1.focus.length = 0;
+    door('hygiene').click();
+    ok(same(openRoom(), ['hygiene', 'hygiene', 'hygiene']) && same(ROOM_IDS.map((r) => door(r).getAttribute('aria-pressed')), ['false', 'true', 'false', 'false']), 'a click on a door opens its room: that door is the pressed one, that room\'s strip and lane are the ones not hidden', openRoom());
+    ok(scenes.length === 1 && s1.crews.length === c + 1 && same(s1.crew.map((a) => a.id), DEPT.hygiene) && s1.log[s1.log.length - 1] === 'setCrew' && s1.log.filter((l) => /^(resize|start)/.test(l)).length === 2 && st.children.length === 2,
+      '... the same scene on the same canvas is handed that room\'s crew: no new scene, no new size, not started again', [scenes.length, s1.crew.map((a) => a.id), s1.log.slice(-3)]);
+    ok(tipEl.hidden === true && described().length === 0 && s1.focus[s1.focus.length - 1] === null, '... the tooltip that was showing goes, and no robot stays lit', [tipEl.hidden, described(), s1.focus]);
+    ok(model.calls.length === n + 7 && same(model.calls.slice(n).map((x) => x.room), ['hygiene', 'hygiene', 'hygiene', 'mine', 'hygiene', 'arr', 'exec']), '... and the drawings run again at once: the stage and the two chip lines of that room, and the four doors', model.calls.slice(n).map((x) => x.room));
+    ok(lineOf('sweeper') === '05:50 · needs 1' && same(stateOf(chip('sweeper')), ['is-needs']) && lineOf('accounts') === 'unknown 0' && same(stateOf(chip('accounts')), ['is-unknown']) && lineOf('desk') === deskLine, 'the chips of the open room get their lines and states; his own, now hidden, keep what they had', DEPT.hygiene.map(lineOf));
+    // pointing at a department's robot: its tooltip, with the role sentence from the HTML
+    s1.anchors.sweeper = { x: 300, y: 100 }; s1.opts.onHover('sweeper');
+    ok(tipEl.hidden === false && same(tipEl.children.flatMap((x) => (x.children.length ? x.children : [x]).map((y) => y.textContent)), ['Sweeper', 'Counts the open deals that break your hygiene rules, team by team.', 'Now: needs', 'Last result 2026-11-23T05:50:40Z', 'Next run soon']) && same(described(), ['sweeper']) && s1.canvas.style.cursor === '',
+      'a department\'s robot has its tooltip too: name, role sentence, the model\'s lines; with no card in the lane its chip leads nowhere (plain cursor)', tipEl.textContent);
+    s1.opts.onHover(null);
+    // an agent whose task has stopped (the model marks its tooltip entry): the sentence on what it does is left out,
+    // since it reads as if the agent still ran
+    { const real = modelStandIn.derive, words = () => tipEl.children.flatMap((x) => (x.children.length ? x.children : [x]).map((y) => y.textContent));
+      modelStandIn.derive = (...a) => { const o = real(...a); if (o.tips.sweeper) o.tips.sweeper.stopped = true; if (o.tips.accounts) o.tips.accounts.stopped = 'true'; return o; }; bus.changed();
+      s1.opts.onHover('sweeper'); const stopped = words(); s1.opts.onHover('accounts'); const notTrue = words();
+      modelStandIn.derive = real; bus.changed(); s1.opts.onHover('sweeper'); const running = words(); s1.opts.onHover(null);
+      ok(same(stopped, ['Sweeper', 'Now: needs', 'Last result 2026-11-23T05:50:40Z', 'Next run soon']) && same(notTrue, ['Accounts', 'Finds accounts and records without the right owner.', 'Now: unknown', 'Next run soon']) && running[1] === 'Counts the open deals that break your hygiene rules, team by team.',
+        'an agent the model marks as stopped: its tooltip leaves out the role sentence and keeps the rest; only the value true marks it, and when the mark is gone the sentence is back', [stopped, notTrue]); }
+    // a press on a chip, or its robot: to the agent's first card in the lane when it has one, else its tooltip
+    shell.length = 0; clicks.length = 0; scrolled.length = 0;
+    const nowhere = s1.opts.onPick('sweeper'); flush();
+    ok(nowhere === false && same(clicks.map((x) => x.dataset.ck), ['sweeper']) && same(shell, [null]) && scrolled.length === 0 && tipEl.hidden === false && tipEl.children[0].textContent === 'Sweeper' && !chip('sweeper').classList.contains('ck-leads'),
+      'an agent with no card in the lane: a press on its chip, or its robot, opens nothing and shows its tooltip, as Review\'s does', [nowhere, shell, scrolled.length]);
+    s1.opts.onHover(null);
+    // (this page has no lane drawing: the test puts the cards in the lane, and has the reader say whose they are)
+    const card = new El('li'), other = new El('li'); card.dataset.ckOf = 'sweeper'; other.dataset.ckOf = 'sweeper'; laneOf('hygiene').append(card, other); SN.cards = { sweeper: [{ id: 's1' }, { id: 's0' }] }; bus.changed();
+    ok(chip('sweeper').classList.contains('ck-leads') && !chip('accounts').classList.contains('ck-leads') && same(stateOf(chip('sweeper')), ['is-needs']), 'an agent with a card in the lane: its chip is marked as leading somewhere (beside its one state class)', chip('sweeper').className);
+    s1.opts.onHover('sweeper'); const pointer = s1.canvas.style.cursor; shell.length = 0; clicks.length = 0;
+    const led = s1.opts.onPick('sweeper'), before = scrolled.length; flush();
+    ok(pointer === 'pointer' && led === true && before === 0 && scrolled.length === 1 && scrolled[0].el === card && scrolled[0].o.block === 'start' && card.getAttribute('tabindex') === '-1' && document.activeElement === card && tipEl.hidden === true && same(shell, [null]),
+      '... and a press on it, or on its robot, scrolls to its first card in the lane and moves focus there; no tab is asked for', [pointer, led, scrolled.map((x) => x.o), shell]);
+    laneOf('hygiene').hidden = true; scrolled.length = 0; const hiddenLane = s1.opts.onPick('sweeper'); flush(); laneOf('hygiene').hidden = false;
+    ok(hiddenLane === false && scrolled.length === 0, 'a card under a hidden lane is no card', [hiddenLane, scrolled.length]);
+    // the cards of two agents in the lane: each chip goes to its own agent's first card
+    const mate = new El('li'); mate.dataset.ckOf = 'accounts'; laneOf('hygiene').append(mate); SN.cards.accounts = [{ id: 'a1' }]; bus.changed();
+    scrolled.length = 0; const own = s1.opts.onPick('accounts'); flush();
+    ok(own === true && chip('accounts').classList.contains('ck-leads') && scrolled.length === 1 && scrolled[0].el === mate && document.activeElement === mate && laneOf('hygiene').children[0] === card,
+      'with the cards of two agents in the lane, a press goes to the first card of its own agent, not to the first card in the lane', [own, scrolled.map((x) => x.el.dataset.ckOf)]);
+    mate.remove();
+    s1.opts.onHover(null); card.remove(); other.remove(); SN.cards = {}; document.activeElement = null; bus.changed();
+    ok(!chip('sweeper').classList.contains('ck-leads'), 'when the card has gone the mark goes with it');
+    // The mark is the reader's word (OS.sense.cards, the lane's own rule), not the lane as it stands: when Today comes
+    // back from another tab the type draws the chips' lines before the lane, which then still holds the cards it had
+    // when the tab was left.
+    { const leads = (id) => chip(id).classList.contains('ck-leads');
+      SN.cards = { sweeper: [{ id: 's1' }] }; bus.changed();
+      const ahead = [leads('sweeper'), leads('accounts'), laneOf('hygiene').children.length]; // the reader has a card of Sweeper's; the lane is not drawn yet
+      const left = new El('li'); left.dataset.ckOf = 'sweeper'; laneOf('hygiene').append(left); SN.cards = {}; bus.changed();
+      const behind = [leads('sweeper'), laneOf('hygiene').children.length]; // the reader has none any more; the lane still holds the one it had
+      left.remove();
+      ok(same(ahead, [true, false, 0]) && same(behind, [false, 1]), 'the mark follows the reader, not the lane as it stands: a chip drawn before its lane is marked for the cards the lane is about to hold, and is not marked for one the lane has not let go of yet', [ahead, behind]);
+      // only a department's agent, and only while its room is the open one (its lane is then on show)
+      SN.cards = { sweeper: [{ id: 's1' }], pacing: [{ id: 'p1' }], desk: [{ id: 'a' }], instinct: [{ id: 'i1' }] };
+      strip('mine').hidden = false; strip('arr').hidden = false; bus.changed();
+      const elsewhere = ['sweeper', 'pacing', 'desk', 'instinct'].map(leads);
+      strip('mine').hidden = true; strip('arr').hidden = true;
+      // a reader that has no word on cards (an older file, while a new version of the page is loading), one that
+      // throws, and one whose word is not a list
+      const kept = osStandIn.sense.cards; delete osStandIn.sense.cards; bus.changed(); const without = leads('sweeper');
+      osStandIn.sense.cards = () => { throw new Error('no reader'); }; bus.changed(); const threw = leads('sweeper');
+      osStandIn.sense.cards = () => 'many'; bus.changed(); const text = leads('sweeper');
+      osStandIn.sense.cards = kept; bus.changed(); const again = leads('sweeper');
+      SN.cards = {}; bus.changed();
+      ok(same(elsewhere, [true, false, false, false]) && same([without, threw, text, again, leads('sweeper')], [false, false, false, true, false]) && TYPE.thrown.length === 0,
+        'only a chip of the open department is marked: not one of another room that is on show, and never one of his five; a reader with no word on cards, one that throws, or one whose word is not a list marks nothing, and nothing is thrown', [elsewhere, without, threw, text, again]); }
+    // the timer, and the open door itself, in a department's room
+    const n2 = model.calls.length, c2 = s1.crews.length;
+    tickNow();
+    ok(model.calls.length === n2 + 7 && s1.crews.length === c2 + 1 && same(s1.crew.map((a) => a.id), DEPT.hygiene), 'the 30-second timer redraws the open room: the scene keeps that room\'s crew', [model.calls.length - n2, s1.crew.map((a) => a.id)]);
+    door('hygiene').click();
+    ok(model.calls.length === n2 + 7 && s1.crews.length === c2 + 1, 'a click on the door that is open already does nothing');
+    door('arr').click();
+    ok(same(openRoom(), ['arr', 'arr', 'arr']) && same(s1.crew.map((a) => a.id), DEPT.arr) && same(DEPT.arr.map(lineOf), ['unknown 0', 'unknown 0', 'unknown 0']) && model.calls.length === n2 + 7 + 8, 'on to the next room: its three agents in the scene, its three chips drawn (the stage, three lines, four doors)', [openRoom(), model.calls.length - n2 - 7]);
+    // a door the model has no room for (a person may add one): nothing happens
+    const stray = door('exec'); stray.dataset.ckDoor = 'cellar'; stray.click(); stray.dataset.ckDoor = 'exec';
+    ok(same(openRoom(), ['arr', 'arr', 'arr']) && TYPE.thrown.length === 0, 'a door for a room the model does not have opens nothing');
+    // Today hidden while a door is pressed, and back
+    { const today = st.closest('section'), c3 = s1.crews.length; today.hidden = true; door('exec').click(); const hiddenCrews = s1.crews.length; today.hidden = false; TYPE.all();
+      ok(hiddenCrews === c3 && same(openRoom(), ['exec', 'exec', 'exec']) && same(s1.crew.map((a) => a.id), DEPT.exec) && TYPE.thrown.length === 0, 'a door pressed while Today is hidden still opens its room; the scene gets the crew when the tab is back', [hiddenCrews - c3, s1.crew.map((a) => a.id)]); }
+    // back to his own room: everything as it was
+    const n3 = model.calls.length;
+    door('mine').click();
+    ok(same(openRoom(), ['mine', 'mine', '']) && same(s1.crew.map((a) => a.id), IDS) && model.calls.length === n3 + 10 && lineOf('desk') === deskLine && scenes.length === 1, 'back through the first door: his five in the scene, their chips on show, no lane, on the same scene', [openRoom(), s1.crew.map((a) => a.id), model.calls.length - n3]);
+    // in his own room no chip is marked as leading to cards, whatever the reader says: no lane is on show there
+    SN.cards = { desk: [{ id: 'a' }], instinct: [{ id: 'i1' }], sweeper: [{ id: 's1' }] }; strip('hygiene').hidden = false; bus.changed();
+    const inMine = ['desk', 'instinct', 'sweeper'].map((id) => chip(id).classList.contains('ck-leads'));
+    strip('hygiene').hidden = true; SN.cards = {}; bus.changed();
+    ok(same(inMine, [false, false, false]) && same(openRoom(), ['mine', 'mine', '']), 'with his own room open no chip is marked as leading to cards: not one of his five, and not a department\'s chip that is on show beside them', inMine);
+    delete SN.state.sweeper; delete SN.docs.sweeper; bus.changed();
+  }
+
   // ---- redraws: a burst of changes, the timer, and width ----
   {
     const n = model.calls.length, c = s1.crews.length;
+    const doorsAre = () => ROOM_IDS.map((r) => saidBy(door(r)) + ' [' + pipsOf(r).join(' ') + (countOf(r) ? ' #' + countOf(r) : '') + ']'), settled = doorsAre(); // every door, as drawn before the burst
     bus.fire(); bus.fire(); live('hub/pulse').forEach((s) => s.next(snapOf('hub/pulse', undefined))); bus.fire();
     ok(model.calls.length === n && timeouts.size === 1 && [...timeouts.values()][0].ms === 150, 'a burst of changes (documents, then reactions to them) waits: nothing is redrawn yet, one short timeout is pending', [model.calls.length - n, [...timeouts.values()].map((t) => t.ms)]);
     // mid-burst the dashboard may call the drawings itself (a dataset loaded): they keep to the last settled facts
     SN.acted = { i1: { action: 'ack' }, i2: { action: 'ack' }, i3: { action: 'ack' } };
     TYPE.all();
     ok(model.calls.length === n && s1.crews.length === c + 1 && s1.crew[2].state === 'needs' && whatOf('instinct') === 'needs 2', 'a drawing called in the middle of a burst keeps to the facts as they were before it: no robot sets off on half the news', [model.calls.length - n, s1.crew[2]]);
+    ok(same(doorsAre(), settled) && settled[0] === 'Your agents, 5 agents, 132 waiting on you [is-needs is-needs is-needs is-unknown is-idle #132]' && settled[1] === 'Data Hygiene, 2 agents, no data [is-unknown is-unknown]',
+      '... and every door, drawn in the middle of a burst, keeps to what its own room last settled on: a department\'s door does not take his room\'s crew or count', doorsAre());
     flush();
-    ok(model.calls.length === n + 6 && s1.crews.length === c + 2 && s1.crew[2].state === 'idle' && timeouts.size === 0, '... then both drawings run again once, on all of it: the stage, and the five chip lines', [model.calls.length - n, s1.crews.length - c, s1.crew[2]]);
+    ok(model.calls.length === n + 10 && s1.crews.length === c + 2 && s1.crew[2].state === 'idle' && timeouts.size === 0, '... then the drawings run again once, on all of it: the stage, the five chip lines and the four doors', [model.calls.length - n, s1.crews.length - c, s1.crew[2]]);
     SN.acted = { i2: { action: 'ack' } }; bus.changed();
     const n2 = model.calls.length, c2 = s1.crews.length;
     bus.fire(); T += 1500; bus.fire();
-    ok(model.calls.length === n2 + 6 && s1.crews.length === c2 + 1 && timeouts.size === 0, 'changes that never pause do not hold the picture for ever: after a second and a half it is drawn anyway', [model.calls.length - n2, timeouts.size]);
+    ok(model.calls.length === n2 + 10 && s1.crews.length === c2 + 1 && timeouts.size === 0, 'changes that never pause do not hold the picture for ever: after a second and a half it is drawn anyway', [model.calls.length - n2, timeouts.size]);
     const n3 = model.calls.length, c3 = s1.crews.length;
     advance(28500);
-    ok(model.calls.length === n3 + 6 && s1.crews.length === c3 + 1 && [...timers.values()][0].every === 30000, 'thirty seconds after the script ran, the timer reruns both drawings', [model.calls.length - n3, s1.crews.length - c3, T]);
+    ok(model.calls.length === n3 + 10 && s1.crews.length === c3 + 1 && [...timers.values()][0].every === 30000, 'thirty seconds after the script ran, the timer reruns the drawings: the stage, the chip lines and the doors', [model.calls.length - n3, s1.crews.length - c3, T]);
     ok(s1.log.filter((l) => /^resize/.test(l)).length === 1 && s1.log.filter((l) => l === 'start').length === 1, 'the same width is not resized again, and the scene is not started again', s1.log.filter((l) => /^(resize|start)/.test(l)));
     st._w = 400; TYPE.one(st);
     ok(same(s1.log.filter((l) => /^resize/.test(l)), ['resize 600', 'resize 400']), 'a new width of the stage resizes the scene', s1.log.filter((l) => /^resize/.test(l)));
@@ -556,11 +770,11 @@ const standIns = async () => {
     push('hub/pulse', { agents: { muse: { state: 'running', startedAt: '2026-11-24T12:45:00Z', step: '<b>bold</b>' } } });
     SN.state.muse = 'ok'; SN.docs.muse = { at: '2026-11-24T07:30:00Z', items: [] }; bus.changed();
     s1.opts.onHover('muse');
-    ok(model.calls[model.calls.length - 1].names.muse === '<img src=x> Muse' && tip.children[0].textContent === '<img src=x> Muse' && tip.querySelectorAll('img').length + tip.querySelectorAll('b').length === 1 && st.querySelectorAll('img').length === 0,
-      'a renamed chip renames the robot and its tooltip; what looks like markup stays text', [model.calls[model.calls.length - 1].names.muse, texts()]);
+    ok(mineCall().names.muse === '<img src=x> Muse' && tip.children[0].textContent === '<img src=x> Muse' && tip.querySelectorAll('img').length + tip.querySelectorAll('b').length === 1 && st.querySelectorAll('img').length === 0,
+      'a renamed chip renames the robot and its tooltip; what looks like markup stays text', [mineCall().names.muse, texts()]);
     // the name is the chip's own words, wherever they sit: without the dot, without the drawn line
     const dot = chip('muse').children[0], line = lineEl('muse');
-    const nameWith = (...kids) => { chip('muse').replaceChildren(dot, ...kids, line); bus.changed(); return model.calls[model.calls.length - 1].names.muse; };
+    const nameWith = (...kids) => { chip('muse').replaceChildren(dot, ...kids, line); bus.changed(); return mineCall().names.muse; };
     const strong = new El('strong'), em = new El('em'); em.textContent = 'Muse'; strong.append(em, ' Two');
     const plain = nameWith('  Muse  the\n second '), rebuilt = nameWith(strong), none = nameWith(), dotted = (dot.textContent = '•', nameWith('Muse'));
     ok(plain === 'Muse the second' && rebuilt === 'Muse Two' && none === undefined && dotted === 'Muse', 'the name survives the bold being taken off or rebuilt: it is the chip\'s text without its dot and its line; no words, no name (the model keeps its own)', [plain, rebuilt, none, dotted]);
@@ -645,7 +859,7 @@ const standIns = async () => {
     ok(scenes.length === 2 && scene() !== s1 && timers.size === 1 && same(scene().log, ['setCrew', 'resize 600', 'start']) && st.children.filter((c) => c.tagName === 'CANVAS').length === 1 && scene().crew.length === 5, 'the next call mounts afresh: one canvas, one scene (started once, with the crew: nothing is held a second time), still one timer', [scenes.length, timers.size, scene().log]);
     ok(st.children.find((c) => c.tagName !== 'CANVAS').id === 'ck-tip-2', 'each tooltip has an id of its own', st.children.map((c) => c.id));
     model.fail = true; bus.changed(); model.fail = false;
-    ok(TYPE.thrown.length === 6 && TYPE.thrown.every((e) => /the model threw/.test(e.message)) && scene().destroyed === 1 && timers.size === 1, 'a throw in the model is not swallowed: the dashboard hears it and unmounts, which destroys the scene; the timer goes on', [TYPE.thrown.length, scene().destroyed, timers.size]);
+    ok(TYPE.thrown.length === 10 && TYPE.thrown.every((e) => /the model threw/.test(e.message)) && scene().destroyed === 1 && timers.size === 1, 'a throw in the model is not swallowed (the stage, five chip lines, four doors): the dashboard hears it and unmounts, which destroys the scene; the timer goes on', [TYPE.thrown.length, scene().destroyed, timers.size]);
     TYPE.thrown.length = 0; H.doc.counts.waiting = 7;
     tickNow();
     ok(scenes.length === 3 && scene().destroyed === 0 && TYPE.thrown.length === 0 && whatOf('desk') === 'needs 7' && scene().crew[0].waiting === 7, '... and its next tick brings the picture back, with the chips', [scenes.length, whatOf('desk')]);
@@ -670,6 +884,9 @@ const standIns = async () => {
     tickNow(); bus.changed(); st._w = 320; TYPE.one(st); st._w = 600;
     chip('desk').fire('mouseenter'); chip('desk').fire('mouseleave'); chip('review').click(); press('Escape'); flush();
     ok(scenes.length === n && st.childNodes.length === 0 && TYPE.thrown.length === 0 && whatOf('desk') === 'needs 113', 'update is a no-op there, the chips still follow the facts, and nothing throws', [scenes.length - n, TYPE.thrown.map(String)]);
+    door('hygiene').click();
+    ok(same(openRoom(), ['hygiene', 'hygiene', 'hygiene']) && lineOf('accounts') === 'unknown 0' && same(pipsOf('hygiene'), ['is-unknown', 'is-unknown']) && scenes.length === n && st.childNodes.length === 0 && TYPE.thrown.length === 0, '... and a door still opens its room there: its chips and the doors are drawn, no scene is made', [openRoom(), lineOf('accounts')]);
+    door('mine').click();
     TYPE.leave(st); noInk = false; bus.changed();
     ok(scenes.length === n + 1 && st.children.length === 2 && !st.classList.contains('ck-off'), 'mounted again where a context is to be had, the picture is back', [scenes.length - n, st.className]);
   }
@@ -677,11 +894,13 @@ const standIns = async () => {
   // ---- a second run of the script, as the dashboard does when a file changes ----
   for (const again of ['unmount', 'keep', 'forget']) {
     TYPE.again = again;
+    door('hygiene').click(); // a department's room is open when the script runs again
     const old = scene(), n = scenes.length, was = [...timers.keys()], help = $$('[data-ck-help]')[0], legend = document.getElementById(help.getAttribute('aria-controls'));
     bus.fire(); // a change is pending when the script runs again
     load('os-cockpit.js');
     ok(old.destroyed >= 1 && timers.size === 1 && !was.some((id) => timers.has(id)) && same([...timeouts.values()].map((t) => t.ms), [2500]) && live('hub/weekly').length + live('hub/pulse').length === 0 && bus.size() === 1,
       'second run (' + again + '): the earlier run\'s scene, timer, pending redraw, subscriptions and bus listener are gone; the new run has its own timer and hold', [old.destroyed, timers.size, [...timeouts.values()].map((t) => t.ms), live('hub/weekly').length, bus.size()]);
+    ok(same(openRoom(), ['mine', 'mine', '']), 'second run (' + again + '): the page is back in his own room, whatever room the earlier run had open', openRoom());
     await tick(); await tick();
     TYPE.all();
     ok(scene().crew.length === 0 && lineOf('desk') === '—', 'second run (' + again + '): until hub/weekly answers again, the crew is held', [scene().crew.length, lineOf('desk')]);
@@ -723,6 +942,42 @@ const standIns = async () => {
     const stillHeld = scene().crew.length === 0; H.state = 'ok'; bus.changed(); const waits = scene().crew.length === 0; LN.ready = true; bus.fire();
     ok(stillHeld && waits && scene().crew.length === 5, 'a module that has no ready() is not waited for; a loading document and one that is not ready are', [stillHeld, waits, scene().crew.length]);
     osStandIn.sense.ready = ready;
+    // a department agent's document holds the first crew too, whichever room is open: a door shows its room's count
+    SN.state.sweeper = 'loading';
+    load('os-cockpit.js'); await tick(); await tick(); push('hub/weekly', { at: '2026-11-23T06:46:19Z', slack: { ts: '1.2' } }); TYPE.all(); bus.changed();
+    const deptHeld = scene().crew.length === 0 && lineOf('desk') === '—' && ROOM_IDS.every((r) => countOf(r) === '' && pipsOf(r).every((p) => p === ''));
+    SN.state.sweeper = 'ok'; SN.docs.sweeper = { at: '2026-11-23T05:50:40Z', status: 'ok', trial: true, items: [{ id: 's1' }, { id: 's2' }] }; SN.acted = { ...SN.acted, s2: { action: 'ack' } }; bus.fire();
+    ok(deptHeld && scene().crew.length === 5 && countOf('hygiene') === '1' && same(pipsOf('hygiene'), ['is-needs', 'is-unknown']), 'a department agent\'s document that has not answered holds the first crew as well; when it answers, its door opens on the right count at once (1, not 2)', [deptHeld, scene().crew.length, countOf('hygiene')]);
+    delete SN.state.sweeper; delete SN.docs.sweeper; delete SN.acted.s2;
+  }
+  // ---- a model without rooms (an older file, while a new version of the page is loading): his five, as before ----
+  {
+    delete modelStandIn.ROOMS; load('os-cockpit.js'); await tick(); await tick();
+    push('hub/weekly', { at: '2026-11-23T06:46:19Z', slack: { ts: '1.2' } }); TYPE.all();
+    const before = model.calls.length; door('hygiene').click();
+    ok(TYPE.thrown.length === 0 && scene().crew.length === 5 && whatOf('desk') === 'needs 113' && ROOM_IDS.every((r) => doorSlot(r).childNodes.length === 0) && same(openRoom(), ['mine', 'mine', '']) && model.calls.length === before && mineCall().args === 3,
+      'a model without rooms: the five in the scene and on their chips as before; the doors stay bare and open nothing; nothing throws', [scene().crew.length, openRoom(), TYPE.thrown.map(String)]);
+    modelStandIn.ROOMS = STAND_ROOMS;
+  }
+  // ---- rooms that are not whole are no rooms; and a room of one agent ----
+  {
+    modelStandIn.ROOMS = [STAND_ROOMS[0], { id: 'hygiene', name: 'hygiene' }]; load('os-cockpit.js'); await tick(); await tick();
+    push('hub/weekly', { at: '2026-11-23T06:46:19Z', slack: { ts: '1.2' } }); TYPE.all();
+    const before = model.calls.length; door('hygiene').click();
+    ok(TYPE.thrown.length === 0 && scene().crew.length === 5 && whatOf('desk') === 'needs 113' && ROOM_IDS.every((r) => doorSlot(r).childNodes.length === 0) && same(openRoom(), ['mine', 'mine', '']) && model.calls.length === before && mineCall().args === 3,
+      'a model with a room that is not whole (it lists no agents) is taken as a model without rooms: the five as before, the doors bare, nothing throws', [scene().crew.length, openRoom(), TYPE.thrown.map(String)]);
+    const one = { id: 'exec', name: 'exec', agents: [{ id: 'rundown' }] };
+    STAND_ROOMS.push(one); modelStandIn.ROOMS = STAND_ROOMS.slice(0, 3).concat([one]); load('os-cockpit.js'); await tick(); await tick();
+    push('hub/weekly', { at: '2026-11-23T06:46:19Z', slack: { ts: '1.2' } }); TYPE.all();
+    ok(TYPE.thrown.length === 0 && saidBy(door('exec')) === 'Executive, 1 agent, no data' && same(pipsOf('exec'), ['is-unknown']) && saidBy(door('arr')) === 'ARR, 3 agents, no data' && scene().crew.length === 5,
+      'a room of one agent: its door has one dot and says "1 agent"', [saidBy(door('exec')), pipsOf('exec')]);
+    STAND_ROOMS.pop(); modelStandIn.ROOMS = STAND_ROOMS;
+    // a strip that names no room (the page as it was stored before the doors, or a person took the attribute off) is his own
+    const first = strip('mine'); first.removeAttribute('data-ck-room'); load('os-cockpit.js'); await tick(); await tick();
+    push('hub/weekly', { at: '2026-11-23T06:46:19Z', slack: { ts: '1.2' } }); TYPE.all();
+    const atStart = !first.hidden; door('hygiene').click(); const inDept = first.hidden && !strip('hygiene').hidden; door('mine').click();
+    ok(atStart && inDept && !first.hidden && strip('hygiene').hidden && whatOf('desk') === 'needs 113' && TYPE.thrown.length === 0, 'a strip that names no room is his own: on show in his room, hidden while a department is open, on show again on the way back', [atStart, inDept, first.hidden]);
+    first.setAttribute('data-ck-room', 'mine');
   }
 
   // ---- no database ----
@@ -761,6 +1016,41 @@ const standIns = async () => {
     ok(got.every((a) => a.step === '' && a.fresh === Date.parse(a.id === 'review' ? '2026-11-23T06:46:19Z' : a.id === 'desk' ? '2026-11-24T12:15:58Z' : a.id === 'decide' ? '2026-11-24T06:44:12Z' : '2026-11-24T07:30:00Z')), 'real model, stand-in page: each fresh time is the document\'s', got.map((a) => a.fresh));
     push('hub/weekly', { at: '2026-11-23T06:46:19Z', week: '2026-11-23', slack: null });
     ok(lineOf('review') === 'failed Mon 07:46' && same(stateOf(chip('review')), ['is-error']), 'real model, stand-in page: a review that was not posted reads "failed Mon 07:46"', lineOf('review'));
+    // the departments with the real model: the first week, when only Sweeper has run (on trial)
+    SN.state.sweeper = 'ok'; SN.docs.sweeper = { at: '2026-11-23T05:50:40Z', status: 'ok', trial: true, run: 'ask', scope: 'All EMEA', items: [{ id: 's1' }] };
+    for (const id of ['accounts', 'forecast', 'renewals', 'prep']) SN.state[id] = 'missing';
+    bus.changed();
+    ok(same(ROOM_IDS.map(pipsOf), [['is-needs', 'is-needs', 'is-needs', 'is-needs', 'is-error'], ['is-needs', 'is-unknown'], ['is-unknown', 'is-unknown', 'is-unknown'], ['is-unknown', 'is-unknown']]) && same(ROOM_IDS.map(countOf), ['137', '1', '', '']) && same(ROOM_IDS.map((r) => saidBy(door(r))), ['Your agents, 5 agents, 137 waiting on you, 1 failed', 'Data Hygiene, 2 agents, 1 waiting on you', 'ARR, 3 agents, no data', 'Executive, 2 agents, no data']),
+      'real model, stand-in page: the doors in the first week: his room\'s five dots and 137, and the review that failed is said; Data Hygiene with Sweeper\'s one thing and a hollow dot; ARR and Executive all hollow', [ROOM_IDS.map(pipsOf), ROOM_IDS.map(countOf), ROOM_IDS.map((r) => saidBy(door(r)))]);
+    door('hygiene').click();
+    ok(same(scene().crew.map((a) => [a.id, a.name, a.look, a.hue, a.state, a.waiting]), [['sweeper', 'Sweeper', 'plain', 'green', 'needs', 1], ['accounts', 'Accounts', 'headset', 'violet', 'unknown', 0]]) && same(DEPT.hygiene.map(lineOf), ['Mon 06:50 · trial · 1 for you', 'not run yet']) && same(DEPT.hygiene.map((id) => stateOf(chip(id))), [['is-needs'], ['is-unknown']]),
+      'real model, stand-in page: Data Hygiene: Sweeper reads "Mon 06:50 · trial · 1 for you", Accounts is an empty chair that reads "not run yet"', [scene().crew.map((a) => [a.id, a.state]), DEPT.hygiene.map(lineOf)]);
+    const tipNow = () => stage().children.find((x) => x.tagName !== 'CANVAS').children.flatMap((x) => (x.children.length ? x.children : [x]).map((y) => y.textContent));
+    scene().opts.onHover('sweeper');
+    ok(same(tipNow(), ['Sweeper', 'Counts the open deals that break your hygiene rules, team by team.', '1 waiting on you. On trial: nothing it prepared can be sent', 'Last result yesterday 06:50', 'Next run Fri 06:50']), 'real model, stand-in page: Sweeper\'s tooltip says what the trial means', tipNow());
+    scene().opts.onHover('accounts');
+    ok(same(tipNow(), ['Accounts', 'Finds accounts and records without the right owner.', 'Has not run yet']), 'real model, stand-in page: Accounts has not run yet: no last result, and no next run is promised', tipNow());
+    door('arr').click(); scene().opts.onHover('pacing');
+    ok(same(DEPT.arr.map(lineOf), ['not linked yet', 'not run yet', 'not run yet']) && same(tipNow(), ['Pacing', 'Posts the Q4 pacing each weekday morning, by itself.', 'Runs today and posts by itself. Not linked to the cockpit yet']) && scene().crew.length === 3 && scene().crew.every((a) => a.state === 'unknown'),
+      'real model, stand-in page: ARR: Pacing, which runs and posts by itself, is "not linked yet" (it is not said to have not run); Forecast and Renewals have not run; three empty chairs', [DEPT.arr.map(lineOf), tipNow()]);
+    scene().opts.onHover(null);
+    // an agent whose document does not exist is never due or late: a week on, nothing has changed but the clock
+    T = 7 * 864e5; tickNow();
+    ok(same(DEPT.arr.map(lineOf), ['not linked yet', 'not run yet', 'not run yet']) && same(pipsOf('arr'), ['is-unknown', 'is-unknown', 'is-unknown']) && same(pipsOf('exec'), ['is-unknown', 'is-unknown']) && same(pipsOf('hygiene'), ['is-late', 'is-unknown'])
+      && same(['hygiene', 'arr', 'exec'].map((r) => saidBy(door(r))), ['Data Hygiene, 2 agents, 1 waiting on you, 1 with no result yet', 'ARR, 3 agents, no data', 'Executive, 2 agents, no data']),
+      'real model, stand-in page: a week on, no schedule has spoken for an agent with no document; Sweeper, whose document exists, has no result for its runs since (amber on its door, and the door says so)', [DEPT.arr.map(lineOf), pipsOf('hygiene'), saidBy(door('hygiene'))]);
+    // Pacing's task stops with the year: from 1 January nothing says that it still runs (the open room is ARR)
+    T = Date.parse('2026-12-31T22:59:00Z') - NOW; tickNow(); scene().opts.onHover('pacing'); const eve = tipNow();
+    T = Date.parse('2026-12-31T23:00:00Z') - NOW; tickNow(); scene().opts.onHover('pacing');
+    ok(same([eve, tipNow()], [['Pacing', 'Posts the Q4 pacing each weekday morning, by itself.', 'Runs today and posts by itself. Not linked to the cockpit yet'], ['Pacing', 'Not linked to the cockpit yet']]) && lineOf('pacing') === 'not linked yet',
+      'real model, stand-in page: at 23:59 on 31 December Pacing still "runs today"; from midnight its tooltip says only that it is not linked: not that it runs, and not the sentence on what it does, which says that it posts (its chip reads "not linked yet" throughout)', [eve, tipNow()]);
+    scene().opts.onHover('forecast'); const beside = tipNow();
+    door('exec').click(); scene().opts.onHover('rundown'); const rundown = tipNow(); scene().opts.onHover('prep');
+    ok(same([rundown, tipNow(), beside], [['Rundown', 'Not linked to the cockpit yet'], ['Prep', 'Prepares the material for Friday\'s leadership meeting.', 'Has not run yet'], ['Forecast', 'Sets the directors\' roll-up, Leo\'s call and Salesforce side by side.', 'Has not run yet']]),
+      'real model, stand-in page: the same for Rundown from that midnight on; the agents beside them, whose tasks have no end, keep their sentence', [rundown, tipNow(), beside]);
+    scene().opts.onHover(null);
+    T = 0; door('mine').click();
+    delete SN.state.sweeper; delete SN.docs.sweeper; for (const id of ['accounts', 'forecast', 'renewals', 'prep']) delete SN.state[id];
     global.OSCrew = modelStandIn;
   } else console.log('skip the real model on the stand-in page: dashboard/os-cockpit-model.js is not there, or does not have lead, brief and overdue yet');
 
@@ -792,8 +1082,13 @@ const standIns = async () => {
     H.doc.counts.waiting = 7; bus.changed();
     ok(whatOf('desk') === 'needs 7' && same(stateOf(chip('desk')), ['is-needs']) && st.classList.contains('ck-off'), '... a document that changes after the fold still reaches its chip', [lineOf('desk'), stateOf(chip('desk'))]);
     H.doc.counts.waiting = 0; const drawn = model.calls.length; advance(30000);
-    ok(timers.size === 1 && model.calls.length === drawn + 5 && model.calls[model.calls.length - 1].now === NOW + T && whatOf('desk') === 'idle 0' && same(stateOf(chip('desk')), ['is-idle']), '... and the 30-second timer still runs: half a minute on, the chips are drawn again with the clock moved on (the stage is left alone)', [timers.size, model.calls.length - drawn, lineOf('desk'), stateOf(chip('desk'))]);
+    ok(timers.size === 1 && model.calls.length === drawn + 9 && model.calls[model.calls.length - 1].now === NOW + T && whatOf('desk') === 'idle 0' && same(stateOf(chip('desk')), ['is-idle']), '... and the 30-second timer still runs: half a minute on, the chips and the doors are drawn again with the clock moved on (the stage is left alone)', [timers.size, model.calls.length - drawn, lineOf('desk'), stateOf(chip('desk'))]);
     H.doc.counts.waiting = 113; bus.changed();
+    // the doors carry on without the picture too: a room opens on its chips and the doors alone, and no scene is made
+    { const calls = model.calls.length; door('hygiene').click();
+      ok(same(openRoom(), ['hygiene', 'hygiene', 'hygiene']) && model.calls.length === calls + 6 && lineOf('accounts') === 'unknown 0' && same(pipsOf('mine'), ['is-needs', 'is-needs', 'is-needs', 'is-needs', 'is-idle']) && alive().length === 0 && scenes.length === n && st.classList.contains('ck-off') && TYPE.thrown.length === 0 && thrownOn().length === 0,
+        '... and so do the doors: with the stage folded away a door still opens its room, on the chips and the doors alone', [openRoom(), model.calls.length - calls, lineOf('accounts')]);
+      door('mine').click(); }
     // the stage mounted anew (its element left the page and came back; a tab that is only hidden keeps its mount, and
     // with it the fold, for this run of the script): the picture gets another go
     TYPE.leave(st); TYPE.all();
@@ -833,11 +1128,15 @@ const standIns = async () => {
     TYPE.all();
     ok(!st.classList.contains('ck-off') && alive().length === 1 && scene().crew.length === 5 && TYPE.thrown.length === 0, '... also when the type keeps what the earlier run mounted', [st.className, alive().length, TYPE.thrown.map(String)]);
     TYPE.again = 'unmount';
+    // the stage mounted anew while a department's room is open: the new scene is handed that room's crew
+    { door('exec').click(); const m = scenes.length; TYPE.leave(st); TYPE.all();
+      ok(scenes.length === m + 1 && alive().length === 1 && same(scene().crew.map((a) => a.id), DEPT.exec) && same(scene().log, ['setCrew', 'resize 600', 'start']) && same(openRoom(), ['exec', 'exec', 'exec']), 'the stage mounted anew while a department\'s room is open: the new scene is handed that room\'s crew, and the room stays open', [scene().crew.map((a) => a.id), scene().log]);
+      door('mine').click(); }
   }
 
   bus.fire();
   if (window.__osCockpit) window.__osCockpit.stop();
-  ok(timers.size === 0 && timeouts.size === 0 && live('hub/weekly').length + live('hub/pulse').length === 0 && winOn.length === 0 && docHeard('keydown') === 0 && $$('[data-ck]').every((c) => c._on.length === 0) && bus.size() === 0 && alive().length === 0, 'what a run leaves on window can stop everything it set up', [timers.size, timeouts.size]);
+  ok(timers.size === 0 && timeouts.size === 0 && live('hub/weekly').length + live('hub/pulse').length === 0 && winOn.length === 0 && docHeard('keydown') === 0 && $$('[data-ck]').every((c) => c._on.length === 0) && $$('[data-ck-door]').every((d) => d._on.length === 0) && bus.size() === 0 && alive().length === 0, 'what a run leaves on window can stop everything it set up', [timers.size, timeouts.size]);
 };
 
 // =====================================================================================================================
@@ -852,8 +1151,13 @@ const realRun = async () => {
   const boot = () => { for (const f of FILES) load(f); global.OSCockpit = sceneStandIn; load('os-cockpit.js'); };
   boot();
   await tick(); await tick(); await tick(); await tick();
-  ok(typeof window.OSCrew.derive === 'function' && same(window.OSCrew.ROSTER.map((a) => a.id), IDS) && same($$('[data-ck]').map((c) => c.dataset.ck), window.OSCrew.ROSTER.map((a) => a.id)), 'the real model loads, and the chips are its roster, in its order');
-  ok(same($$('[data-ck]').map((c) => c.children.find((x) => x.tagName === 'B').textContent), window.OSCrew.ROSTER.map((a) => a.name)), 'the names in the chips are the roster\'s names');
+  const RM = window.OSCrew.ROOMS, nameOf = (c) => c.children.find((x) => x.tagName === 'B').textContent, chipsIn = (u) => u.querySelectorAll('[data-ck]');
+  ok(typeof window.OSCrew.derive === 'function' && same(window.OSCrew.ROSTER.map((a) => a.id), IDS) && same(chipsIn(strip('mine')).map((c) => c.dataset.ck), window.OSCrew.ROSTER.map((a) => a.id)), 'the real model loads, and the chips of his own room are its roster, in its order');
+  ok(same(chipsIn(strip('mine')).map(nameOf), window.OSCrew.ROSTER.map((a) => a.name)), 'the names in those chips are the roster\'s names');
+  ok(same($$('.ck-strip').map((u) => [u.dataset.ckRoom, chipsIn(u).map((c) => c.dataset.ck), chipsIn(u).map(nameOf)]), RM.map((r) => [r.id, r.agents.map((a) => a.id), r.agents.map((a) => a.name)])) && same($$('[data-ck]').map((c) => c.dataset.ck), RM.flatMap((r) => r.agents.map((a) => a.id))),
+    'every room of the model has its strip on the page, with its agents\' chips in its order and under its names; no chip stands for anyone else');
+  ok(same($$('[data-ck-door]').map((d) => [d.dataset.ckDoor, d.childNodes[0].nodeValue]), RM.map((r) => [r.id, r.name])) && same(drawings('ck-lane').map((u) => u.dataset.ckRoom), RM.slice(1).map((r) => r.id)) && same($$('[data-ck-role]').map((r) => r.dataset.ckRole), RM.flatMap((r) => r.agents.map((a) => a.id))) && same($$('.ck-strip').slice(1).map((u) => u.getAttribute('aria-label')), RM.slice(1).map((r) => r.name + ' agents')) && same(drawings('ck-lane').map((u) => u.getAttribute('aria-label')), RM.slice(1).map((r) => r.name + ': prepared for you')),
+    'the doors are the model\'s rooms under its names; each department has its lane, and its two lists are labelled with its name; every agent has its role sentence');
   // documents like the ones the agents write: the numbers and times of the spec's example, made-up words
   const U = 'data/users/u_william/';
   const TODAY = { at: '2026-11-24T12:15:58Z', hubUrl: 'https://claude.ai/artifact/DBfeBDJhUg78LXARWBwSfU', counts: { waiting: 113, critical: 1, prepared: 103, doneToday: 14 }, lastRun: { at: '2026-11-24T12:15:58Z', status: 'ok' }, brief: { headline: 'A headline.' },
@@ -870,12 +1174,26 @@ const realRun = async () => {
   push('hub/leo', { at: '2026-11-24T06:44:12Z', to: { name: 'A Colleague', slackId: 'U0AAAAAAA1' }, items: lane(7, 'leo-') });
   push('hub/instinct', { at: '2026-11-24T07:30:00Z', items: lane(3, 'ins-') }); push('hub/muse', { at: '2026-11-24T07:30:00Z', items: lane(2, 'muse-') });
   push('hub/weekly', WEEKLY); push('hub/pulse', undefined);
+  // the departments' documents: Sweeper has run (on trial, two items, one of which William handled), the others never
+  const SWEEP = { at: '2026-11-23T05:50:40Z', status: 'ok', trial: true, run: 'ask', week: '2026-W48', scope: 'All EMEA · New Business and Upsell', total: 58, errors: [], items: [
+    { id: 'sw-1', level: 'watch', title: 'Seven checks, counted per team', why: 'The largest check is a third of all open deals.', evidence: [{ label: 'Stage 0 after a meeting', value: '41 · $1.2M' }, { label: 'Pilot end passed', value: '17 · $0.6M' }], action: { label: 'Post the ask', sends: [{ type: 'slack', body: 'Team, this week\'s ask.' }] }, source: 'Salesforce, counted Monday 06:50 Stockholm' },
+    { id: 'sw-2', level: 'watch', title: 'Flags by team', why: 'One team has a quarter of the flags.', evidence: [{ label: 'All other teams', value: '9' }] }] };
+  const DEPT_DOCS = ['sweeper', 'accounts', 'forecast', 'renewals', 'prep'];
+  push('hub/sweeper', SWEEP); for (const id of DEPT_DOCS.slice(1)) push('hub/' + id, undefined);
   ok(heldNow() && [OS.hub.ready(), OS.sense.ready(), OS.lanes.ready()].every((r) => r === false), 'every document has arrived, William\'s own reactions have not: OS.hub, OS.sense and OS.lanes say not ready, and the crew is still held', [OS.hub.ready(), OS.sense.ready(), OS.lanes.ready()]);
-  push(U + 'hub-actions', null); push(U + 'sense-acts', { acts: { 'ins-older': { action: 'ack', at: '2026-11-20T00:33:49Z' } } }); push(U + 'decisions', null);
+  ok(ROOM_IDS.every((r) => countOf(r) === '' && pipsOf(r).every((p) => p === '')), '... and no door shows a state or a number yet', ROOM_IDS.map(countOf));
+  // a door pressed while the crew is held: its room is shown, empty, and its lane has no card yet (the item he
+  // handled would show and go)
+  door('hygiene').click();
+  ok(same(openRoom(), ['hygiene', 'hygiene', 'hygiene']) && scene().crew.length === 0 && same(DEPT.hygiene.map(lineOf), ['—', '—']) && laneOf('hygiene').children.length === 0 && OS.sense.items('sweeper').length === 2, 'a door pressed while the crew is held shows its room empty: no robot, the chips at their dash, and no card before his reactions have answered', [openRoom(), laneOf('hygiene').children.length]);
+  door('mine').click();
+  push(U + 'hub-actions', null); push(U + 'sense-acts', { acts: { 'ins-older': { action: 'ack', at: '2026-11-20T00:33:49Z' }, 'sw-2': { action: 'ack', at: '2026-11-23T08:00:00Z' } } }); push(U + 'decisions', null);
   ok(heldNow() && OS.hub.ready() && OS.sense.ready() && !OS.lanes.ready(), 'his Hub actions, his sense reactions and his answers have: still one to go (his Leo actions)', [OS.hub.ready(), OS.sense.ready(), OS.lanes.ready()]);
   push(U + 'leo-acts', { acts: { 'leo-old': { action: 'done', at: '2026-11-14T11:12:17Z' }, 'leo-6': { action: 'done', at: '2026-11-24T07:00:00Z' } } });
   ok(OS.lanes.ready() && same(crew(), [['desk', 'needs', 113], ['decide', 'needs', 16], ['instinct', 'needs', 3], ['muse', 'needs', 2], ['review', 'idle', 0]]), 'the last of his reactions answers: the crew is released, with the counts already less what he had handled (For Leo 6, not 7)', crew());
   ok(scene().crews.slice(0, -1).every((c) => c.length === 0), 'no robot was shown before that');
+  ok(same(ROOM_IDS.map(countOf), ['134', '1', '', '']) && same(pipsOf('hygiene'), ['is-needs', 'is-unknown']) && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, 1 waiting on you' && same(openRoom(), ['mine', 'mine', '']),
+    'the doors open on the right counts at once: Data Hygiene 1 (the item he handled is not counted: never 2), his own room 134', [ROOM_IDS.map(countOf), pipsOf('hygiene')]);
   fail(U + 'leo-acts'); push(U + 'leo-acts', null);
   ok(same(crew()[1], ['decide', 'needs', 17]), 'the documents of the spec\'s example: Decide holds 17', crew()[1]);
   ok(same(scene().crew.map((a) => [a.name, a.look, a.hue]), window.OSCrew.ROSTER.map((a) => [a.name, a.look, a.hue])) && scene().crew.every((a) => typeof a.bubble === 'string' && typeof a.step === 'string' && Number.isFinite(a.fresh)), 'each member is a full crew entry: name, look, hue, bubble, step, fresh');
@@ -888,6 +1206,75 @@ const realRun = async () => {
   const tipWords = () => tip.children.flatMap((c) => (c.children.length ? c.children : [c]).map((x) => x.textContent));
   ok(same(tipWords(), ['Decide', 'Prepares your yes/no decisions and the points for Leo.', '17 waiting on you: 10 decisions, 7 for Leo', 'Last result 07:44', 'Next run 07:43 tomorrow']) && chip('decide').getAttribute('aria-describedby') === tip.id, 'the tooltip: name, role, what waits and of which kind, the last result and the next run; the chip is described by it', tipWords());
   scene().opts.onHover(null);
+  // ---- a department's room: Data Hygiene in its first week ----
+  {
+    const cardsIn = (r) => laneOf(r).children, btn = (card, label) => card.querySelectorAll('button').find((b) => b.textContent === label);
+    const c0 = scene().crews.length;
+    door('hygiene').click();
+    ok(same(openRoom(), ['hygiene', 'hygiene', 'hygiene']) && same(scene().crew.map((a) => [a.id, a.name, a.look, a.hue, a.state, a.waiting]), [['sweeper', 'Sweeper', 'plain', 'green', 'needs', 1], ['accounts', 'Accounts', 'headset', 'violet', 'unknown', 0]]) && scenes.length === 1,
+      'a click on the Data Hygiene door: the same scene gets Sweeper (one thing for you) and Accounts (an empty chair)', scene().crew.map((a) => [a.id, a.state, a.waiting]));
+    ok(same(DEPT.hygiene.map(lineOf), ['Mon 06:50 · trial · 1 for you', 'not run yet']) && same(DEPT.hygiene.map((id) => stateOf(chip(id)).concat(chip(id).classList.contains('ck-leads') ? ['leads'] : [])), [['is-needs', 'leads'], ['is-unknown']]), 'its chips read "Mon 06:50 · trial · 1 for you" and "not run yet"; Sweeper\'s leads to its card', DEPT.hygiene.map(lineOf));
+    const cards = cardsIn('hygiene'), card = cards[0];
+    ok(cards.length === 1 && card.dataset.ckOf === 'sweeper' && same(card.children[0].children.map((x) => x.textContent), ['Sweeper', 'Trial', 'yesterday 06:50 · All EMEA · New Business and Upsell']) && /Seven checks, counted per team/.test(card.textContent) && /41 · \$1\.2M/.test(card.textContent) && /From Salesforce, counted Monday 06:50 Stockholm/.test(card.textContent),
+      'the lane under the chips: one card (the item he handled is not shown). It names its agent, says Trial, when and for what the document was written, then the title, the evidence and where it is from', cards.map((x) => x.textContent));
+    const send = btn(card, 'Post the ask via Claude');
+    ok(!!send && send.disabled === true && /Trial week: nothing can be sent\./.test(card.textContent) && !!btn(card, 'Got it') && !!btn(card, 'Not useful') && !btn(card, 'Got it').disabled, 'on trial the send button is there and is off, with the note "Trial week: nothing can be sent."; Got it and Not useful are on', card.querySelectorAll('button').map((b) => [b.textContent, !!b.disabled]));
+    const writes = DB.writes.length; send.click(); await tick(); flush();
+    ok(DB.writes.length === writes && same(crew()[0], ['sweeper', 'needs', 1]), 'a press on the button that is off sends nothing and marks nothing');
+    tickNow(); OS.docs.changed(); flush();
+    ok(cardsIn('hygiene')[0] === card, 'a redraw with nothing new in the cards keeps the very same card (the keyboard\'s place in it is not lost)');
+    scrolled.length = 0; const led = scene().opts.onPick('sweeper'); flush();
+    ok(led === true && scrolled.length === 1 && scrolled[0].el === card && document.activeElement === card, 'a click on the Sweeper robot, or its chip, scrolls to its card and moves focus there', [led, scrolled.length]);
+    const no = scene().opts.onPick('accounts'); flush();
+    ok(no === false && same(tipWords(), ['Accounts', 'Finds accounts and records without the right owner.', 'Has not run yet']), 'a click on Accounts\' empty chair or chip opens nothing: its tooltip, which says it has not run yet and promises no run', tipWords());
+    scene().opts.onHover(null);
+    btn(card, 'Got it').click();
+    ok(cardsIn('hygiene').length === 0 && lineOf('sweeper') === 'Mon 06:50 · trial · 1 for you', 'Got it takes the card away at once (as in the Instinct pane); the chip and the door follow when the burst of changes is over', [cardsIn('hygiene').length, lineOf('sweeper')]);
+    await tick(); flush();
+    const w = DB.writes[DB.writes.length - 1];
+    ok(w.p === U + 'sense-acts' && w.data.acts['sw-1'].action === 'ack' && w.data.acts['sw-2'].action === 'ack' && DB.writes.every((x) => /^data\/users\/u_william\//.test(x.p)), 'Got it is kept with his reactions to Instinct and Muse, in his own sense-acts, and nowhere else', w.p);
+    ok(same(crew(), [['sweeper', 'idle', 0], ['accounts', 'unknown', 0]]) && lineOf('sweeper') === 'Mon 06:50 · trial' && cardsIn('hygiene').length === 0 && countOf('hygiene') === '' && !chip('sweeper').classList.contains('ck-leads') && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, nothing waiting',
+      '... and at once nothing waits in the room: Sweeper idle ("trial" in place of "all clear"), the lane empty, no number on the door', [crew(), lineOf('sweeper'), countOf('hygiene')]);
+    OS.sense.act('sw-1', null); await tick(); flush();
+    // the trial over, and a new run: the first four items count and show
+    push('hub/sweeper', { ...SWEEP, at: '2026-11-24T05:50:30Z', trial: false, items: SWEEP.items.concat([{ id: 'sw-3' }, { id: 'sw-4' }, { id: 'sw-5' }, { id: 'sw-6' }]) });
+    const after = cardsIn('hygiene');
+    ok(after.length === 3 && after.every((x) => same(x.children[0].children.map((y) => y.textContent), ['Sweeper', '06:50 · All EMEA · New Business and Upsell'])) && !btn(after[0], 'Post the ask via Claude') && /Open the Claude chat beside this page to send from here\./.test(after[0].textContent) && lineOf('sweeper') === '06:50 · 3 for you' && same(crew()[0], ['sweeper', 'needs', 3]),
+      'off trial, a new run with six items: the first four count and show (one of them handled: three cards, "3 for you"), no Trial mark, and the usual note where Claude is not beside the page', [after.length, lineOf('sweeper')]);
+    push('hub/sweeper', { at: '2026-11-24T05:50:30Z', status: 'error', trial: false, run: 'ask', errors: ['all seven checks failed'] });
+    ok(same(crew()[0], ['sweeper', 'error', 0]) && lineOf('sweeper') === 'failed 06:50' && cardsIn('hygiene').length === 0 && same(pipsOf('hygiene'), ['is-error', 'is-unknown']) && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, 1 failed', 'a run that ended in an error and left no items: "failed 06:50", red on the door, and the door says "1 failed"; not "not run yet", and not "nothing waiting"', [crew()[0], lineOf('sweeper'), saidBy(door('hygiene'))]);
+    // a placeholder is not a result; a document that can no longer be read shows nothing of what it held
+    push('hub/accounts', { hubUrl: 'https://claude.ai/x', trial: true }); push('hub/sweeper', SWEEP);
+    ok(lineOf('accounts') === 'not run yet' && same(crew()[1], ['accounts', 'unknown', 0]) && cardsIn('hygiene').length === 1, 'a document that says neither when nor how a run ended and lists no items is a placeholder: Accounts still reads "not run yet"', [lineOf('accounts'), crew()[1]]);
+    // a result must list its items: one that does not is no data, not a run with nothing to show
+    const roomNow = () => [OS.sense.state('sweeper'), lineOf('sweeper'), crew()[0].join(' '), cardsIn('hygiene').length, countOf('hygiene'), pipsOf('hygiene').join(' '), saidBy(door('hygiene')), chip('sweeper').classList.contains('ck-leads')];
+    const unlisted = [{ 0: SWEEP.items[0], 1: SWEEP.items[1] }, 'two things', null].map((list) => { push('hub/sweeper', { ...SWEEP, items: list }); return roomNow(); });
+    ok(same(unlisted, Array(3).fill(['ok', 'no data', 'sweeper unknown 0', 0, '', 'is-unknown is-unknown', 'Data Hygiene, 2 agents, no data', false])),
+      'a result whose items are not a list (two items keyed 0 and 1 where a list was meant, a text, nothing): "no data", an empty chair, a hollow dot and no card; not "trial" with "nothing waiting"', unlisted[0]);
+    scene().anchors.sweeper = { x: 300, y: 100 }; scene().opts.onHover('sweeper');
+    ok(same(tipWords(), ['Sweeper', 'Counts the open deals that break your hygiene rules, team by team.', 'Can\'t read the database here']), '... and its tooltip does not say "Nothing waiting on you", gives no last result and promises no run', tipWords());
+    scene().opts.onHover(null);
+    push('hub/sweeper', { ...SWEEP, items: [] });
+    ok(same(roomNow(), ['ok', 'Mon 06:50 · trial', 'sweeper idle 0', 0, '', 'is-idle is-unknown', 'Data Hygiene, 2 agents, nothing waiting', false]), 'an empty list is a run with nothing to show: "trial" in place of "all clear", and the door says "nothing waiting"', roomNow());
+    // an item needs an id that is not empty: his reactions are kept by id, so one without could never be handled
+    push('hub/sweeper', { ...SWEEP, items: [{ ...SWEEP.items[0], id: '', title: 'An item without an id' }, SWEEP.items[0]] });
+    ok(same(roomNow(), ['ok', 'Mon 06:50 · trial · 1 for you', 'sweeper needs 1', 1, '1', 'is-needs is-unknown', 'Data Hygiene, 2 agents, 1 waiting on you', true]) && cardsIn('hygiene')[0].dataset.ckOf === 'sweeper' && /Seven checks, counted per team/.test(cardsIn('hygiene')[0].textContent),
+      'an item whose id is empty is left out: the door counts 1, not 2, and the lane has the one card that Got it can take away', roomNow());
+    btn(cardsIn('hygiene')[0], 'Got it').click(); await tick(); flush();
+    ok(same(roomNow(), ['ok', 'Mon 06:50 · trial', 'sweeper idle 0', 0, '', 'is-idle is-unknown', 'Data Hygiene, 2 agents, nothing waiting', false]), '... and once that one is handled the door\'s count is gone: nothing is left that he cannot act on', roomNow());
+    OS.sense.act('sw-1', null); await tick(); flush(); push('hub/sweeper', SWEEP);
+    fail('hub/sweeper');
+    ok(lineOf('sweeper') === 'no data' && cardsIn('hygiene').length === 0 && countOf('hygiene') === '' && same(pipsOf('hygiene'), ['is-unknown', 'is-unknown']) && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, no data' && !chip('sweeper').classList.contains('ck-leads'), 'when Sweeper\'s document can no longer be read: "no data", no cards (the lane shows what the chip counts), nothing on the door', [lineOf('sweeper'), cardsIn('hygiene').length, saidBy(door('hygiene'))]);
+    push('hub/accounts', undefined); push('hub/sweeper', SWEEP);
+    // ARR and Executive: nobody reports yet
+    door('arr').click();
+    ok(same(scene().crew.map((a) => [a.id, a.state]), [['pacing', 'unknown'], ['forecast', 'unknown'], ['renewals', 'unknown']]) && same(DEPT.arr.map(lineOf), ['not linked yet', 'not run yet', 'not run yet']) && cardsIn('arr').length === 0 && same(openRoom(), ['arr', 'arr', 'arr']),
+      'the ARR door: three empty chairs; Pacing, which runs and posts by itself, reads "not linked yet", the others "not run yet"; no cards', DEPT.arr.map(lineOf));
+    door('exec').click();
+    ok(same(DEPT.exec.map(lineOf), ['not linked yet', 'not run yet']) && saidBy(door('exec')) === 'Executive, 2 agents, no data', 'the Executive door: Rundown "not linked yet", Prep "not run yet"', DEPT.exec.map(lineOf));
+    door('mine').click();
+    ok(same(openRoom(), ['mine', 'mine', '']) && same(crew().map((a) => a[0]), IDS) && scene().crews.length > c0 && scenes.length === 1 && TYPE.thrown.length === 0, 'back through the first door: his five again, on the same scene; nothing thrown on the way', [openRoom(), TYPE.thrown.map(String)]);
+  }
   // the "Needs you" tile, the Hub pane's run line and the Desk slip tell one story
   const tile = () => drawings('hub-count').find((e) => e.dataset.field === 'waiting').textContent;
   ok(tile() === '113' && same(runLine(), ['Worker: last run 13:15 · ok', 'plain']), 'the Hub\'s "Needs you" tile shows the same 113, and its run line is plain', [tile(), runLine()]);
@@ -952,17 +1339,45 @@ const realRun = async () => {
   const hubPane = document.getElementById('hub-today');
   ok(shown() === 'today' && scrolled.some((x) => x.el === hubPane) && document.activeElement === hubPane && hubPane.getAttribute('tabindex') === '-1', 'a click on the Desk robot stays on Today, scrolls to the Hub pane and moves focus there', scrolled.map((x) => x.el.id || x.el.className));
 
+  // Back on Today from another tab while a department's room is open. The type then draws what stands under Today in
+  // the page's own order: the chips' lines before the lane. A chip's mark (ck-leads: a press goes to its cards) is
+  // right at once all the same, because it is asked of the reader and not of the lane as it stands.
+  {
+    const tab = (id) => { $$('[data-nav-item]').find((b) => b.dataset.nav === id).click(); flush(); };
+    const order = () => { const seen = []; $$('[data-draw]').forEach((e) => { if (/^ck-(line|lane)$/.test(e.dataset.draw) && !e.closest('[hidden]')) seen.push(e.dataset.draw); }); return seen.join(); };
+    const now = () => [lineOf('sweeper'), chip('sweeper').classList.contains('ck-leads'), laneOf('hygiene').children.length];
+    door('hygiene').click();
+    ok(order() === 'ck-line,ck-line,ck-lane' && same(now(), ['Mon 06:50 · trial · 1 for you', true, 1]), 'Data Hygiene open: Sweeper has one card and its chip is marked; in the page\'s order the two chip lines come before the lane', [order(), now()]);
+    tab('decide'); push('hub/sweeper', { ...SWEEP, at: '2026-11-24T05:50:30Z', items: [] }); // away: a new run, with nothing to show
+    const hiddenStill = now();
+    tab('today'); TYPE.all();
+    ok(same(hiddenStill, ['Mon 06:50 · trial · 1 for you', true, 1]) && same(now(), ['06:50 · trial', false, 0]), 'a run with no items arrives while another tab is open (nothing is drawn under a hidden tab); back on Today the chip reads "06:50 · trial", its card is gone, and the chip is no longer marked as leading to one', [hiddenStill, now()]);
+    tab('decide'); push('hub/sweeper', { ...SWEEP, at: '2026-11-24T08:05:30Z', items: [{ ...SWEEP.items[0], id: 'sw-new-1' }, { ...SWEEP.items[1], id: 'sw-new-2' }] }); // away again: two new items
+    tab('today'); TYPE.all();
+    ok(same(now(), ['09:05 · trial · 2 for you', true, 2]) && shown() === 'today', 'the other way round: two new items arrive while another tab is open; back on Today the chip has its two cards and is marked at once, not half a minute later', now());
+    scrolled.length = 0; const led = scene().opts.onPick('sweeper'); flush();
+    ok(led === true && scrolled.length === 1 && scrolled[0].el === laneOf('hygiene').children[0] && scrolled[0].el.dataset.ckOf === 'sweeper', '... and a press on it goes to the first of them', [led, scrolled.length]);
+    push('hub/sweeper', SWEEP); door('mine').click();
+  }
+
   // the dashboard runs every script again when a file changes
-  const n = scenes.length, DOCS = ['hub/today', 'hub/decisions', 'hub/leo', 'hub/instinct', 'hub/muse', 'hub/weekly', 'hub/pulse', U + 'hub-actions', U + 'sense-acts', U + 'decisions', U + 'leo-acts', U + 'os-done'];
-  ok(DOCS.every((p) => live(p).length === 1), 'one live subscription to each of the twelve documents', DOCS.map((p) => live(p).length));
+  const n = scenes.length, DOCS = ['hub/today', 'hub/decisions', 'hub/leo', 'hub/instinct', 'hub/muse', 'hub/weekly', 'hub/pulse', U + 'hub-actions', U + 'sense-acts', U + 'decisions', U + 'leo-acts', U + 'os-done'].concat(DEPT_DOCS.map((id) => 'hub/' + id));
+  ok(DOCS.length === 17 && DOCS.every((p) => live(p).length === 1), 'one live subscription to each of the seventeen documents: the twelve, and one for each department agent that writes a document', DOCS.map((p) => live(p).length));
+  ok(same(DEPT_DOCS, RM.slice(1).flatMap((r) => r.agents).filter((a) => !a.missing).map((a) => a.id)) && live('hub/pacing').length + live('hub/rundown').length === 0, 'those five are the model\'s department agents but Pacing and Rundown, which post by themselves: nothing is read for those two', DEPT_DOCS);
   boot(); await tick(); await tick(); await tick(); await tick();
   ok(DOCS.every((p) => live(p).length === 1), 'every script run again: still one live subscription to each (the earlier run\'s were closed)', DOCS.map((p) => live(p).length));
   push('hub/today', TODAY); push('hub/decisions', { at: '2026-11-24T06:44:12Z', items: lane(10, 'dec-') }); push('hub/leo', { at: '2026-11-24T06:44:12Z', items: lane(7, 'leo-') });
   push('hub/instinct', { at: '2026-11-24T07:30:00Z', items: lane(3, 'ins-') }); push('hub/muse', { at: '2026-11-24T07:30:00Z', items: lane(2, 'muse-') }); push('hub/weekly', WEEKLY);
   for (const p of ['hub-actions', 'sense-acts', 'decisions', 'leo-acts']) push(U + p, null);
   TYPE.all();
+  // this time the departments' documents are the last to answer: the first crew waits for them too
+  const heldStill = () => scene().crew.length === 0 && IDS.every((id) => lineOf(id) === '—' && stateOf(chip(id)).length === 0) && ROOM_IDS.every((r) => countOf(r) === '' && pipsOf(r).every((x) => x === ''));
+  ok(heldStill() && OS.hub.ready() && OS.sense.ready() && OS.lanes.ready(), 'the documents of his five and all his reactions have answered, the departments\' documents have not: the crew is still held, and the doors are bare', [scene().crew.length, ROOM_IDS.map(countOf)]);
+  for (const id of DEPT_DOCS.slice(0, 4)) push('hub/' + id, undefined);
+  ok(heldStill(), 'four of the five department documents have answered: still held');
+  push('hub/prep', undefined);
   ok(timers.size === 1 && alive().length === 1 && scenes.length === n + 1, '... one timer and one scene', [timers.size, alive().length]);
-  ok($$('[data-ck]').every((c) => c.heard('click') === 1 && c.heard('focus') === 1) && docHeard('keydown') === 2 && winOn.length === 0, '... and still one cockpit listener of each kind (the document\'s two keydowns are the page\'s and the cockpit\'s)', [docHeard('keydown'), winOn.length]);
+  ok($$('[data-ck]').every((c) => c.heard('click') === 1 && c.heard('focus') === 1) && $$('[data-ck-door]').every((d) => d.heard('click') === 1) && docHeard('keydown') === 2 && winOn.length === 0, '... and still one cockpit listener of each kind, on the doors too (the document\'s two keydowns are the page\'s and the cockpit\'s)', [docHeard('keydown'), winOn.length]);
   ok(same(crew(), [['desk', 'needs', 113], ['decide', 'needs', 17], ['instinct', 'needs', 3], ['muse', 'needs', 2], ['review', 'idle', 0]]) && TYPE.thrown.length === 0, '... and the picture follows the documents as before', [crew(), TYPE.thrown.map(String)]);
   ok(same([...unsupported].filter((s) => !/\s/.test(s)), []), 'no selector the stand-in document could not read was needed by this run', [...unsupported]);
 };

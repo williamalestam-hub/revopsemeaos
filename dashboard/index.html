@@ -167,26 +167,55 @@
 
     <!-- ===== TODAY: the Hub's summary, then the greeting hero ===== -->
     <section class="scr" id="today" data-page="today">
-      <!-- ===== COCKPIT: your agents at work. The picture is drawn (os-cockpit*.js); the names and sentences are here ===== -->
+      <!-- ===== COCKPIT: your agents at work, and a door to each department's room. The picture is drawn (os-cockpit*.js); the names and sentences are here ===== -->
       <div class="pane cockpit" id="cockpit" role="group" aria-label="Cockpit">
+        <div class="ck-doors" role="group" aria-label="Rooms">
+          <button class="ck-door" type="button" data-ck-door="mine" aria-pressed="true">Your agents<span data-draw="ck-door" data-ck-room="mine"></span></button>
+          <button class="ck-door" type="button" data-ck-door="hygiene" aria-pressed="false">Data Hygiene<span data-draw="ck-door" data-ck-room="hygiene"></span></button>
+          <button class="ck-door" type="button" data-ck-door="arr" aria-pressed="false">ARR<span data-draw="ck-door" data-ck-room="arr"></span></button>
+          <button class="ck-door" type="button" data-ck-door="exec" aria-pressed="false">Executive<span data-draw="ck-door" data-ck-room="exec"></span></button>
+        </div>
         <div class="ck-stage" data-draw="cockpit"></div>
         <div class="ck-bar">
-          <ul class="ck-strip" aria-label="Agents">
+          <ul class="ck-strip" data-ck-room="mine" aria-label="Agents">
             <li><button class="ck-chip" type="button" data-ck="desk" data-nav="today" data-ck-go="hub-today"><i class="ck-dot" aria-hidden="true"></i><b>Desk</b><span class="ck-line" data-draw="ck-line" data-ck-id="desk">—</span></button></li>
             <li><button class="ck-chip" type="button" data-ck="decide" data-nav="decide" data-ck-alt="leo"><i class="ck-dot" aria-hidden="true"></i><b>Decide</b><span class="ck-line" data-draw="ck-line" data-ck-id="decide">—</span></button></li>
             <li><button class="ck-chip" type="button" data-ck="instinct" data-nav="today" data-ck-go="sense"><i class="ck-dot" aria-hidden="true"></i><b>Instinct</b><span class="ck-line" data-draw="ck-line" data-ck-id="instinct">—</span></button></li>
             <li><button class="ck-chip" type="button" data-ck="muse" data-nav="today" data-ck-go="sense"><i class="ck-dot" aria-hidden="true"></i><b>Muse</b><span class="ck-line" data-draw="ck-line" data-ck-id="muse">—</span></button></li>
             <li><button class="ck-chip" type="button" data-ck="review"><i class="ck-dot" aria-hidden="true"></i><b>Review</b><span class="ck-line" data-draw="ck-line" data-ck-id="review">—</span></button></li>
           </ul>
+          <ul class="ck-strip" data-ck-room="hygiene" aria-label="Data Hygiene agents" hidden>
+            <li><button class="ck-chip" type="button" data-ck="sweeper"><i class="ck-dot" aria-hidden="true"></i><b>Sweeper</b><span class="ck-line" data-draw="ck-line" data-ck-id="sweeper">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="accounts"><i class="ck-dot" aria-hidden="true"></i><b>Accounts</b><span class="ck-line" data-draw="ck-line" data-ck-id="accounts">—</span></button></li>
+          </ul>
+          <ul class="ck-strip" data-ck-room="arr" aria-label="ARR agents" hidden>
+            <li><button class="ck-chip" type="button" data-ck="pacing"><i class="ck-dot" aria-hidden="true"></i><b>Pacing</b><span class="ck-line" data-draw="ck-line" data-ck-id="pacing">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="forecast"><i class="ck-dot" aria-hidden="true"></i><b>Forecast</b><span class="ck-line" data-draw="ck-line" data-ck-id="forecast">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="renewals"><i class="ck-dot" aria-hidden="true"></i><b>Renewals</b><span class="ck-line" data-draw="ck-line" data-ck-id="renewals">—</span></button></li>
+          </ul>
+          <ul class="ck-strip" data-ck-room="exec" aria-label="Executive agents" hidden>
+            <li><button class="ck-chip" type="button" data-ck="rundown"><i class="ck-dot" aria-hidden="true"></i><b>Rundown</b><span class="ck-line" data-draw="ck-line" data-ck-id="rundown">—</span></button></li>
+            <li><button class="ck-chip" type="button" data-ck="prep"><i class="ck-dot" aria-hidden="true"></i><b>Prep</b><span class="ck-line" data-draw="ck-line" data-ck-id="prep">—</span></button></li>
+          </ul>
           <button class="ck-help" type="button" data-ck-help aria-expanded="false" aria-controls="ck-legend" aria-label="How to read the cockpit">?</button>
         </div>
-        <p class="ck-legend" id="ck-legend" hidden>At its desk: a run is under way or due; amber means no result yet, red means it failed. At your desk: waiting on you. By the coffee: nothing needs you. An empty chair: no data.</p>
+        <p class="ck-legend" id="ck-legend" hidden>At its desk: a run is under way or due; amber means no result yet, red means it failed. At your desk: waiting on you. By the coffee: nothing needs you. An empty chair: no data. A door shows another room: one dot per agent, hollow when it has no data.</p>
+        <ul class="lane-list ck-lane" data-draw="ck-lane" data-ck-room="hygiene" aria-label="Data Hygiene: prepared for you" hidden></ul>
+        <ul class="lane-list ck-lane" data-draw="ck-lane" data-ck-room="arr" aria-label="ARR: prepared for you" hidden></ul>
+        <ul class="lane-list ck-lane" data-draw="ck-lane" data-ck-room="exec" aria-label="Executive: prepared for you" hidden></ul>
         <div class="ck-roles" hidden>
           <span data-ck-role="desk">Prepares replies and next steps from Slack, mail and meetings.</span>
           <span data-ck-role="decide">Prepares your yes/no decisions and the points for Leo.</span>
           <span data-ck-role="instinct">Watches the numbers and says what changed.</span>
           <span data-ck-role="muse">Works out ideas from your numbers.</span>
           <span data-ck-role="review">Posts the Monday performance review to your DM.</span>
+          <span data-ck-role="sweeper">Counts the open deals that break your hygiene rules, team by team.</span>
+          <span data-ck-role="accounts">Finds accounts and records without the right owner.</span>
+          <span data-ck-role="pacing">Posts the Q4 pacing each weekday morning, by itself.</span>
+          <span data-ck-role="forecast">Sets the directors' roll-up, Leo's call and Salesforce side by side.</span>
+          <span data-ck-role="renewals">Lists the renewals that are running late.</span>
+          <span data-ck-role="rundown">Posts the evening numbers to the leadership group, by itself.</span>
+          <span data-ck-role="prep">Prepares the material for Friday's leadership meeting.</span>
         </div>
       </div>
       <div class="pane sense" id="sense" data-draw="sense"></div>

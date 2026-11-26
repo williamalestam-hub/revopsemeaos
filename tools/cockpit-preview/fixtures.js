@@ -34,5 +34,18 @@
   // a run finishing while you watch: Desk works, then comes over with 5 new items
   F.handover = { clock: at(13, 14), crew: five([['working', { step: 'Writing lines' }], ['idle', {}], ['idle', {}], ['idle', {}], ['idle', {}]]),
     script: [{ at: 2500, crew: five([['needs', { waiting: 5, fresh: at(13, 15), bubble: '5 for you' }], ['idle', {}], ['idle', {}], ['idle', {}], ['idle', {}]]) }] };
+  // The departments' rooms, as a door of the cockpit shows them on the same canvas (the agents of ROOMS in
+  // dashboard/os-cockpit-model.js). An agent that has not run yet is an empty chair.
+  const hygiene = (s) => [A('sweeper', 'Sweeper', 'plain', 'green', s[0][0], s[0][1]), A('accounts', 'Accounts', 'headset', 'violet', s[1][0], s[1][1])];
+  const arr = (s) => [A('pacing', 'Pacing', 'gavel', 'teal', s[0][0], s[0][1]), A('forecast', 'Forecast', 'bulb', 'rose', s[1][0], s[1][1]), A('renewals', 'Renewals', 'clipboard', 'amber', s[2][0], s[2][1])];
+  const exec = (s) => [A('rundown', 'Rundown', 'antenna', 'green', s[0][0], s[0][1]), A('prep', 'Prep', 'plain', 'blue', s[1][0], s[1][1])];
+  // Data Hygiene in its first week (Monday 30 Nov): Sweeper on trial with its ask, Accounts not started
+  F.hygiene = { clock: at(9, 12, 30), crew: hygiene([['needs', { waiting: 1 }], ['unknown', {}]]) };
+  // ARR once all three run (Friday 27 Nov, after Forecast's run): Forecast has something for you
+  F.arr = { clock: at(12, 22, 27), crew: arr([['idle', {}], ['needs', { waiting: 1 }], ['idle', {}]]) };
+  // Executive in the evening: Rundown is writing its post, Prep not started
+  F.exec = { clock: at(20, 2), crew: exec([['working', { step: 'Writing the post' }], ['unknown', {}]]) };
+  // the doors: his five, then a click on each door in turn (a whole new crew each time), and back to his five
+  F.doors = { clock: at(9, 12, 30), crew: F.morning.crew, script: [{ at: 3000, crew: F.hygiene.crew }, { at: 6000, crew: F.arr.crew }, { at: 9000, crew: F.exec.crew }, { at: 12000, crew: F.morning.crew }] };
   if (typeof module !== 'undefined' && module.exports) module.exports = F; else root.CK_FIXTURES = F;
 })(typeof window !== 'undefined' ? window : globalThis);

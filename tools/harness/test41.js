@@ -1162,5 +1162,42 @@ for (const [what, change] of [['a width change of a scrollbar', (s) => s.resize(
       m.s.destroy(); }
   }
 }
+// ---- a door of the cockpit: another room's whole crew on the same canvas ----
+// The page hands the scene the open room's crew (os-cockpit.js: a click on a door). Nothing else changes: the same
+// canvas, the same size. Tried here as the page does it: his five, then each department's room, then his five again,
+// with 300 ms between the clicks (the last crew still fading in) and with 6 s (everybody at rest).
+{
+  const TURN = [['Data Hygiene', FX.hygiene.crew], ['ARR', FX.arr.crew], ['Executive', FX.exec.crew], ['his five', FX.morning.crew]];
+  for (const [w, reduced, gap] of [[360, false, 300], [400, false, 6000], [888, false, 300], [888, true, 6000], [1280, false, 6000], [1280, true, 300]]) {
+    const canvas = mkCanvas(), wrong = []; let simT = 0, t = 0, err = null;
+    const scene = API.create(canvas, { now: () => FX.doors.clock + simT, seed: 7, reducedMotion: reduced, onHover() {}, onPick() {} });
+    const frames = (ms) => { for (const end = t + ms; t < end; t += STEP) { simT = t; canvas.ctx.texts.length = 0; scene.frame(t); } };
+    try {
+      scene.setCrew(FX.morning.crew);
+      const h0 = scene.resize(w);
+      frames(gap);
+      let before = FX.morning.crew;
+      for (const [room, crew] of TURN) {
+        scene.setCrew(crew); frames(gap);
+        const ids = new Set(crew.map((a) => a.id)), gone = before.filter((a) => !ids.has(a.id)), texts = canvas.ctx.texts.slice();
+        if (parseFloat(canvas.style.height) !== h0) wrong.push(room + ': the height changed from ' + h0 + ' to ' + canvas.style.height);
+        if (gone.some((a) => scene.anchor(a.id))) wrong.push(room + ': one who left still has an anchor');
+        if (gone.some((a) => texts.includes(a.name))) wrong.push(room + ': the name of one who left is still drawn');
+        const strays = new Set();
+        for (let x = 4; x < w; x += 8) for (let y = 4; y < h0; y += 8) { const id = scene.hit(x, y); if (id != null && !ids.has(id)) strays.add(id); }
+        if (strays.size) wrong.push(room + ': hit() still answers ' + [...strays].join());
+        if (gap >= 6000 || reduced) {
+          const present = crew.filter((a) => a.state !== 'unknown');
+          if (!present.every((a) => texts.includes(a.name))) wrong.push(room + ': a name of the new crew is not drawn');
+          if (!present.every((a) => { const p = scene.anchor(a.id); return p && scene.hit(p.x, p.y) === a.id; })) wrong.push(room + ': an anchor of the new crew does not hit its agent');
+          if (!present.filter((a) => a.state === 'needs').every((a) => texts.includes(String(a.waiting)) || a.waiting > 99)) wrong.push(room + ': a slip of the new crew is not drawn');
+        }
+        before = crew;
+      }
+    } catch (e) { err = e; }
+    ok(!err && !wrong.length && canvas.ctx.bad === 0, `a door @${w}${reduced ? ', reduced motion' : ''}, ${gap} ms a room: each room's crew takes the canvas over (nothing thrown, the same height, those who left are gone, the new ones are there)`, err ? String(err.stack || err).split('\n').slice(0, 3) : wrong.length ? wrong : canvas.ctx.bad);
+    scene.destroy();
+  }
+}
 console.log(`\n${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

@@ -1183,23 +1183,36 @@ OS.hub = (() => {
 // watches and good news, each with evidence and a prepared action) and hub/muse (two or three ideas a morning, with the
 // numbers, a first step and a challenge). William's reactions (got it, not useful, keep, sent) live in his private
 // data/users/<id>/sense-acts; the task reads "not useful" to learn what to stop raising. Nothing here sends anything.
+// The departments' agents (the cockpit's other rooms) each write one document of the same kind, hub/<agent's id>:
+// { at, status: ok|partial|error, trial, run, scope, items: up to 4 like Instinct's }. They are read here too, and
+// William's reactions to their items are kept in the same sense-acts. The cockpit shows them (os-cockpit.js, and the
+// ck-lane drawing); the Instinct and Muse pane does not.
 OS.sense = (() => {
-  const docs = { instinct: null, muse: null }, state = { instinct: 'loading', muse: 'loading' };
+  const PANE = ['instinct', 'muse'], DEPT = ['sweeper', 'accounts', 'forecast', 'renewals', 'prep'];
+  const docs = {}, state = {};
+  for (const k of PANE.concat(DEPT)) { docs[k] = null; state[k] = 'loading'; }
+  const nodb = () => { for (const k of Object.keys(state)) state[k] = 'nodb'; };
   let acts = {}, ref = null, canWrite = false, writing = Promise.resolve();
   let answered = false; // William's reactions have answered once, or never will (no database, no user)
-  const redraw = () => { try { dash.draw('sense'); } catch (e) { /* not registered yet */ } OS.docs.changed(); };
+  // the pane, and the cockpit's lane at once: a card William has just handled goes without waiting for the cockpit
+  const redraw = () => { ['sense', 'ck-lane'].forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } }); OS.docs.changed(); };
+  // A department's document is a run's result when it says when or how the run ended, or lists items. A run that
+  // failed may leave no items and must read "failed"; a document with none of the three is a placeholder, and its
+  // agent has not run yet.
+  const ran = (d) => Array.isArray(d.items) || [d.at, d.status].some((v) => typeof v === 'string' && !!v);
   (async () => {
     try {
       const c = window.claude;
-      if (!c || typeof c.use !== 'function') { state.instinct = state.muse = 'nodb'; answered = true; return; }
+      if (!c || typeof c.use !== 'function') { nodb(); answered = true; return; }
       const db = await c.use('db');
-      if (!db) { state.instinct = state.muse = 'nodb'; answered = true; redraw(); return; }
-      for (const k of ['instinct', 'muse']) {
+      if (!db) { nodb(); answered = true; redraw(); return; }
+      for (const k of PANE.concat(DEPT)) {
         watch(db.doc('hub/' + k), (snap) => {
           const d = snap && snap.exists ? snap.data() : null;
-          docs[k] = d && typeof d === 'object' && Array.isArray(d.items) ? d : null;
-          state[k] = docs[k] ? 'ok' : 'missing'; redraw();
-        }, () => { state[k] = 'error'; redraw(); });
+          docs[k] = d && typeof d === 'object' && (DEPT.includes(k) ? ran(d) : Array.isArray(d.items)) ? d : null;
+          state[k] = docs[k] ? 'ok' : 'missing';
+          if (DEPT.includes(k)) OS.docs.changed(); else redraw(); // the pane shows none of a department's document
+        }, () => { state[k] = 'error'; if (DEPT.includes(k)) OS.docs.changed(); else redraw(); });
       }
       const user = await c.use('user');
       const uid = user ? await user.id() : null;
@@ -1210,7 +1223,7 @@ OS.sense = (() => {
         acts = d && d.acts && typeof d.acts === 'object' ? { ...d.acts } : {};
         canWrite = true; answered = true; redraw();
       }, () => { canWrite = false; answered = true; redraw(); });
-    } catch (e) { state.instinct = state.muse = 'nodb'; answered = true; redraw(); }
+    } catch (e) { nodb(); answered = true; redraw(); }
   })();
   const act = (id, a) => {
     if (!ref || !canWrite || !id) return;
@@ -1219,8 +1232,15 @@ OS.sense = (() => {
     acts = next; redraw();
     writing = writing.then(() => ref.set({ acts: next, updatedAt: new Date().toISOString() })).catch(() => { canWrite = false; redraw(); });
   };
-  const items = (k) => (docs[k] ? docs[k].items.filter((x) => x && typeof x === 'object' && typeof x.id === 'string').slice(0, 12) : []);
-  return { state: (k) => state[k], doc: (k) => docs[k], items, act, acted: (id) => acts[id] || null, canWrite: () => canWrite, ready: () => answered, redraw };
+  // the first 12 of Instinct's and Muse's; the first 4 of a department agent's, so that what the cockpit counts is what it shows.
+  // A department agent's item needs an id that is not empty: William's reactions are kept by id, so one without could
+  // never be handled, and its count would never drop.
+  const items = (k) => (docs[k] && Array.isArray(docs[k].items) ? docs[k].items.filter((x) => x && typeof x === 'object' && typeof x.id === 'string' && (!!x.id || !DEPT.includes(k))).slice(0, DEPT.includes(k) ? 4 : 12) : []);
+  // What the cockpit's lane shows of a department agent's document, and what its chip leads to: the items William has
+  // not handled, and those he sent on. None before his reactions have answered (one he had handled would show and
+  // go), nor while the document can't be read (its chip says "no data", and counts nothing).
+  const cards = (k) => (answered && DEPT.includes(k) && state[k] === 'ok' ? items(k).filter((x) => { const did = acts[x.id]; return !did || did.action === 'sent'; }) : []);
+  return { state: (k) => state[k], doc: (k) => docs[k], items, cards, act, acted: (id) => acts[id] || null, canWrite: () => canWrite, ready: () => answered, redraw };
 })();
 
 // ---------- Decide and For Leo ----------

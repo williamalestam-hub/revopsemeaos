@@ -2,8 +2,8 @@
 // document must not stack: with two click handlers, one click ticked an action item and the second unticked it at once.
 // Loads os-core.js twice and checks that each page-wide listener is there once, and that one click toggles a tick once.
 // Also the small bus the cockpit listens on (OS.docs): on, off and changed, and a fresh one after a second run.
-// And the database: a second run closes the first run's subscriptions before it opens its own (ten documents, not
-// twenty, then thirty), and OS.hub, OS.sense and OS.lanes say when William's own documents have answered (ready()).
+// And the database: a second run closes the first run's subscriptions before it opens its own (fifteen documents, not
+// thirty, then forty-five), and OS.hub, OS.sense and OS.lanes say when William's own documents have answered (ready()).
 const { Node } = require('./fakedom.js');
 const D = require('path').join(__dirname, '../../dashboard/');
 global.dash = { loader: () => {}, calc: () => {}, draw: () => {}, params: () => ({ region: 'All', mgr: '', person: '' }), setParams: () => {}, onData: () => {}, colors: Array(8).fill('#111'), setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
@@ -46,8 +46,9 @@ ok(toggles === 1, 'one click on a tick toggles it once', toggles);
   ok(OS.docs !== before && other === 3, 'OS.docs: a second run of the scripts starts with no listeners', other);
   ok(L.filter((x) => x[0] === 'click').length === 2 && L.filter((x) => x[0] === 'keydown').length === 1, 'a third run still leaves two click listeners and one keydown', L.map((x) => x[0]));
 }
-// The database, the same way. os-core.js subscribes to ten documents: the viewer's ticks; hub/today and his Hub
-// actions; hub/instinct, hub/muse and his reactions; hub/decisions, hub/leo, his answers and his Leo actions.
+// The database, the same way. os-core.js subscribes to fifteen documents: the viewer's ticks; hub/today and his Hub
+// actions; hub/instinct, hub/muse and his reactions; hub/decisions, hub/leo, his answers and his Leo actions; and the
+// five documents of the departments' agents (hub/sweeper, hub/accounts, hub/forecast, hub/renewals, hub/prep).
 (async () => {
   const subs = [];
   const docRef = (p) => ({ path: p, onSnapshot(next, error) { const s = { p, next, error, live: true }; subs.push(s); return () => { s.live = false; }; }, set: async () => {}, get: async () => ({ exists: false, data: () => null }) });
@@ -59,10 +60,13 @@ ok(toggles === 1, 'one click on a tick toggles it once', toggles);
   const ready = () => [OS.hub.ready(), OS.sense.ready(), OS.lanes.ready()];
   await settle();
   ok(subs.length === 0 && ready().every((r) => r === true) && OS.hub.state() === 'nodb', 'without a database nothing is subscribed, and ready() is true at once: there is nothing to wait for', [subs.length, ready()]);
+  const READ = ['instinct', 'muse', 'sweeper', 'accounts', 'forecast', 'renewals', 'prep']; // every document OS.sense reads
+  ok(READ.every((k) => OS.sense.state(k) === 'nodb') && OS.sense.state('pacing') === undefined && OS.sense.state('rundown') === undefined, '... and every document OS.sense reads, a department agent\'s too, says so at once: none is left loading for the cockpit to wait for', READ.map((k) => OS.sense.state(k)));
   global.claude = withDb;
   run(); await settle();
   const one = live();
-  ok(one.length === 10 && new Set(one).size === 10 && subs.length === 10, 'one run subscribes to ten documents, each once', one);
+  ok(one.length === 15 && new Set(one).size === 15 && subs.length === 15, 'one run subscribes to fifteen documents, each once', one);
+  ok(JSON.stringify(one.filter((p) => /^hub\//.test(p))) === JSON.stringify(['hub/accounts', 'hub/decisions', 'hub/forecast', 'hub/instinct', 'hub/leo', 'hub/muse', 'hub/prep', 'hub/renewals', 'hub/sweeper', 'hub/today']), 'ten of them are shared: the five the page has always read, and one for each department agent that writes a document', one);
   ok(ready().every((r) => r === false), 'ready(): false while William\'s own documents have not answered', ready());
   const answer = (p, data) => subs.filter((x) => x.live && x.p === p).forEach((x) => x.next({ exists: data != null, data: () => data }));
   answer('hub/today', { counts: { waiting: 1 } }); answer('hub/instinct', { items: [] }); answer('hub/decisions', { items: [] }); answer('hub/leo', { items: [] });
@@ -74,18 +78,18 @@ ok(toggles === 1, 'one click on a tick toggles it once', toggles);
   answer('data/users/u1/leo-acts', null);
   ok(ready().every((r) => r === true), 'ready(): all three', ready());
   run(); await settle();
-  ok(JSON.stringify(live()) === JSON.stringify(one) && subs.length === 20, 'a second run leaves the same ten live subscriptions: the first run\'s were closed', [live().length, subs.length]);
+  ok(JSON.stringify(live()) === JSON.stringify(one) && subs.length === 30, 'a second run leaves the same fifteen live subscriptions: the first run\'s were closed', [live().length, subs.length]);
   ok(ready().every((r) => r === false), 'ready(): a new run starts over', ready());
   run(); await settle();
-  ok(JSON.stringify(live()) === JSON.stringify(one) && subs.length === 30, 'and a third run still leaves ten', [live().length, subs.length]);
+  ok(JSON.stringify(live()) === JSON.stringify(one) && subs.length === 45, 'and a third run still leaves fifteen', [live().length, subs.length]);
   // two runs before the database has answered the first: the run that was replaced opens none
   let open; gate = new Promise((r) => { open = r; });
   run(); run(); open(); gate = null; await settle();
-  ok(JSON.stringify(live()) === JSON.stringify(one) && subs.length === 40, 'two runs before the database answers: the one that was replaced subscribes to nothing', [live().length, subs.length]);
+  ok(JSON.stringify(live()) === JSON.stringify(one) && subs.length === 60, 'two runs before the database answers: the one that was replaced subscribes to nothing', [live().length, subs.length]);
   // a viewer the dashboard knows no id for: nothing private to wait for
   global.claude = { use: async (n) => (n === 'db' ? { doc: docRef } : null) };
   run(); await settle();
-  ok(live().length === 5 && live().every((p) => /^hub\//.test(p)) && ready().every((r) => r === true), 'without a user id only the five shared documents are read, and ready() is true', [live(), ready()]);
+  ok(live().length === 10 && live().every((p) => /^hub\//.test(p)) && ready().every((r) => r === true), 'without a user id only the ten shared documents are read, and ready() is true', [live(), ready()]);
   ok(L.filter((x) => x[0] === 'click').length === 2 && L.filter((x) => x[0] === 'keydown').length === 1, 'after all those runs: still two click listeners and one keydown', L.map((x) => x[0]));
   console.log(`\n${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);

@@ -1401,9 +1401,22 @@ const senseLeoBtn = (x, label) => {
       .then(() => OS.sense.act(x.id, 'sent'), () => { b.textContent = 'Claude is not available here'; });
   });
 };
-const senseCard = (x, kind) => {
+// `of` is given for an item of a department's agent (the cockpit's lane): { id, name, trial, meta }. Its card opens
+// with whose it is, a mark while that agent is on trial, and when and for what its document was written. On trial
+// nothing the agent prepared can be sent: the send button is there and is off, and there is no button for Leo. Got
+// it and Not useful work as ever.
+const senseCard = (x, kind, of) => {
   const acted = OS.sense.acted(x.id);
   const li = OS.el('li', 'lane-card sense-card sense-' + kind + (acted && acted.action === 'keep' ? ' kept' : ''));
+  if (of) {
+    li.dataset.ckOf = of.id;
+    const top = OS.el('p', 'ck-of');
+    top.append(OS.el('b', '', of.name));
+    if (of.trial) top.append(OS.el('span', 'chip warn', 'Trial'));
+    if (of.meta) top.append(OS.el('span', 'lane-meta', of.meta));
+    li.append(top);
+  }
+  const trial = !!of && of.trial;
   const head = OS.el('div', 'lane-head');
   if (kind === 'instinct') {
     const lv = Object.hasOwn(SENSE_LEVEL, x.level) ? x.level : 'watch';
@@ -1425,22 +1438,28 @@ const senseCard = (x, kind) => {
   const sends = laneSends(a);
   if (acted && acted.action === 'sent') row.append(OS.el('span', 'hub-note', 'Sent to Claude' + (acted.at ? ' · ' + laneWhen(acted.at) : '')));
   else {
-    if (a && sends.length && OS.ask.can()) {
-      row.append(hubBtn(String(a.label || 'Send via Claude') + ' via Claude', 'btn-primary', () => {
+    if (a && sends.length && (trial || OS.ask.can())) {
+      const send = hubBtn(String(a.label || 'Send via Claude') + ' via Claude', 'btn-primary', () => {
+        if (trial) return; // off: a press that gets through anyway sends nothing
         OS.ask.send(OS.ask.data(String(x.title || '').slice(0, 100), 'Send the message' + (sends.length > 1 ? 's' : '') + ' below as me, exactly as written. Show me each message and its recipient first and send only after my OK.'
-          + sends.map((m, i) => '\n\n--- Message ' + (i + 1) + ': ' + (HUB_TYPE[m.type] || 'Message') + ' to ' + (hubDest(m) || 'the right recipient (find them and show me who first)') + '\n' + m.body).join('') + '\n\n(' + x.id + ' in the EMEA RevOps OS.)', { kind: 'sense', senseId: x.id }, 'cut to fit; the full text is in the OS'))
+          + sends.map((m, i) => '\n\n--- Message ' + (i + 1) + ': ' + (HUB_TYPE[m.type] || 'Message') + ' to ' + (hubDest(m) || 'the right recipient (find them and show me who first)') + (m.subject ? ', subject "' + m.subject + '"' : '') + '\n' + m.body).join('') + '\n\n(' + x.id + ' in the EMEA RevOps OS.)', { kind: 'sense', senseId: x.id }, 'cut to fit; the full text is in the OS'))
           .then(() => OS.sense.act(x.id, 'sent'), () => {});
-      }));
+      });
+      send.disabled = trial;
+      row.append(send);
     }
-    const leo = senseLeoBtn(x); if (leo) row.append(leo);
+    const leo = trial ? null : senseLeoBtn(x); if (leo) row.append(leo);
   }
   if (OS.sense.canWrite()) {
     if (kind === 'muse') row.append(hubBtn(acted && acted.action === 'keep' ? 'Kept ✓' : 'Keep', acted && acted.action === 'keep' ? 'on' : '', () => OS.sense.act(x.id, acted && acted.action === 'keep' ? null : 'keep')));
     else row.append(hubBtn('Got it', '', () => OS.sense.act(x.id, 'ack')));
     row.append(hubBtn('Not useful', '', () => OS.sense.act(x.id, 'notuseful')));
   }
-  if (sends.length && !OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send from here.'));
+  // on trial the note stands wherever something was prepared to be sent: an action's messages, or a line for Leo
+  if (trial && (sends.length || (typeof x.message === 'string' && x.message.trim()))) row.append(OS.el('span', 'hub-note', 'Trial week: nothing can be sent.'));
+  else if (sends.length && !OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send from here.'));
   li.append(row);
+  if (of && typeof x.source === 'string' && x.source) li.append(OS.el('p', 'lane-meta', 'From ' + x.source));
   return li;
 };
 dash.draw('sense', (el) => {
@@ -1459,6 +1478,32 @@ dash.draw('sense', (el) => {
   };
   el.replaceChildren(col('instinct', 'Instinct', 'What changed and needs a look, with the evidence and a prepared action.'),
     col('muse', 'Muse', 'Ideas worth your time, with the numbers, a first step and a challenge.'));
+});
+
+// The cockpit's lane: the prepared items of one department's agents, as cards, under the chips of that room (one
+// list per room in the HTML, [data-ck-room]; the cockpit's wiring shows the open room's and draws it). An item stays
+// until William says Got it or Not useful; one he sent on stays, marked as sent. No card is made before his
+// reactions have answered (one he had handled would show and go), nor for a document that can't be read now (its
+// chip says "no data", and counts nothing). That rule is the reader's (OS.sense.cards): the cockpit asks it too, to
+// mark the chip that leads to these cards. The cards are made anew only when something in them changed, so that the
+// keyboard's place among them is not lost every time the cockpit redraws.
+const laneDrawn = new WeakMap(); // each lane's cards, as last made: what they were made of
+dash.draw('ck-lane', (ul) => {
+  const crew = window.OSCrew, room = crew && Array.isArray(crew.ROOMS) ? crew.ROOMS.find((r) => r && r.id === ul.dataset.ckRoom) : null;
+  const leo = OS.lanes.leoTo(); // a card's button for Leo is there only once For Leo's document names him
+  const cards = [], key = [OS.sense.canWrite(), OS.ask.can(), leo ? [leo.name, leo.slackId] : null];
+  for (const a of (room && room !== crew.ROOMS[0] && Array.isArray(room.agents) ? room.agents : [])) {
+    const d = OS.sense.doc(a.id), trial = !!d && d.trial === true;
+    const meta = d ? [laneWhen(d.at), typeof d.scope === 'string' ? d.scope.slice(0, 80) : ''].filter(Boolean).join(' · ') : '';
+    for (const x of OS.sense.cards(a.id)) {
+      cards.push(() => senseCard(x, 'instinct', { id: a.id, name: a.name, trial, meta }));
+      key.push([a.id, trial, meta, x, OS.sense.acted(x.id)]);
+    }
+  }
+  const now = JSON.stringify(key);
+  if (laneDrawn.get(ul) === now && ul.children.length === cards.length) return;
+  laneDrawn.set(ul, now);
+  ul.replaceChildren(...cards.map((make) => make()));
 });
 
 // ===================== HOME HERO =====================

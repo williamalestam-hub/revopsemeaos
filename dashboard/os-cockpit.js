@@ -3,9 +3,14 @@
 // (window.OSCockpit). Where each robot belongs is worked out by os-cockpit-model.js (window.OSCrew) from a few facts.
 // This file gathers those facts from the documents the page already reads (OS.hub, OS.sense, OS.lanes) and from two
 // of its own (hub/weekly, hub/pulse), and keeps the picture, the chips under it and the tooltip in step with them.
+// The model has several rooms (OSCrew.ROOMS): William's own agents, then one room per department. A row of doors
+// above the picture opens one room at a time on the same canvas: the scene is handed that room's crew, that room's
+// chips are shown and the others hidden, and under the chips stand the cards of what its agents prepared (the
+// ck-lane drawing, in os-draw.js). The page opens on his own agents; the open room is not kept anywhere.
 // Who writes what: the names, the role sentences and the legend are in index.html. This file writes only inside its
-// two drawings (the stage: a canvas and a tooltip; each chip's line). Outside them it listens and sets hidden, class,
-// style, tabindex and aria-*. Words from a document reach the page through textContent or the canvas, never as HTML.
+// three drawings (the stage: a canvas and a tooltip; each chip's line; each door's dots and number). Outside them it
+// listens and sets hidden, class, style, tabindex and aria-*. Words from a document reach the page through
+// textContent or the canvas, never as HTML.
 // The picture is for the eye only: everything it says is in the chips and the tooltip, so the canvas is aria-hidden.
 (() => {
   const KEY = '__osCockpit';
@@ -21,12 +26,19 @@
   const HOLD = 2500; // ms: the longest the first crew waits for every document, and William's reactions to it, to answer
   const STATES = ['working', 'due', 'late', 'error', 'needs', 'idle', 'unknown'];
   const NOTHING = { crew: [], lines: {}, lead: {}, brief: {}, tips: {} }; // what is shown while the first crew is held
+  // The rooms, his own first. A model without rooms (an older file, while a new version of the page is loading) has
+  // the one room: every chip on the page, derived as it always was.
+  const whole = (r) => !!r && typeof r === 'object' && typeof r.id === 'string' && !!r.id && Array.isArray(r.agents) && r.agents.every((a) => !!a && typeof a === 'object' && typeof a.id === 'string');
+  const ROOMS = Array.isArray(Crew.ROOMS) && Crew.ROOMS.length && Crew.ROOMS.every(whole) ? Crew.ROOMS : [{ id: 'mine', agents: null }];
+  const MINE = ROOMS[0], DEPT = ROOMS.slice(1).flatMap((r) => r.agents); // the departments' agents, all rooms together
+  const roomOf = (id) => ROOMS.find((r) => r !== MINE && r.agents.some((a) => a.id === id)) || MINE;
   // this run's handles, on window so that the next run can stop them
-  const S = { dead: false, timer: null, soon: null, hold: null, began: 0, born: Date.now(), open: false, out: null, tips: 0,
+  const S = { dead: false, timer: null, soon: null, hold: null, began: 0, born: Date.now(), open: false, outs: {}, tips: 0, room: MINE,
     live: new Set(), subs: [], listeners: [], off: null, review: { src: 'loading', at: null, status: '' }, pulse: null };
   window[KEY] = S;
 
-  const rerun = () => { clearTimeout(S.soon); S.soon = null; if (!S.dead) ['cockpit', 'ck-line'].forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } }); };
+  // the lane's cards are drawn with the rest (first, though nothing hangs on the order: a chip's mark is asked of the reader)
+  const rerun = () => { clearTimeout(S.soon); S.soon = null; if (!S.dead) ['ck-lane', 'cockpit', 'ck-line', 'ck-door'].forEach((n) => { try { dash.draw(n); } catch (e) { /* not registered yet */ } }); };
   const listen = (target, type, fn, opt) => { target.addEventListener(type, fn, opt); S.listeners.push([target, type, fn, opt]); };
   const said = (v) => (typeof v === 'string' && v ? v : '');
 
@@ -34,11 +46,13 @@
   // A count read before William's own reactions to it have answered would be too high, and a robot would set off for
   // his desk and turn back. So the first crew is held (an empty room, the chips at their dash) until every document
   // has answered and each module says its reactions have (ready() on OS.hub, OS.sense and OS.lanes), or for HOLD.
+  // The departments' documents are waited for as well, whichever room is open: a door shows its room's count.
   const answered = () => {
     const os = window.OS || {};
     const ready = (m) => { try { return !m || typeof m.ready !== 'function' || !!m.ready(); } catch (e) { return true; } };
     let loading = S.review.src === 'loading';
-    try { loading = loading || [os.hub.state(), os.sense.state('instinct'), os.sense.state('muse'), os.lanes.state('decisions'), os.lanes.state('leo')].includes('loading'); } catch (e) { /* a module is missing: nothing of it to wait for */ }
+    // (a department agent's document is one of OS.sense's; one the page does not read is not waited for)
+    try { loading = loading || [os.hub.state(), os.sense.state('instinct'), os.sense.state('muse'), os.lanes.state('decisions'), os.lanes.state('leo')].concat(DEPT.map((a) => os.sense.state(a.id))).includes('loading'); } catch (e) { /* a module is missing: nothing of it to wait for */ }
     return !loading && ready(os.hub) && ready(os.sense) && ready(os.lanes);
   };
   const open = () => {
@@ -95,6 +109,19 @@
       } catch (e) { f[k] = unread(); }
     }
     f.review = { src: S.review.src, at: S.review.at, status: S.review.status, waiting: 0 };
+    // The departments' agents: one document each, under the agent's own id, read by OS.sense like Instinct's. What
+    // waits is its items William has not reacted to. A run that ended in an error is a failed one to the model. One
+    // whose document the page does not read (it posts by itself, and says nothing here yet) is missing. A result
+    // that lists no items (the field is left out, or is not a list) is no data, not "all clear", as a summary without
+    // a count is for Desk; only a run that failed may leave none.
+    for (const a of DEPT) {
+      try {
+        const sense = os.sense, src = sense.state(a.id), d = sense.doc(a.id), status = str(d && d.status) || '';
+        const failed = status === 'error' || status === 'failed', listed = !!d && Array.isArray(d.items);
+        f[a.id] = typeof src !== 'string' ? { src: 'missing', at: null, status: '', waiting: 0 }
+          : { src: src === 'ok' && !failed && !listed ? 'error' : src, at: str(d && d.at), status: failed ? 'failed' : status, waiting: sense.items(a.id).filter((x) => !sense.acted(x.id)).length, trial: !!d && d.trial === true };
+      } catch (e) { f[a.id] = unread(); }
+    }
     f.pulse = S.pulse;
     return f;
   };
@@ -107,20 +134,29 @@
   // they are still in a <b>
   const words = (n) => (n.nodeType === 3 ? n.nodeValue || '' : n.nodeType !== 1 || n.hasAttribute('data-draw') || n.classList.contains('ck-dot') || n.getAttribute('aria-hidden') === 'true' ? '' : [...n.childNodes].map(words).join(''));
   const nameIn = (chip) => (chip ? [...chip.childNodes].map(words).join('').replace(/\s+/g, ' ').trim() : '');
-  const names = () => { const n = {}; chips().forEach((c) => { const t = nameIn(c); if (t && !(c.dataset.ck in n)) n[c.dataset.ck] = t; }); return n; };
+  // the names of a room's agents, as their chips say them
+  const names = (room) => { const n = {}; chips().forEach((c) => { const t = nameIn(c); if (t && !(c.dataset.ck in n) && (!room.agents || room.agents.some((a) => a.id === c.dataset.ck))) n[c.dataset.ck] = t; }); return n; };
   const roleOf = (id) => { const r = [...document.querySelectorAll('[data-ck-role]')].find((x) => x.dataset.ckRole === id); return r ? String(r.textContent || '').trim() : ''; };
-  const linked = (id) => { const c = chipOf(id); return !!c && !!(c.dataset.nav || c.dataset.ckGo); };
+  // a department agent's first card in the lane on screen (the ck-lane drawing marks each card with its agent)
+  const cardOf = (id) => [...document.querySelectorAll('[data-ck-of]')].find((c) => c.dataset.ckOf === id && !c.closest('[hidden]')) || null;
+  // a chip leads somewhere when it names a tab or an element of Today, or when its agent has a card in the lane
+  const linked = (id) => { const c = chipOf(id); return !!c && !!(c.dataset.nav || c.dataset.ckGo || cardOf(id)); };
+  // Whether an agent of the open department has cards in its lane: asked of the reader, by the lane's own rule
+  // (OS.sense.cards), not of the lane as it stands. When Today comes back from another tab the dashboard draws the
+  // chips' lines before the lane, which then still holds the cards it had when the tab was left. (A press and the
+  // pointer look for the card itself, cardOf: by then the lane is drawn.)
+  const carded = (id) => { try { const c = S.room !== MINE && roomOf(id) === S.room ? window.OS.sense.cards(id) : null; return Array.isArray(c) && c.length > 0; } catch (e) { return false; } };
   // a chip that stands for two tabs (data-ck-alt): nothing left for its own tab and something for the other one
   const wantsAlt = (id) => { try { const p = facts()[id].parts; return Array.isArray(p) && p.length > 1 && !p[0].n && p.slice(1).some((x) => x.n > 0); } catch (e) { return false; } };
 
-  // what the model makes of the facts now; while the first crew is held, nothing; in the middle of a burst of changes,
-  // what it made of them before the burst
-  const derive = () => {
+  // what the model makes of a room's facts now; while the first crew is held, nothing; in the middle of a burst of
+  // changes, what it made of them before the burst. His own room is asked for as it always was: the model's own five.
+  const derive = (room) => {
     if (!open()) return NOTHING;
-    if (S.soon !== null && S.out) return S.out;
-    const out = Crew.derive(facts(), Date.now(), names());
-    S.out = out && typeof out === 'object' ? out : {};
-    return S.out;
+    if (S.soon !== null && S.outs[room.id]) return S.outs[room.id];
+    const out = room === MINE ? Crew.derive(facts(), Date.now(), names(room)) : Crew.derive(facts(), Date.now(), names(room), room.agents);
+    S.outs[room.id] = out && typeof out === 'object' ? out : {};
+    return S.outs[room.id];
   };
   const crewOf = (out) => (Array.isArray(out.crew) ? out.crew.filter((a) => a && typeof a === 'object') : []);
   const reduced = () => { try { return !!window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
@@ -134,10 +170,11 @@
   const hideTip = (m) => { m.tipFor = null; m.tip.hidden = true; describe(m, null); };
   const hideTips = () => S.live.forEach(hideTip);
   const node = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; if (text) n.textContent = text; return n; };
-  // name, what the agent is for, and the model's short lines (what it is doing; its last result and next run)
+  // name, what the agent is for, and the model's short lines (what it is doing; its last result and next run). The
+  // sentence on what it is for is left out once the model says the agent's task has stopped: it reads as if it ran.
   const showTip = (m, id) => {
     const tips = (m.out.tips && typeof m.out.tips === 'object' && m.out.tips[id]) || {}, a = crewOf(m.out).find((x) => x.id === id);
-    const rows = [['b', 'ck-tip-name', said(nameIn(chipOf(id)) || (a && a.name))], ['span', 'ck-tip-role', roleOf(id)], ['span', 'ck-tip-state', said(tips.state)]]
+    const rows = [['b', 'ck-tip-name', said(nameIn(chipOf(id)) || (a && a.name))], ['span', 'ck-tip-role', tips.stopped === true ? '' : roleOf(id)], ['span', 'ck-tip-state', said(tips.state)]]
       .filter((r) => r[2]).map((r) => node(...r));
     const when = [tips.last, tips.next].filter(said).map((t) => node('span', '', t));
     if (when.length) { const row = node('span', 'ck-tip-when'); row.append(...when); rows.push(row); }
@@ -228,7 +265,7 @@
       if (m.failed === S) return; // the picture threw in this run: folded away until the stage is mounted anew
       if (m.dead) build(el, m);   // stopped by a later run of this script: start again in place
       if (m.off) return;
-      const out = derive();
+      const out = derive(S.room); // the open room's crew: a click on a door hands the scene another one
       m.out = out;
       try {
         m.scene.setCrew(crewOf(out));
@@ -246,14 +283,48 @@
   // Each chip's line and the chip's one state class. The line is two spans: when (the model's lead, the time) and what
   // (its brief: the count, or what is wrong). A narrow page shows only the second (os-cockpit.css).
   dash.draw('ck-line', (el) => {
-    const out = derive(), id = el.dataset.ckId, a = crewOf(out).find((x) => x.id === id);
+    const id = el.dataset.ckId, out = derive(roomOf(id)), a = crewOf(out).find((x) => x.id === id);
     const of = (map) => said(map && typeof map === 'object' ? map[id] : '');
     const lead = of(out.brief) ? of(out.lead) : '', what = of(out.brief) || of(out.lines);
     if (what) el.replaceChildren(...(lead ? [node('span', 'ck-when', lead + ' · ')] : []), node('span', 'ck-what', what));
     else el.textContent = '—';
     const chip = el.closest('[data-ck]'), state = !a ? '' : STATES.includes(a.state) ? a.state : 'unknown';
     if (chip) STATES.forEach((s) => chip.classList.toggle('is-' + s, s === state));
+    if (chip) chip.classList.toggle('ck-leads', carded(id)); // a press on it goes to its cards in the lane
   });
+
+  // Each door's dots and number, whether its room is open or not: one dot per agent of the room, in the colour of
+  // that agent's state (faint while nothing is known yet), then what waits on William there, when something does. The
+  // last span is not shown: with the door's own words it makes the name a screen reader says ("Data Hygiene, 2
+  // agents, 1 waiting on you"). It says what the dots say: what waits, then the runs that failed and those that left
+  // no result. "Nothing waiting" is said only when none of that is so and an agent has data; "no data" when none has.
+  dash.draw('ck-door', (el) => {
+    const room = ROOMS.find((r) => r.id === el.dataset.ckRoom);
+    if (!room || !room.agents) { el.replaceChildren(); return; }
+    const out = derive(room), crew = crewOf(out), n = typeof out.total === 'number' && out.total > 0 ? Math.floor(out.total) : 0;
+    const stateOf = (a) => (STATES.includes(a.state) ? a.state : 'unknown'), count = (...states) => crew.filter((a) => states.includes(stateOf(a))).length;
+    const pips = node('span', 'ck-pips'), kids = [pips];
+    pips.setAttribute('aria-hidden', 'true');
+    pips.append(...room.agents.map((agent) => { const a = crew.find((x) => x.id === agent.id); return node('i', 'ck-pip' + (a ? ' is-' + stateOf(a) : '')); }));
+    if (n) { const waits = node('span', 'ck-door-n', String(n)); waits.setAttribute('aria-hidden', 'true'); kids.push(waits); }
+    const failed = count('error'), none = count('due', 'late');
+    const says = [room.agents.length + (room.agents.length === 1 ? ' agent' : ' agents'), n ? n + ' waiting on you' : '', failed ? failed + ' failed' : '', none ? none + ' with no result yet' : ''].filter(Boolean);
+    if (crew.length && says.length === 1) says.push(count('unknown') === crew.length ? 'no data' : 'nothing waiting');
+    kids.push(node('span', 'ck-sr', says.map((t) => ', ' + t).join('')));
+    el.replaceChildren(...kids);
+  });
+
+  // ---------- The doors ----------
+  // A click on a door opens its room: the door says so (aria-pressed), that room's chips and lane are shown and the
+  // others hidden, the tooltip goes, and every drawing runs again, the stage with the new room's crew.
+  const doors = () => [...document.querySelectorAll('[data-ck-door]')];
+  const show = (room) => {
+    S.room = room;
+    doors().forEach((d) => d.setAttribute('aria-pressed', String(d.dataset.ckDoor === room.id)));
+    document.querySelectorAll('.ck-strip').forEach((u) => { u.hidden = (u.dataset.ckRoom || MINE.id) !== room.id; });
+    document.querySelectorAll('.ck-lane').forEach((u) => { u.hidden = u.dataset.ckRoom !== room.id; });
+  };
+  show(MINE); // every run of this script starts in his own room, whatever an earlier run left open
 
   // ---------- Listening ----------
   // the clock: one timer for the page's life, whether or not the picture is mounted, so the chips keep time without
@@ -290,8 +361,8 @@
 
   // The chips. Pointing at one, or tabbing to it, lights up its robot and shows its tooltip. A press is the page's own
   // (data-nav opens the tab); just after it, a chip with data-ck-go scrolls to that element and moves focus there, and
-  // one with data-ck-alt goes on to that other tab when its own has nothing left. A chip that leads nowhere shows its
-  // tooltip.
+  // one with data-ck-alt goes on to that other tab when its own has nothing left. A department agent's chip scrolls to
+  // its first card in the lane, when it has one. A chip that leads nowhere shows its tooltip.
   const focusOn = (id) => S.live.forEach((m) => { try { m.scene.setFocus(id); } catch (e) { /* the scene left */ } });
   const byKeys = (chip) => { try { return chip.matches(':focus-visible'); } catch (e) { return false; } };
   const held = () => { const a = document.activeElement; return a && a.dataset && a.dataset.ck && byKeys(a) ? a.dataset.ck : null; };
@@ -303,12 +374,12 @@
     listen(chip, 'focus', () => { focusOn(id); if (byKeys(chip)) tipFor(id); });
     listen(chip, 'blur', () => { focusOn(null); tipFor(null); });
     listen(chip, 'click', () => {
-      const go = chip.dataset.ckGo, alt = chip.dataset.ckAlt;
-      if (!chip.dataset.nav && !go) { tipFor(id); return; }
+      const go = chip.dataset.ckGo, alt = chip.dataset.ckAlt, card = !go && !!cardOf(id);
+      if (!chip.dataset.nav && !go && !card) { tipFor(id); return; }
       tipFor(null); // the tab may change under it
       if (alt && wantsAlt(id)) setTimeout(() => { const tab = document.getElementById('nav-' + alt); if (tab && typeof tab.click === 'function') tab.click(); }, 0);
-      if (go) setTimeout(() => {
-        const t = document.getElementById(go);
+      if (go || card) setTimeout(() => {
+        const t = go ? document.getElementById(go) : cardOf(id);
         if (!t || t.closest('[hidden]')) return;
         t.style.scrollMarginTop = 'calc(var(--app-tabs-h, 3rem) + 8px)'; // clear of the sticky tab strip
         t.setAttribute('tabindex', '-1');
@@ -317,6 +388,14 @@
       }, 0);
     });
   });
+  // a door opens its room; the room that is open already stays as it is
+  doors().forEach((door) => listen(door, 'click', () => {
+    const room = ROOMS.find((r) => r.id === door.dataset.ckDoor);
+    if (!room || !room.agents || room === S.room) return;
+    hideTips(); focusOn(null);
+    show(room);
+    rerun();
+  }));
   // the "?" button shows or hides the legend it controls, and says so only when there is one
   document.querySelectorAll('[data-ck-help]').forEach((b) => listen(b, 'click', () => {
     const legend = document.getElementById(b.getAttribute('aria-controls') || '');

@@ -13,6 +13,33 @@
     { id: 'muse', name: 'Muse', look: 'bulb', hue: 'violet', days: [1, 2, 3, 4, 5], at: ['08:07'], graceMin: 60, idleWord: 'all clear' },
     { id: 'review', name: 'Review', look: 'clipboard', hue: 'blue', days: [1], at: ['07:37'], graceMin: 45, idleWord: 'posted' },
   ];
+  // The rooms of the cockpit: his own five, then one room per department. A door on the page opens each. An agent's id
+  // is its own in every room, no look or hue comes twice in a room, and no department robot looks like one of his
+  // five. At most five agents a room: a sixth makes the picture taller on a phone. `missing` is what an agent says
+  // instead of "not run yet" while nothing of it can be read: [the chip's words, the tooltip's sentence, and the
+  // sentence from `until` on]. `until` is the moment the agent's task stops by its own instructions (a time with its
+  // zone): from then on nothing here says that it still runs, and its tooltip entry is marked `stopped`, so that the
+  // page leaves out its sentence on what the agent does.
+  // Pacing and Rundown are tasks for the last quarter of 2026: they run in November and December, and their own
+  // instructions tell them to post nothing after 31 December.
+  const LINK = ['not linked yet', 'Runs today and posts by itself. Not linked to the cockpit yet', 'Not linked to the cockpit yet'];
+  const YEAR_END = '2027-01-01T00:00+01:00'; // the first moment of 2027 in Stockholm
+  const ROOMS = [
+    { id: 'mine', name: 'Your agents', agents: ROSTER },
+    { id: 'hygiene', name: 'Data Hygiene', agents: [
+      { id: 'sweeper', name: 'Sweeper', look: 'plain', hue: 'green', days: [1, 5], at: ['06:50'], graceMin: 45, idleWord: 'all clear' },
+      { id: 'accounts', name: 'Accounts', look: 'headset', hue: 'violet', days: [3], at: ['06:50'], graceMin: 45, idleWord: 'all clear' },
+    ] },
+    { id: 'arr', name: 'ARR', agents: [
+      { id: 'pacing', name: 'Pacing', look: 'gavel', hue: 'teal', days: [1, 2, 3, 4, 5], at: ['07:45'], graceMin: 45, idleWord: 'posted', missing: LINK, until: YEAR_END },
+      { id: 'forecast', name: 'Forecast', look: 'bulb', hue: 'rose', days: [5], at: ['12:10'], graceMin: 45, idleWord: 'all clear' },
+      { id: 'renewals', name: 'Renewals', look: 'clipboard', hue: 'amber', days: [4], at: ['06:50'], graceMin: 45, idleWord: 'all clear' },
+    ] },
+    { id: 'exec', name: 'Executive', agents: [
+      { id: 'rundown', name: 'Rundown', look: 'antenna', hue: 'green', days: [1, 2, 3, 4, 5, 6, 7], at: ['20:01'], graceMin: 45, idleWord: 'posted', missing: LINK, until: YEAR_END },
+      { id: 'prep', name: 'Prep', look: 'plain', hue: 'blue', days: [5], at: ['12:40'], graceMin: 45, idleWord: 'all clear' },
+    ] },
+  ];
   const MIN = 6e4, DAY = 864e5;
   const TOL = 20 * MIN;     // agents write their `at` roughly: a result stamped up to 20 minutes before a run is still that run's
   const RUN_MAX = 45 * MIN; // a "running" heartbeat older than this is a run that stopped without saying so
@@ -124,22 +151,34 @@
     // "no result", not "missed": all that is known is that nothing has arrived
     late: (w) => ({ brief: 'no result ' + w.run, bubble: 'No result ' + w.run, tip: 'No result from the ' + w.run + ' run', say: 'no result from the ' + w.run + ' run' }),
     error: (w) => ({ brief: w.at ? 'failed ' + w.at : 'failed', bubble: 'Run failed', tip: 'The last run failed', say: 'the last run failed' }),
-    // a partial result (one of its sources failed) is not an error, but it is said where the last result is shown
-    needs: (w) => ({ lead: w.at, brief: (w.partial ? 'partial · ' : '') + w.count, bubble: w.n + ' for you', tip: w.n + ' waiting on you' + (w.parts ? ': ' + w.parts : ''), say: w.n + ' waiting on you' + (w.partial ? ', last run partial' : '') }),
-    idle: (w) => ({ lead: w.at, brief: w.partial ? 'partial' : w.idle, bubble: '', tip: 'Nothing waiting on you', say: 'nothing waiting' + (w.partial ? ', last run partial' : '') }),
-    unknown: (w) => ({ bubble: '', ...UNREAD[w.src] }),
+    // a partial result (one of its sources failed) is not an error, but it is said where the last result is shown; so
+    // is the trial of an agent whose prepared messages cannot be sent yet (w.marks: "partial", "trial", or both)
+    needs: (w) => ({ lead: w.at, brief: w.marks.concat(w.count).join(' · '), bubble: w.n + ' for you', tip: w.n + ' waiting on you' + (w.parts ? ': ' + w.parts : ''), say: w.n + ' waiting on you' + w.also }),
+    idle: (w) => ({ lead: w.at, brief: w.marks.join(' · ') || w.idle, bubble: '', tip: 'Nothing waiting on you', say: 'nothing waiting' + w.also }),
+    // an agent that says for itself why nothing of it can be read (the roster's `missing`) says that, not "not run yet"
+    unknown: (w) => ({ bubble: '', ...(w.src === 'missing' && w.own ? w.own : UNREAD[w.src]) }),
   };
 
   // ---------- The crew ----------
-  const derive = (facts, nowMs, names) => {
+  // `roster` is the room to work on (a list of agents like ROSTER); without one it is his own five.
+  const derive = (facts, nowMs, names, roster) => {
     const now = clock(nowMs), all = isObj(facts) ? facts : {}, pulse = isObj(all.pulse) ? all.pulse : {};
     const out = { crew: [], lines: {}, lead: {}, brief: {}, tips: {}, aria: '', total: 0 }, said = [];
-    for (const agent of ROSTER) {
+    const mine = !Array.isArray(roster) || roster === ROSTER;
+    const list = mine ? ROSTER : roster.filter((a) => isObj(a) && typeof a.id === 'string' && a.id);
+    for (const agent of list) {
       const f = isObj(all[agent.id]) ? all[agent.id] : {}, p = isObj(pulse[agent.id]) ? pulse[agent.id] : {};
       // no entry, or a source this does not know, is treated as still loading
       const src = SRC.includes(f.src) ? f.src : 'loading';
       const name = cut(isObj(names) ? names[agent.id] : '', 12) || agent.name;
       const last = time(f.at), n = count(f.waiting), partial = f.status === 'partial';
+      // on trial: only a result that could be read says so, and only with the word true
+      const trial = src === 'ok' && f.trial === true;
+      // from its `until` on its task has stopped, by its own instructions (an `until` that is no time ends nothing)
+      const stopped = now >= time(agent.until);
+      // its own words for a result that does not exist; once it has stopped, the sentence that no longer says it runs
+      const mis = Array.isArray(agent.missing) ? agent.missing.map((t, i) => cut(t, i ? 90 : 24)) : [];
+      const own = mis[0] && mis[1] ? { brief: mis[0], tip: (stopped && mis[2]) || mis[1], say: mis[0] } : null;
       // a step ends without full stops: sentences are built around it
       const step = cut(p.step, 24).replace(/[.\u2026\s]+$/, '');
       const { prev, next } = runsAround(agent, now);
@@ -169,7 +208,8 @@
       // what waits, in words: its parts when it has any, else the number
       const parts = breakdown(f.parts), waits = n > 0 ? parts || n + ' for you' : '';
       // times inside a line or a sentence are short; "Last result" and "Next run" have room for yesterday and tomorrow
-      const w = WORDS[state]({ src, step, n, parts, partial, count: waits, idle: agent.idleWord, run: when(prev, now, true), at: when(state === 'error' && died ? pulseAt : last, now, true) });
+      const marks = (partial ? ['partial'] : []).concat(trial ? ['trial'] : []);
+      const w = WORDS[state]({ src, own, step, n, parts, marks, also: (partial ? ', last run partial' : '') + (trial ? ', on trial' : ''), count: waits, idle: agent.idleWord, run: when(prev, now, true), at: when(state === 'error' && died ? pulseAt : last, now, true) });
       // what waits on William does not vanish while its agent is working, due, late or failed (a working chip stays short)
       const still = n > 0 && ['working', 'due', 'late', 'error'].includes(state);
       const lead = w.lead || '', brief = w.brief + (still && state !== 'working' ? ' · ' + waits : '');
@@ -178,9 +218,14 @@
       out.lead[agent.id] = lead;
       out.brief[agent.id] = brief;
       out.tips[agent.id] = {
-        state: w.tip + (still ? '. ' + n + ' still waiting on you' : ''),
+        state: w.tip + (still ? '. ' + n + ' still waiting on you' : '') + (trial ? '. On trial: nothing it prepared can be sent' : ''),
         last: src === 'ok' && real(last) ? 'Last result ' + when(last, now) + (partial ? ', partial: a source failed' : '') : '',
-        next: next === null ? '' : 'Next run ' + when(next, now),
+        // a department's agent is promised a next run only once a result of it has been read: until then nothing says
+        // that its schedule is real (his own five have run for as long as the cockpit has stood)
+        next: next === null || (src !== 'ok' && !mine) ? '' : 'Next run ' + when(next, now),
+        // said only of an agent whose task has stopped: the page then leaves out its sentence on what the agent
+        // does, which reads as if it still ran
+        ...(stopped ? { stopped: true } : {}),
       };
       said.push(name + ': ' + w.say + (still ? ', ' + n + ' still waiting on you' : '') + '.');
       // everything that waits on William is counted, wherever its agent stands; an agent that can't be read has no count
@@ -190,7 +235,7 @@
     return out;
   };
 
-  const api = { TZ, ROSTER, derive, runsAround, when, overdue };
+  const api = { TZ, ROSTER, ROOMS, derive, runsAround, when, overdue };
   root.OSCrew = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
