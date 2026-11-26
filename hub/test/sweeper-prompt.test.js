@@ -24,7 +24,10 @@ const required = [
   ['unattended, never ask', ['You run unattended', 'never ask questions']],
   ['nothing outside the two documents', 'You never send, post, create or change anything outside the two documents named below'],
   ['OS db and tools', ['https://claude.ai/artifact/TEF8CuQXmPS6rEY3yLVN92', 'only with ArtifactData', 'ToolSearch', 'soqlQuery']],
-  ['real clock', ['date -u +%Y-%m-%dT%H:%M:%SZ', 'never guess it', "TZ=Europe/Stockholm date '+%F %u %G-W%V'"]],
+  ['real clock', ['export TZ=Europe/Stockholm; D=$(date +%F);', 'echo "now=$(date -u +%FT%TZ)"', 'echo "D=$D wday=$(date +%u) week=$(date +%G-W%V)"',
+    'echo "D0=$(z "$D 00:00") D7=$(z "$(date -d "$D -7 days" +%F) 00:00") D10=$(date -d "$D -10 days" +%F)"', 'before any query', 'never guess it',
+    'write it character for character, without quotes', 'Never work one out yourself']],
+  ['no Salesforce date word', ['Never use a Salesforce date word (TODAY, N_DAYS_AGO, LAST_N_DAYS and the like)', "the connector user's clock"]],
   ['read-only and aggregates only', ['Salesforce is read-only', 'you ask only for aggregates', '`COUNT(Id)`', '`SUM(Finance_ARR_USD__c)`', '`COUNT_DISTINCT(OwnerId)`']],
   ['no row of a record is read', ['Never select or group by a record\'s name, an account, an owner, a manager or anything a person typed', 'no row of a record is ever read, not even with LIMIT 1']],
   ['the object and field rules', ['Never `Opportunity_Snapshot__c`', 'ARR is `Finance_ARR_USD__c`', 'Never put a LIMIT on an aggregate']],
@@ -34,7 +37,10 @@ const required = [
   ['no number about one person', ['No number about one person', 'at least 3 owners stand behind it', '"Smaller teams"', 'The EMEA total is always written']],
   ['every run counts afresh', 'Every run counts afresh in Salesforce: never reuse a number an earlier run in this conversation counted'],
   ['the seven checks', ['`stage0-met`', '`pilot-end`', '`stuck-1`', '`pilot-start`', '`no-contact`', '`zero-arr`', '`close`']],
-  ['their rules', ['Gong__Related_Opportunity__c', "Pilot_End_Date__c < TODAY AND StageName LIKE '3%'", 'LastStageChangeInDays > 55', 'No_Pilot__c = false', 'Id NOT IN (SELECT OpportunityId FROM OpportunityContactRole)', 'CloseDate < TODAY']],
+  ['their rules', ['Gong__Related_Opportunity__c', 'Gong__Gong_Interaction__r.Gong__Call_Start__c < <D0>)', "`Pilot_End_Date__c < <D> AND StageName LIKE '3%'`", 'LastStageChangeInDays > 55',
+    '`Pilot_Start_Date__c < <D> AND No_Pilot__c = false AND', 'Id NOT IN (SELECT OpportunityId FROM OpportunityContactRole)', '`CloseDate < <D>`']],
+  ['the dated notes', ['`step-late` `Next_Steps_Date__c < <D>`', '`(LastActivityDate = null OR LastActivityDate <= <D10>)`',
+    '`CreatedDate >= <D7> AND (Finance_ARR_USD__c = 0 OR Finance_ARR_USD__c = null)`', '`new-all` `CreatedDate >= <D7>`']],
   ['notes are not checks', ['not checks yet', '`no-step-date`', '`step-late`', '`no-step`', 'the text is never read', '`quiet-10`', '`new-zero`', '`new-all`', '`open-all`']],
   ['a failed query', ['leave it out', 'status `partial`', 'status `error`, no items']],
   ['which run', ['Friday (weekday 5): a `progress` run', 'Any other day: an `ask` run', 'hub/sweeper-state']],
@@ -94,6 +100,24 @@ for (const m of prompt.match(/\(SELECT [^)]+\)/g) || []) {
 if ((prompt.match(/Opportunity_Snapshot__c/g) || []).length !== 1) fail('Opportunity_Snapshot__c may appear once only, in the rule that forbids it');
 // the text fields may be named only where the prompt forbids selecting them, or as a blank-or-not test
 if (/NextStep(?! = null|,)/.test(prompt.replace(/Next_Steps__c|Next_Steps_Date__c/g, ''))) fail('NextStep may only be tested for blank (NextStep = null) or named in the list of things never selected');
+
+// 5b. No Salesforce date word in any rule: Salesforce reads them in the connector user's time zone (US Pacific), so at
+// 06:50 Stockholm "today" is still yesterday there. Every date in a rule is a value the clock command printed: a date
+// field compares with <D> or <D10>, a datetime field with <D0>, <D7> or <state.at>. The words may stand only in the
+// one sentence that forbids them.
+const dateWord = /\b(TODAY|YESTERDAY|TOMORROW|(?:THIS|LAST|NEXT)_(?:N_)?(?:DAY|WEEK|MONTH|QUARTER|YEAR|FISCAL_QUARTER|FISCAL_YEAR)S?(?::\d+)?|LAST_90_DAYS|NEXT_90_DAYS|N_(?:DAY|WEEK|MONTH|QUARTER|YEAR|FISCAL_QUARTER|FISCAL_YEAR)S_AGO(?::\d+)?)\b/g;
+const noWords = prompt.replace(/Never use a Salesforce date word \([^)]*\)/, '');
+if (noWords === prompt) fail('the sentence that forbids Salesforce date words is missing');
+for (const w of new Set(noWords.match(dateWord) || [])) fail('a Salesforce date word outside the sentence that forbids them: ' + w);
+// a date field never meets an instant, and a datetime field never meets a plain date
+for (const f of ['Pilot_End_Date__c', 'Pilot_Start_Date__c', 'CloseDate', 'Next_Steps_Date__c', 'LastActivityDate']) {
+  for (const c of prompt.match(new RegExp('\\b' + f + ' (?:<=|>=|<|>|=) (?!null)\\S+', 'g')) || []) if (!/ <(D|D10)>\)?`?[;,]?$/.test(c)) fail('a date field compared with something that is not <D> or <D10>: ' + c);
+}
+for (const f of ['Gong__Call_Start__c', 'CreatedDate']) {
+  for (const c of prompt.match(new RegExp('\\b' + f + ' (?:<=|>=|<|>|=) \\S+', 'g')) || []) if (!/ <(D0|D7|state\.at)>\)?`?[;,]?$/.test(c)) fail('a datetime field compared with something that is not <D0>, <D7> or <state.at>: ' + c);
+}
+// every <NAME> in a rule is a value the clock prints
+for (const n of ['D', 'D0', 'D7', 'D10']) if (!new RegExp('[ "]' + n + '=\\$').test(prompt)) fail('the clock command does not print ' + n);
 
 // 6. No customer names: firm-shaped words, and proper nouns that are not on the list below.
 for (const re of [/\bLLP\b/, /\bLLC\b/, /\bAdvokat\w*/i, /\bSolicitors?\b/, /\bChambers\b/, /\bRechtsanw/i, /\bAvocats?\b/i, /\bAbogados\b/i, /&\s?Partners\b/, /\bAttorneys?\b/i, /\bLaw Firm\b/i, /\bKanzlei\b/i]) {

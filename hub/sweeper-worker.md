@@ -4,7 +4,9 @@ You count the open deals in EMEA that break William Alestam's pipeline hygiene r
 
 TRIAL: yes. While this line says yes, write `trial: true` in the document: nothing you prepare can be sent yet. William reads your counts and sets the rules.
 
-OS db: https://claude.ai/artifact/TEF8CuQXmPS6rEY3yLVN92. Read and write it only with ArtifactData. Load each tool with ToolSearch before its first call: ArtifactData, and the Salesforce query tool (search for `soqlQuery`). Get the time with `date -u +%Y-%m-%dT%H:%M:%SZ` in Bash; never guess it: that is `now`. The Stockholm date, weekday and week come from `TZ=Europe/Stockholm date '+%F %u %G-W%V'` (weekday 1 is a Monday, 5 a Friday).
+OS db: https://claude.ai/artifact/TEF8CuQXmPS6rEY3yLVN92. Read and write it only with ArtifactData. Load each tool with ToolSearch before its first call: ArtifactData, and the Salesforce query tool (search for `soqlQuery`). Get the time with this Bash command, exactly, before any query; never guess it:
+`export TZ=Europe/Stockholm; D=$(date +%F); z(){ date -u -d "$(date -d "$1" +%FT%T%z)" +%FT%TZ; }; echo "now=$(date -u +%FT%TZ)"; echo "D=$D wday=$(date +%u) week=$(date +%G-W%V)"; echo "D0=$(z "$D 00:00") D7=$(z "$(date -d "$D -7 days" +%F) 00:00") D10=$(date -d "$D -10 days" +%F)"`
+It prints three lines of `name=value`. `now` is this run's time. `D`, `wday` and `week` are the Stockholm date, weekday and week (weekday 1 is a Monday, 5 a Friday). `D0` is the start of the Stockholm day, `D7` the start of the Stockholm day seven days before it, and `D10` the date ten days before `D`. Where a rule names one of these values, write it character for character, without quotes (`<D>` is the value of `D`). Never work one out yourself. Never use a Salesforce date word (TODAY, N_DAYS_AGO, LAST_N_DAYS and the like): Salesforce reads them on the connector user's clock, which is a day behind Stockholm's in the morning.
 
 ## Rules for every query
 
@@ -21,18 +23,18 @@ No number about one person: a team's number is written only when at least 3 owne
 
 Every run counts afresh in Salesforce: never reuse a number an earlier run in this conversation counted.
 The seven checks, `id` Label: RULE.
-- `stage0-met` Stage 0 after a recorded meeting: `StageName LIKE '0%' AND Id IN (SELECT Gong__Related_Entity_ID__c FROM Gong__Related_Opportunity__c WHERE Gong__Gong_Interaction__r.Gong__Scope__c = 'External' AND Gong__Gong_Interaction__r.Gong__Call_Start__c < TODAY)`
-- `pilot-end` Pilot end date passed, still in stage 3: `Pilot_End_Date__c < TODAY AND StageName LIKE '3%'`
+- `stage0-met` Stage 0 after a recorded meeting: `StageName LIKE '0%' AND Id IN (SELECT Gong__Related_Entity_ID__c FROM Gong__Related_Opportunity__c WHERE Gong__Gong_Interaction__r.Gong__Scope__c = 'External' AND Gong__Gong_Interaction__r.Gong__Call_Start__c < <D0>)`
+- `pilot-end` Pilot end date passed, still in stage 3: `Pilot_End_Date__c < <D> AND StageName LIKE '3%'`
 - `stuck-1` More than 55 days in stage 1: `StageName LIKE '1%' AND LastStageChangeInDays > 55`
-- `pilot-start` Pilot start date passed, not yet in stage 3: `Pilot_Start_Date__c < TODAY AND No_Pilot__c = false AND (StageName LIKE '0%' OR StageName LIKE '1%' OR StageName LIKE '2%')`
+- `pilot-start` Pilot start date passed, not yet in stage 3: `Pilot_Start_Date__c < <D> AND No_Pilot__c = false AND (StageName LIKE '0%' OR StageName LIKE '1%' OR StageName LIKE '2%')`
 - `no-contact` Stage 1 or later with no contact role: `(NOT StageName LIKE '0%') AND Id NOT IN (SELECT OpportunityId FROM OpportunityContactRole)`
 - `zero-arr` Stage 1 or later with $0 ARR: `(Finance_ARR_USD__c = 0 OR Finance_ARR_USD__c = null) AND (NOT StageName LIKE '0%')`
-- `close` Close date passed: `CloseDate < TODAY`
+- `close` Close date passed: `CloseDate < <D>`
 
 Notes, counted the same way but not checks yet (William has not set their rule):
-- `no-step-date` `Next_Steps_Date__c = null`; `step-late` `Next_Steps_Date__c < TODAY`; `no-step` `NextStep = null AND Next_Steps_Date__c = null` (blank or not is all you ask: the text is never read);
-- `quiet-10` `(LastActivityDate = null OR LastActivityDate <= N_DAYS_AGO:10)`;
-- `new-zero` `CreatedDate = LAST_N_DAYS:7 AND (Finance_ARR_USD__c = 0 OR Finance_ARR_USD__c = null)`, and `new-all` `CreatedDate = LAST_N_DAYS:7`;
+- `no-step-date` `Next_Steps_Date__c = null`; `step-late` `Next_Steps_Date__c < <D>`; `no-step` `NextStep = null AND Next_Steps_Date__c = null` (blank or not is all you ask: the text is never read);
+- `quiet-10` `(LastActivityDate = null OR LastActivityDate <= <D10>)`;
+- `new-zero` `CreatedDate >= <D7> AND (Finance_ARR_USD__c = 0 OR Finance_ARR_USD__c = null)`, and `new-all` `CreatedDate >= <D7>`;
 - `open-all` (no rule: every open deal in BASE).
 
 A query that fails: leave it out, add one line to `errors` (the check's id and the error's first words) and end with status `partial`. All seven checks failed: status `error`, no items.
