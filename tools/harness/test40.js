@@ -520,7 +520,10 @@ eq(['pacing', 'rundown'].map((id) => [EVE, NEW_YEAR, T('2027-06-01T10:00:00Z')].
 const tipOf = (missing, until, t) => seeIn({ agents: [{ id: 'x', name: 'X', look: 'plain', hue: 'green', days: [1], at: ['06:50'], graceMin: 45, idleWord: 'all clear', missing, until }] }, 'x', NONE, t).tip.state;
 eq([tipOf(['a', 'B. C', 'C'], YEAR_END, EVE), tipOf(['a', 'B. C', 'C'], YEAR_END, NEW_YEAR), tipOf(['a', 'B. C'], YEAR_END, NEW_YEAR), tipOf(['a', 'B. C', 'C'], undefined, NEW_YEAR), tipOf(['a', 'B. C', '  '], YEAR_END, NEW_YEAR), tipOf(undefined, YEAR_END, NEW_YEAR), tipOf(['a'], YEAR_END, NEW_YEAR)],
   ['B. C', 'B. C', 'B. C', 'B. C', 'B. C', 'Has not run yet', 'Has not run yet'], 'an agent\'s own sentence is the second entry of `missing`, before `until` and from it on: a third entry is not read (the contract has two); without own words an agent has not run yet, whatever its `until`');
-each(['2027-01-01', '2027-01-01T00:00', 'soon', 0, 1, NEW_YEAR, null, {}, [], true, NaN], (v) => tipOf(['a', 'B. C', 'C'], v, T('2030-01-01T00:00:00Z')), 'B. C', 'an `until` that is not a time with its zone ends nothing');
+// (the sentence alone can no longer tell: it is the same before and after `until`. What ends at `until` is said by the
+// mark `stopped`, so this check reads the whole entry: the sentence, and that nothing but the three lines is there)
+each(['2027-01-01', '2027-01-01T00:00', 'soon', 0, 1, NEW_YEAR, null, {}, [], true, NaN], (v) => { const tip = seeIn({ agents: [{ id: 'x', name: 'X', look: 'plain', hue: 'green', days: [1], at: ['06:50'], graceMin: 45, idleWord: 'all clear', missing: ['a', 'B. C', 'C'], until: v }] }, 'x', NONE, T('2030-01-01T00:00:00Z')).tip; return tip.state + ' [' + Object.keys(tip).join() + ']'; },
+  'B. C [state,last,next]', 'an `until` that is not a time with its zone ends nothing: the agent\'s sentence stands, and its tooltip entry is its three lines, not marked as stopped');
 // from `until` on the agent's tooltip entry is marked as stopped: the page then leaves out its sentence on what the
 // agent does, which reads as if it still ran (Pacing's and Rundown's say that they post)
 const roomWith = (id) => C.ROOMS.find((r) => r.agents.some((a) => a.id === id)), YEARS_ON = T('2030-01-01T00:00:00Z');

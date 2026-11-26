@@ -396,9 +396,9 @@ const staticChecks = () => {
     'os-cockpit.css: a pill whose value is words (the card marks it lane-ev-text) opens with its label: the value keeps its place after the label and its weight goes to the label, so the answer is not read before what it is about');
   // the draft on a department's card ("Read the draft"): a quiet summary that shows the keyboard's focus; the message wraps
   const pageCss = fs.readFileSync(D + 'os.css', 'utf8');
-  ok(/(^|\n)\.ck-lane \.lane-draft summary\s*\{[^}]*color:\s*var\(--color-fg-muted\);[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*cursor:\s*pointer/.test(css) && /\.lane-meta\s*\{[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*color:\s*var\(--color-fg-muted\)/.test(pageCss)
+  ok(/(^|\n)\.ck-lane \.lane-draft summary\s*\{[^}]*width:\s*fit-content;[^}]*color:\s*var\(--color-fg-muted\);[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*cursor:\s*pointer/.test(css) && /\.lane-meta\s*\{[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*color:\s*var\(--color-fg-muted\)/.test(pageCss)
     && /(^|\n)\.ck-lane \.lane-draft summary:focus-visible\s*\{[^}]*outline:\s*2px solid/.test(css) && !/\.lane-draft[^{}]*\{[^}]*(display:\s*none|list-style:\s*none|pointer-events|outline:\s*(none|0))/.test(css),
-    'os-cockpit.css: the draft\'s summary is a quiet line, the size and colour of a card\'s grey lines (os.css: .lane-meta), with the pointer; it shows the keyboard\'s focus, and nothing hides it or its marker');
+    'os-cockpit.css: the draft\'s summary is a quiet line, the size and colour of a card\'s grey lines (os.css: .lane-meta), with the pointer, and no wider than its words (width: fit-content: a press beside them opens nothing); it shows the keyboard\'s focus, and nothing hides it or its marker');
   ok(/\.lane-body\s*\{[^}]*white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere/.test(pageCss) && !/\.lane-(draft|msgs|body)[^{}]*\{[^}]*(white-space|overflow|(min-|max-)?width:\s*\d)/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')),
     'the draft\'s message keeps its line breaks and wraps, also in the middle of a long word (os.css: .lane-body), and nothing in os-cockpit.css changes how it wraps or gives it a width: a long line does not make the card, or the page, wider');
   ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\.html\(|createContextualFragment|DOMParser|eval\(|new Function/.test(wiring), 'os-cockpit.js writes no HTML: no innerHTML, outerHTML, insertAdjacentHTML, document.write');
@@ -431,6 +431,16 @@ const staticChecks = () => {
     'README: what the three tab numbers and the headline show, that each is a drawing stored hidden with an empty drawing of its name beside it to show it, and where those stand');
   ok(/A word too long for its line \(a long link, say\) is broken: in these cards, in Decide's and For Leo's, in the lines under their lists and in the Hub's headline, as in the cockpit's lane\. A topic chip that is too long runs over several lines\. So nothing a document says makes the page scroll sideways on a phone/.test(readme),
     'README: a word too long for its line is broken in every list of cards and in the headline, so the page does not scroll sideways');
+  ok(/The pane's columns are 20rem wide at least where there is room and never wider than the pane, so on a narrow phone its cards fit whatever the font size/.test(readme),
+    'README: the columns of the Instinct and Muse pane are never wider than the pane, so its cards fit a narrow phone');
+  ok(/A number waits until your own reactions have been read, as the cockpit's counts do: before that it would count what you have handled already, and drop a moment later/.test(readme),
+    'README: a tab\'s number waits for his own reactions, as the cockpit\'s counts do');
+  ok(/and the card says the same, "Trial: nothing can be sent\."; Got it and Not useful still work, and take the card away at once\./.test(readme) && !/Trial week/.test(readme),
+    'README: on trial the card says what the tooltip says, "Trial: nothing can be sent."; nothing in the README says "Trial week" any more');
+  ok(/What a card is made of is no more than it uses: a card on trial stays when Claude beside the page comes or goes \(it can send nothing either way\), and a card you sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names the day\./.test(readme),
+    'README: a card on trial stays when Claude beside the page comes or goes, and a card he sent on is made anew when the words of its time change');
+  ok(/`tools\/harness\/test35\.js` checks the tab order, the empty state, a fake `hub\/today` rendering that the hero still draws, the Chat links, and that the Today tab's number and the headline show, go at nothing and come back\./.test(readme),
+    'README: what test35.js checks, the Today tab\'s number and the headline among it');
 
   // ---- 2. the store ----
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'os-store-'));
@@ -1309,6 +1319,9 @@ const realRun = async () => {
   push('hub/sweeper', SWEEP); for (const id of DEPT_DOCS.slice(1)) push('hub/' + id, undefined);
   ok(heldNow() && [OS.hub.ready(), OS.sense.ready(), OS.lanes.ready()].every((r) => r === false), 'every document has arrived, William\'s own reactions have not: OS.hub, OS.sense and OS.lanes say not ready, and the crew is still held', [OS.hub.ready(), OS.sense.ready(), OS.lanes.ready()]);
   ok(ROOM_IDS.every((r) => countOf(r) === '' && pipsOf(r).every((p) => p === '')), '... and no door shows a state or a number yet', ROOM_IDS.map(countOf));
+  // (seen in Chromium: the tabs read Today 4, Decide 2, For Leo 3 until his reactions arrived, then 1, none and 1)
+  ok(same(FOUR.map(shownOf), [null, null, null, 'A headline.']) && FOUR.slice(0, 3).every((n) => numberOf(n).hidden && numberOf(n).textContent === ''),
+    '... nor does a tab show a number: the three wait for his reactions, as the cockpit does (each would count what he has handled already, and drop a moment later); the headline, which no reaction of his changes, is there', FOUR.map(shownOf));
   // a door pressed while the crew is held: its room is shown, empty, and its lane has no card yet (the item he
   // handled would show and go)
   door('hygiene').click();
@@ -1316,9 +1329,11 @@ const realRun = async () => {
   door('mine').click();
   push(U + 'hub-actions', null); push(U + 'sense-acts', { acts: { 'ins-older': { action: 'ack', at: '2026-11-20T00:33:49Z' }, 'sw-2': { action: 'ack', at: '2026-11-23T08:00:00Z' } } }); push(U + 'decisions', null);
   ok(heldNow() && OS.hub.ready() && OS.sense.ready() && !OS.lanes.ready(), 'his Hub actions, his sense reactions and his answers have: still one to go (his Leo actions)', [OS.hub.ready(), OS.sense.ready(), OS.lanes.ready()]);
+  ok(same(FOUR.map(shownOf), ['113', null, null, 'A headline.']), 'the Today tab shows its number once his Hub actions have answered (113); the tabs of Decide and For Leo still wait for his Leo actions', FOUR.map(shownOf));
   push(U + 'leo-acts', { acts: { 'leo-old': { action: 'done', at: '2026-11-14T11:12:17Z' }, 'leo-6': { action: 'done', at: '2026-11-24T07:00:00Z' } } });
   ok(OS.lanes.ready() && same(crew(), [['desk', 'needs', 113], ['decide', 'needs', 16], ['instinct', 'needs', 3], ['muse', 'needs', 2], ['review', 'idle', 0]]), 'the last of his reactions answers: the crew is released, with the counts already less what he had handled (For Leo 6, not 7)', crew());
   ok(scene().crews.slice(0, -1).every((c) => c.length === 0), 'no robot was shown before that');
+  ok(same(FOUR.map(shownOf), ['113', '10', '6', 'A headline.']), '... and the tabs of Decide and For Leo show their numbers: the first number For Leo shows is 6, already less the point he had acted on (never 7)', FOUR.map(shownOf));
   ok(same(ROOM_IDS.map(countOf), ['134', '1', '', '']) && same(pipsOf('hygiene'), ['is-needs', 'is-unknown']) && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, 1 waiting on you' && same(openRoom(), ['mine', 'mine', '']),
     'the doors open on the right counts at once: Data Hygiene 1 (the item he handled is not counted: never 2), his own room 134', [ROOM_IDS.map(countOf), pipsOf('hygiene')]);
   fail(U + 'leo-acts'); push(U + 'leo-acts', null);
@@ -1347,7 +1362,7 @@ const realRun = async () => {
     ok(cards.length === 1 && card.dataset.ckOf === 'sweeper' && same(card.children[0].children.map((x) => x.textContent), ['Sweeper', 'Trial', 'yesterday 06:50 · All EMEA · New Business and Upsell']) && /Seven checks, counted per team/.test(card.textContent) && /41 · \$1\.2M/.test(card.textContent) && /From Salesforce, counted Monday 06:50 Stockholm/.test(card.textContent),
       'the lane under the chips: one card (the item he handled is not shown). It names its agent, says Trial, when and for what the document was written, then the title, the evidence and where it is from', cards.map((x) => x.textContent));
     const send = btn(card, 'Post the ask via Claude');
-    ok(!!send && send.disabled === true && /Trial week: nothing can be sent\./.test(card.textContent) && !!btn(card, 'Got it') && !!btn(card, 'Not useful') && !btn(card, 'Got it').disabled, 'on trial the send button is there and is off, with the note "Trial week: nothing can be sent."; Got it and Not useful are on', card.querySelectorAll('button').map((b) => [b.textContent, !!b.disabled]));
+    ok(!!send && send.disabled === true && same(card.querySelectorAll('.hub-note').map((n) => n.textContent), ['Trial: nothing can be sent.']) && !!btn(card, 'Got it') && !!btn(card, 'Not useful') && !btn(card, 'Got it').disabled, 'on trial the send button is there and is off, with the note "Trial: nothing can be sent."; Got it and Not useful are on', card.querySelectorAll('button').map((b) => [b.textContent, !!b.disabled]));
     const writes = DB.writes.length; send.click(); await tick(); flush();
     ok(DB.writes.length === writes && same(crew()[0], ['sweeper', 'needs', 1]), 'a press on the button that is off sends nothing and marks nothing');
     // the message he cannot send during the trial can be read: "Read the draft", closed, between the buttons and the source line

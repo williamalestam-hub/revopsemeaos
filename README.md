@@ -48,7 +48,9 @@ the document carries the Hub's URL (the link's address is fixed in `index.html`;
 **The numbers on the tabs, and the headline.** The Today, Decide and For Leo tabs each show a number while something
 waits on you: Needs you less what you have handled on this tab; the decisions you have not answered; the points for
 Leo you have not acted on. At nothing the number goes. The brief's headline stands under the four counts while the
-brief has one. Each of these four is a drawing that is stored hidden, and the dashboard type runs no drawing under the
+brief has one. A number waits until your own reactions have been read, as the cockpit's counts do: before that it
+would count what you have handled already, and drop a moment later (`test36.js` and `test42.js` hold that). Each of
+these four is a drawing that is stored hidden, and the dashboard type runs no drawing under the
 `hidden` attribute: a drawing can hide itself, but it is never run again to show itself. So beside each stands an
 empty drawing of the same name (a `.msg-slot`, in the tab's button or in the Hub pane) that only sets `hidden` on it;
 when `hidden` comes off, the type draws it, and it writes its own number or headline. A tab's number is displayed by
@@ -109,7 +111,9 @@ hours from 08:07 to 16:07 Stockholm.
 - A word too long for its line (a long link, say) is broken: in these cards, in Decide's and For Leo's, in the lines
   under their lists and in the Hub's headline, as in the cockpit's lane. A topic chip that is too long runs over
   several lines. So nothing a document says makes the page scroll sideways on a phone (`os.css`; `test38.js` holds the
-  rule, and that a document's words stand only where they can be broken).
+  rule, and that a document's words stand only where they can be broken). The pane's columns are 20rem wide at least
+  where there is room and never wider than the pane, so on a narrow phone its cards fit whatever the font size
+  (`test38.js` holds that rule too).
 
 `tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering that the hero still draws, the Chat links, and that the Today tab's number and the headline show, go at nothing and come back.
 
@@ -180,8 +184,8 @@ still reads "not run yet". While `trial` is true the agent is on trial: its chip
 (not while a run
 is due, late, under way or failed), its tooltip says "Trial: nothing can be sent" in all of those
 states, and on its cards every send is off: the action's button is shown but off, there is no button for a line to Leo
-(an item's `message`), and the card says "Trial week: nothing can be sent."; Got it and Not useful still work, and
-take the card away at once. Off trial a card sends as an Instinct card does (an email with its subject, a `message` to
+(an item's `message`), and the card says the same, "Trial: nothing can be sent."; Got it and Not useful still work,
+and take the card away at once. Off trial a card sends as an Instinct card does (an email with its subject, a `message` to
 Leo once `hub/leo` names him). On trial and off, a card whose action has messages has **Read the draft** under its
 buttons: closed until you press it, it shows each message as text (what it is, to whom when the document names
 someone, its subject, and its body to the letter). Opening it sends nothing and writes nothing, and nothing in it
@@ -192,8 +196,10 @@ document was written (its `scope`), and a card ends with where its item is from 
 the card before it, of the same agent, does not name the same source. First and before are counted among the cards
 in the lane now: when you handle the first card, the next one says the scope and the source. A card is made anew
 only when what it is made of changed (whether it carries those two lines is part of that); every other card is left
-untouched, so an open draft stays open and the keyboard keeps its place. When a document can no longer be read its
-cards go with its count. A chip of an agent with cards, or a click on its robot, scrolls to its first card; one with
+untouched, so an open draft stays open and the keyboard keeps its place. What a card is made of is no more than it
+uses: a card on trial stays when Claude beside the page comes or goes (it can send nothing either way), and a card
+you sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names
+the day. When a document can no longer be read its cards go with its count. A chip of an agent with cards, or a click on its robot, scrolls to its first card; one with
 nothing to show opens nothing and shows its tooltip.
 
 **Sweeper** (Data Hygiene) is the first department agent that reports. The scheduled task *RevOps Sweeper (Data

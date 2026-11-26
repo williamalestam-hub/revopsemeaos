@@ -213,9 +213,12 @@ const DOC = {
     'each was shown by the empty drawing beside it and then drawn once, by the type\'s rule: the number carries the class that shows a badge, and the empty drawings stay empty', [tab.className, RAN]);
   // the fault this guards against: without the empty drawing beside it (as the page was stored before), a drawing that is
   // stored hidden is never run, so nothing ever shows
-  const alone = (name, tag, cls) => { const el = new Node(tag); el.className = cls; el.dataset.draw = name; el.hidden = true; typeDraws(name, [el]); return [el.hidden, el.textContent]; };
-  ok(JSON.stringify([alone('hub-badge', 'span', 'app-badge info'), alone('hub-brief', 'p', 'hub-brief')]) === JSON.stringify([[true, ''], [true, '']]),
-    'a number or a headline that stands alone, stored hidden with no empty drawing beside it, never shows: its drawing is not run under hidden', [alone('hub-badge', 'span', 'app-badge info'), alone('hub-brief', 'p', 'hub-brief')]);
+  // (then hidden is taken off it by code that is not a drawing, as a handler may, and the type draws it: the page's own
+  // drawing writes it. So it is the hidden attribute alone that kept it dark, and this check runs the page's lines.)
+  const alone = (name, tag, cls) => { const el = new Node(tag), ran = { ...RAN }; el.className = cls; el.dataset.draw = name; el.hidden = true; typeDraws(name, [el]); const under = [el.hidden, el.textContent];
+    el.hidden = false; typeDraws(name, [el]); Object.assign(RAN, ran); return [under, [el.hidden, el.textContent, name === 'hub-brief' || badgeShows(el)]]; };
+  ok(JSON.stringify([alone('hub-badge', 'span', 'app-badge info'), alone('hub-brief', 'p', 'hub-brief')]) === JSON.stringify([[[true, ''], [false, '3', true]], [[true, ''], [false, DOC.brief.headline, true]]]),
+    'a number or a headline that stands alone, stored hidden with no empty drawing beside it, never shows: its drawing is not run under hidden; with hidden taken off by other code the very same element is drawn and shows (3, and the headline)', [alone('hub-badge', 'span', 'app-badge info'), alone('hub-brief', 'p', 'hub-brief')]);
   // the number follows the document, down to nothing and back
   const tabNow = () => { const b = badge(); return [badgeShows(b), b.hidden ? '' : b.textContent]; };
   const seen = [5, 0, 12, -3, 'many', 1234].map((waiting) => { push({ ...DOC, counts: { ...DOC.counts, waiting } }); return tabNow(); });

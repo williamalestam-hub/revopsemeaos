@@ -59,6 +59,13 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   ok(Array.isArray(DB.subs['data/users/' + UID + '/hub-actions']) && DB.subs['data/users/' + UID + '/hub-actions'].length === 1, "subscribes once to William's own hub-actions document");
   ok(BADGE.length === 2 && BADGE[0].classList.contains('msg-slot') && !BADGE[0].hidden && BADGE[1].hidden === true && tabNumber() === 'hidden', 'before the summary arrives the Today tab shows no number: it is stored hidden, after the empty drawing of its name', [BADGE.length, tabNumber()]);
   DB.subs['hub/today'][0](snapOf('hub/today', DOC));
+  // The summary is there; his own actions have not answered yet. The tab's number waits for them: until then it would
+  // count what he has handled already and drop a moment later (seen in Chromium: "Today 4" for a second, then "Today 1").
+  { const early = [OS.hub.ready(), draw('hub-count', 'b', { field: 'waiting' }).textContent, tabNumber()];
+    DB.subs['data/users/' + UID + '/hub-actions'][0](snapOf('x', { actions: { 'sl-D1-1': { action: 'done', at: '2026-11-05T08:30:00Z', title: 'Vicky asks about round robins' } } }));
+    const first = [OS.hub.ready(), tabNumber()];
+    ok(JSON.stringify(early) === JSON.stringify([false, '2', 'hidden']) && JSON.stringify(first) === JSON.stringify([true, '1']),
+      'the summary has arrived, his own actions have not answered: the Today tab shows no number yet (it would count what he has handled, and drop); they answer, one item done earlier today: the first number the tab shows is 1, never 2', [early, first]); }
   DB.subs['data/users/' + UID + '/hub-actions'][0](snapOf('x', null));
   await OS.ask.refresh(); await tick();
   ok(OS.ask.can() === true, 'Claude beside the page is available in this run');

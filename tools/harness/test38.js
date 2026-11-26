@@ -13,7 +13,8 @@
 const { Node } = require('./fakedom.js');
 process.env.TZ = 'Europe/Stockholm';
 const NOW = Date.parse('2026-11-05T09:00:00Z');
-{ const RealDate = Date; global.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } static UTC(...a) { return RealDate.UTC(...a); } static parse(s) { return RealDate.parse(s); } }; }
+let PASSED = 0; // ms a check has let pass since NOW (the clock stands still but for that)
+{ const RealDate = Date; global.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [NOW + PASSED])); } static now() { return NOW + PASSED; } static UTC(...a) { return RealDate.UTC(...a); } static parse(s) { return RealDate.parse(s); } }; }
 // clicks: keep each element's listeners so a test can fire them
 Node.prototype.addEventListener = function (type, fn) { (this._on = this._on || {})[type] = (this._on[type] || []).concat(fn); };
 const fire = (el, type, ev) => (el._on && el._on[type] || []).forEach((f) => f(Object.assign({ stopPropagation() {}, preventDefault() {} }, ev || {})));
@@ -128,8 +129,8 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
   ok(lc.length === 4 && lc.every((c) => c.dataset.ckOf === 'sweeper') && lc[0].children[0].children.map((x) => x.textContent).join('|') === 'Sweeper|Trial|06:50 · All EMEA · New Business and Upsell' && /Watch/.test(lc[0].textContent) && /Seven checks, counted per team/.test(lc[0].textContent) && /From Salesforce, counted Thursday 06:50 Stockholm/.test(lc[0].textContent),
     'the lane: one card per item, four at most; a card opens with its agent, Trial, and the document\'s time and scope, and ends with where it is from');
   const off = label(lc[0], 'Post the ask via Claude');
-  ok(!!off && off.disabled === true && /Trial week: nothing can be sent\./.test(lc[0].textContent) && !btns(lc[1]).some((b) => /via Claude/.test(b.textContent)) && !/Trial week/.test(lc[1].textContent) && !!label(lc[0], 'Got it') && !!label(lc[0], 'Not useful'),
-    'on trial the send button is shown and is off, with its note; a card with nothing to send has neither; Got it and Not useful are there');
+  ok(!!off && off.disabled === true && find(lc[0], (n) => n.className === 'hub-note').map((n) => n.textContent).join('|') === 'Trial: nothing can be sent.' && !btns(lc[1]).some((b) => /via Claude/.test(b.textContent)) && !/nothing can be sent/.test(lc[1].textContent) && !!label(lc[0], 'Got it') && !!label(lc[0], 'Not useful'),
+    'on trial the send button is shown and is off, with its note, "Trial: nothing can be sent." (the tooltip\'s words, and true however long the trial lasts); a card with nothing to send has neither; Got it and Not useful are there', find(lc[0], (n) => n.className === 'hub-note').map((n) => n.textContent));
   fire(off, 'click'); await tick(); await tick();
   ok(SENT.length === 2 && !OS.sense.acted('sw-ask'), 'a press on the button that is off hands Claude nothing and marks nothing');
   const asked = [], register = dash.draw; dash.draw = (n, fn) => { if (!fn) asked.push(n); return register(n, fn); }; // which drawings the page asks for again
@@ -169,7 +170,7 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
     { id: 'fc-mail', level: 'watch', title: 'Three roll-ups are missing', message: 'Leo, three roll-ups are missing.', action: { label: 'Remind them', sends: [{ type: 'email', to: [{ name: 'Karl Stein', email: 'karl@example.com' }], subject: 'Your roll-up for Friday', body: 'Karl, could you send your roll-up today?' }] } }] };
   sub('hub/forecast')[0](snapOf('hub/forecast', FORE));
   lc = draw('ck-lane', 'ul', { ckRoom: 'arr' }).children;
-  ok(lc.length === 2 && !!OS.lanes.leoTo() && OS.ask.can() && lc.every((c) => !btns(c).some((b) => /Leo/.test(b.textContent)) && /Trial week: nothing can be sent\./.test(c.textContent)) && btns(lc[0]).map((b) => b.textContent).join('|') === 'Got it|Not useful' && btns(lc[1]).map((b) => b.textContent + (b.disabled ? ' (off)' : '')).join('|') === 'Remind them via Claude (off)|Got it|Not useful',
+  ok(lc.length === 2 && !!OS.lanes.leoTo() && OS.ask.can() && lc.every((c) => !btns(c).some((b) => /Leo/.test(b.textContent)) && /Trial: nothing can be sent\./.test(c.textContent)) && btns(lc[0]).map((b) => b.textContent).join('|') === 'Got it|Not useful' && btns(lc[1]).map((b) => b.textContent + (b.disabled ? ' (off)' : '')).join('|') === 'Remind them via Claude (off)|Got it|Not useful',
     'on trial a line for Leo cannot be sent either: there is no button for it, though Leo is known and Claude is beside the page, and the note stands on a card that has only that line');
   btns(lc[1]).filter((b) => /via Claude$/.test(b.textContent)).forEach((b) => fire(b, 'click')); await tick(); await tick();
   ok(SENT.length === 3 && !OS.sense.acted('fc-leo') && !OS.sense.acted('fc-mail'), 'and no press there hands Claude anything or marks anything');
@@ -207,7 +208,7 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
   ok(lane.children.length === 2 && LONG.length > 80 && top(c1) === 'Renewals|06:50 · ' + LONG.slice(0, 80) && c2 !== c1 && /Three renewals are running late/.test(c2.textContent) && c3 !== c2 && top(c3) === 'Renewals|Trial|06:50 · ' + LONG.slice(0, 80) && label(c3, send).disabled === true
     && c4 !== c3 && top(c4) === 'Renewals|Trial|06:51 · ' + LONG.slice(0, 80) && renew(LATER) === c4,
     'a lane drawn again in place makes its cards anew when an item\'s words change, when its agent goes on trial and when its document is written anew (a scope is cut at 80 characters); with nothing new they stay', [top(c1), top(c3), top(c4)]);
-  const notTrue = ['true', 1, 'yes', {}, undefined, false].map((trial) => { const c = renew({ ...LATER, trial }), b = label(c, send); return !/Trial/.test(top(c)) && !/Trial week/.test(c.textContent) && !!b && !b.disabled; });
+  const notTrue = ['true', 1, 'yes', {}, undefined, false].map((trial) => { const c = renew({ ...LATER, trial }), b = label(c, send); return !/Trial/.test(top(c)) && !/nothing can be sent/.test(c.textContent) && !!b && !b.disabled; });
   ok(notTrue.every(Boolean) && /^Renewals\|Trial\|/.test(top(renew(LATER))), 'on a card too only trial: true is a trial: with any other value the card has no Trial mark and its send button is on', notTrue);
   // Claude beside the page comes and goes; an item he sends on; his reactions that can no longer be written
   const card = renew({ ...LATER, trial: false }), beside = room.canSendToClaudeSession;
@@ -284,7 +285,7 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
     ok(draftOf(d1).length === 1 && det.className === 'lane-draft' && d1.children.map((c) => c.className).slice(-3).join('|') === 'hub-acts|lane-draft|lane-meta' && shape(det) === 'DETAILS.lane-draft(SUMMARY DIV.lane-msgs(P.hub-to PRE.lane-body))'
       && det.children[0].textContent === 'Read the draft' && det.children[1].children[0].textContent === 'Slack message' && det.children[1].children[1].textContent === BODY,
       'a department card whose action has a message has "Read the draft" after the row of buttons and before the source line: what the message is, and its body to the letter (line breaks and spaces kept)', [d1.children.map((c) => c.className), shape(det)]);
-    ok(det.open !== true && det.attrs.open === undefined && label(d1, 'Post the ask via Claude').disabled === true && /Trial week: nothing can be sent\./.test(d1.textContent), 'the draft is closed when its card is made, and it is there on trial, beside the send button that is off');
+    ok(det.open !== true && det.attrs.open === undefined && label(d1, 'Post the ask via Claude').disabled === true && /Trial: nothing can be sent\./.test(d1.textContent), 'the draft is closed when its card is made, and it is there on trial, beside the send button that is off');
     ok(find(det, (n) => /^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(n.tagName)).length === 0 && find(det, (n) => n._on).length === 0 && find(det, (n) => n.tagName !== '#text').length === 5,
       'nothing in the draft can be pressed: no button, no link, no field, and nothing listens there (it is text to read)');
     ok(draftOf(d2).length === 0 && !/Read the draft/.test(d2.textContent), 'a card with nothing to send has no draft');
@@ -315,6 +316,51 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
     ok(SENT.length === wasSent + 1 && SENT[SENT.length - 1].ask.includes('\n' + BODY + '\n') && gone !== live && /Sent to Claude/.test(gone.textContent) && draftOf(gone).length === 1 && draftOf(gone)[0].children[1].children[1].textContent === BODY && draftOf(gone)[0].open !== true,
       'what a press hands Claude is the body the draft shows, to the letter; the card he sent on is made anew, says so, and still lets him read what went', draftOf(gone).length);
     await fresh();
+    // ---- what a card is made of is no more than it uses ----
+    // On trial nothing can be sent, so a trial card uses neither Claude beside the page nor Leo's name. Seen in
+    // Chromium: he opened a draft, Claude beside the page went (or came), and every card was made anew with its draft
+    // closed, though not a word on it had changed.
+    { const [t1, t2] = sweep(doc([SRC, SRC])), open = draftOf(t1)[0] || {}, beside = room.canSendToClaudeSession, ACTS = 'data/users/' + UID + '/sense-acts';
+      open.open = true; // as a press on "Read the draft" leaves it
+      const now = () => [OS.ask.can(), !!OS.lanes.leoTo(), hyg.children[0] === t1, hyg.children[1] === t2, open.open === true, TOUCHED.length];
+      room.canSendToClaudeSession = async () => 'off'; await OS.ask.refresh(); await tick(); draws['ck-lane'](hyg);
+      const away = now();
+      room.canSendToClaudeSession = beside; await OS.ask.refresh(); await tick(); draws['ck-lane'](hyg);
+      const back = now();
+      sub('hub/leo')[0](snapOf('hub/leo', { at: 'x', items: [] })); draws['ck-lane'](hyg); // For Leo's document no longer names him
+      const noLeo = now();
+      sub('hub/leo')[0](snapOf('hub/leo', LEO)); draws['ck-lane'](hyg);
+      ok(JSON.stringify([away, back, noLeo, now()]) === JSON.stringify([[false, true, true, true, true, 0], [true, true, true, true, true, 0], [true, false, true, true, true, 0], [true, true, true, true, true, 0]]) && label(t1, 'Post the ask via Claude').disabled === true,
+        'on trial a card is not made of whether Claude is beside the page, nor of Leo\'s name (nothing can be sent either way): when Claude goes, when it is back and when Leo is no longer named, the cards are the very same elements, untouched, and an open draft stays open', [away, back, noLeo, now()]);
+      // ... but a trial card does use whether he may react: Got it and Not useful stand on it
+      DB.errs[ACTS]({ code: 'permission-denied' }); draws['ck-lane'](hyg);
+      const mute = hyg.children[0], could = OS.sense.canWrite();
+      sub(ACTS)[0](snapOf('x', DB.docs[ACTS])); draws['ck-lane'](hyg);
+      ok(could === false && mute !== t1 && !btns(mute).some((b) => /^(Got it|Not useful)$/.test(b.textContent)) && OS.sense.canWrite() === true && hyg.children[0] !== mute && !!label(hyg.children[0], 'Got it') && !!label(hyg.children[0], 'Not useful'),
+        '... but it is made of whether he may react: when his reactions can no longer be written a trial card is made anew without Got it and Not useful, and with them again once they can', btns(mute).map((b) => b.textContent)); }
+    // the words of the time he sent a card on are part of what it is made of: they change at midnight
+    { const OLD = '2026-11-02T05:50:40Z'; // a document three days old: its own time reads as a day, at this clock and two days on
+      const [, s2, s3] = sweep(doc([SRC, SRC, SRC], { trial: false, at: OLD }));
+      await press(hyg.children[0], 'Post the ask via Claude');
+      const sent = hyg.children[0], said = (card) => find(card, (n) => n.className === 'hub-note').map((n) => n.textContent).join('|'), then = [said(sent), top(sent)];
+      TOUCHED.length = 0; draws['ck-lane'](hyg);
+      const stays = hyg.children[0] === sent && TOUCHED.length === 0; // (the clock has not moved: nothing to say anew)
+      PASSED = 2 * 864e5; draws['ck-lane'](hyg); // two days on, the cockpit's half-minute tick draws the lane again
+      const later = hyg.children[0], after = [said(later), top(later)], touched = TOUCHED.map((t) => t[0] + (t[1] === sent ? ' the old card' : t[1] === later ? ' the new card' : ' another card'));
+      PASSED = 0; draws['ck-lane'](hyg);
+      ok(stays && JSON.stringify(then) === JSON.stringify(['Sent to Claude · 10:00', 'Sweeper|Mon 2 Nov, 06:50 · ' + SCOPE]) && later !== sent && JSON.stringify(after) === JSON.stringify(['Sent to Claude · Thu 5 Nov, 10:00', then[1]]) && hyg.children[1] === s2 && hyg.children[2] === s3 && touched.join() === 'out the old card,in the new card',
+        'a card he sent on says when ("Sent to Claude · 10:00"); two days on it is made anew and names the day ("Thu 5 Nov, 10:00"), where a card that was kept would go on saying a time of day; the cards beside it, on which nothing changed, are left as they stand', [then, after, touched]);
+      await fresh(); }
+    // a card that is kept stands for one item only, and only while the lane holds it
+    { const twin = { id: 'q-twin', level: 'watch', title: 'Listed twice', source: SRC }, twice = doc([SRC]);
+      twice.items.push(twin, { ...twin });
+      const first = sweep(twice); draws['ck-lane'](hyg); draws['ck-lane'](hyg);
+      ok(first.length === 3 && first[1] !== first[2] && hyg.children.length === 3 && hyg.children.every((c, i) => c === first[i]) && TOUCHED.length === 0,
+        'two items that are the same to the letter (a document that lists one twice) are two cards, at the first draw and at every later one: a card that is kept stands for one item only', [first.length, hyg.children.length, TOUCHED.map((t) => t[0])]);
+      const [g1, g2] = sweep(doc([SRC, SRC]));
+      hyg.replaceChildren(); draws['ck-lane'](hyg); // (the dashboard empties a drawing that threw)
+      ok(hyg.children.length === 2 && /Item 1/.test(hyg.children[0].textContent) && /Item 2/.test(hyg.children[1].textContent) && hyg.children[0] !== g1 && hyg.children[1] !== g2,
+        'a lane that was emptied is filled with cards made anew: a card that has left the lane is not put back, though it is made of the same as before', hyg.children.length); }
     // back to the document the rest of this file reads
     sub('hub/sweeper')[0](snapOf('hub/sweeper', { ...SWEEP, trial: false }));
   }
@@ -379,6 +425,10 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
     const paneOf = (name) => { const at = page.indexOf('data-draw="' + name + '"'); return at < 0 ? 'not on the page' : (page.slice(page.lastIndexOf('<div class="pane ', at)).match(/^<div class="([^"]*)"/) || [])[1]; };
     ok(/<div class="pane sense" id="sense" data-draw="sense"><\/div>/.test(page) && ['dec-list', 'dec-done', 'dec-at', 'leo-list', 'leo-at'].every((n) => paneOf(n) === 'pane lanes') && /<p class="hub-brief" data-draw="hub-brief" hidden><\/p>/.test(page),
       'index.html: the Instinct and Muse pane is .sense, the lists of Decide and For Leo and the lines under them stand in .lanes, and the headline is .hub-brief: the rule reaches each of them', ['dec-list', 'dec-done', 'dec-at', 'leo-list', 'leo-at'].map(paneOf));
+    // (seen in Chromium with a root font size of 16 px, a browser's own: at 320 px the pane's 20rem columns stood 49 px
+    // out of the pane and the page scrolled sideways 33 px with ordinary documents; at 360 px the cards stood 9 px out)
+    ok(/(^|\n)\s*\.sense\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*20rem\),\s*1fr\)\)/.test(css) && !/minmax\(\s*20rem/.test(css),
+      'os.css: a column of the Instinct and Muse pane is at least 20rem wide where there is room and never wider than the pane (minmax(min(100%, 20rem), 1fr)), so on a narrow phone its cards fit the pane whatever the font size');
     const stiff = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter((m) => /\.(lane|sense|dec|leo)-|\.hub-(why|sum|to|note|acts|brief)/.test(m[1]) && /white-space:\s*nowrap|overflow-wrap:\s*normal|word-break:\s*keep-all|text-overflow/.test(m[2])).map((m) => m[1].trim());
     const chipAt = Math.max(...[...css.matchAll(/(^|\n)\s*\.chip\s*\{/g)].map((m) => m.index)), topic = css.search(/(^|\n)\s*\.lane-topic\s*\{\s*white-space:\s*normal;?\s*\}/);
     ok(stiff.length === 0 && /\.chip\s*\{[^}]*white-space:\s*nowrap/.test(css) && topic > chipAt && chipAt > 0,
