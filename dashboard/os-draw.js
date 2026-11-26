@@ -1485,7 +1485,7 @@ const senseCard = (x, kind, of) => {
     row.append(hubBtn('Not useful', '', () => OS.sense.act(x.id, 'notuseful')));
   }
   // on trial the note stands wherever something was prepared to be sent: an action's messages, or a line for Leo
-  if (trial && (sends.length || (typeof x.message === 'string' && x.message.trim()))) row.append(OS.el('span', 'hub-note', 'Trial week: nothing can be sent.'));
+  if (trial && (sends.length || (typeof x.message === 'string' && x.message.trim()))) row.append(OS.el('span', 'hub-note', 'Trial: nothing can be sent.'));
   else if (sends.length && !OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send from here.'));
   li.append(row);
   // a department's card: the messages its action would send, to read (nothing in them can be pressed)
