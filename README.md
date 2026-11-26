@@ -103,7 +103,8 @@ The first pane of Today is a picture of the scheduled agents at work: a small pi
 each agent is a robot and where it stands is its state. At its own desk: a run is under way or due; an amber lamp
 means the run has left no result yet, a red one that it failed. In the queue at your desk, holding a slip with a
 number: that many things wait on you. By the coffee: nothing needs you. An empty chair: no data (its document can't be
-read, or was never written). When a document changes while the page is open, the robots walk to their new places. They
+read, was never written, or does not say what waits). When a document changes while the page is open, the robots
+walk to their new places. They
 take turns and walk around each other and the furniture, so the picture needs a few seconds to follow a change (about
 ten when the whole crew moves); the chips under it change at once. A robot at work has its step in a bubble over its
 head, and a change is said in a bubble for a few seconds. A bubble always stands at its owner; where two would cover
@@ -130,7 +131,9 @@ moment before anything is known), and the number that waits on you in that room.
 the same canvas: the scene is handed that room's crew, the chips under the picture are that room's, and under the
 chips stand the cards of what its agents prepared. The page always opens on your own agents; the open room is not
 remembered. The doors are right while their room is closed, and the empty room at page load waits for the
-departments' documents too, so no door shows a count that is about to drop. A robot stands only for an agent that
+departments' documents too, so no door shows a count that is about to drop. A department's room goes on waiting for
+your reactions past the 2.5 seconds, however long they take: its cards are not shown before them, so its chips, its
+door and its robots wait with them, and no count stands over an empty lane. A robot stands only for an agent that
 really runs and reports. An agent whose document does not exist is an empty chair: its chip reads "not run yet", it
 is never due or late whatever its schedule says, and it is promised no next run. Pacing and Rundown run today and
 post by themselves, but leave nothing the cockpit can read: theirs read "not linked yet". Their tasks are for the
@@ -152,17 +155,30 @@ Instinct and Muse. They are kept by item id, so an item that says something new 
 one week: a reaction to an old item hides a new one that reuses its id. An item whose `id` is empty is left out: it is
 not counted and gets no card, since a reaction to it could not be kept. A run that ended with status `error` shows as
 failed, also when it left no items. Every other result has to list its `items` (an empty list when it has none, which
-reads as nothing waiting); one where `items` is left out or is not a list reads "no data". A document that says
-neither when nor how a run ended (`at`, `status`) and lists no `items` is a placeholder: its agent still reads "not
-run yet". While `trial` is true the agent is on trial: its chip says "trial" beside its last result (not while a run
+reads as nothing waiting); one where `items` is left out or is not a list reads "no data", and so does one of whose
+items none has an id. The chair is then empty and the tooltip says "Can't read the database here", as Desk's does for
+a summary without a count; nothing else is said of the agent meanwhile, not that a run is due, late or under way. A
+document that says neither when nor how a run ended (`at`, `status`) and lists no `items` is a placeholder: its agent
+still reads "not run yet". While `trial` is true the agent is on trial: its chip says "trial" beside its last result
+(not while a run
 is due, late, under way or failed), its tooltip says "On trial: nothing it prepared can be sent" in all of those
 states, and on its cards every send is off: the action's button is shown but off, there is no button for a line to Leo
 (an item's `message`), and the card says "Trial week: nothing can be sent."; Got it and Not useful still work, and
 take the card away at once. Off trial a card sends as an Instinct card does (an email with its subject, a `message` to
 Leo once `hub/leo` names him). A card names its agent, says Trial, when and for what the document was written, then
-the item as an Instinct card shows it, with the evidence as small pills. When a document can no longer be read its
-cards go with its count. A chip of an agent with cards, or a click on its robot, scrolls to its first card; one with
-nothing to show opens nothing and shows its tooltip.
+the item as an Instinct card shows it, with the evidence as small pills: a number first, then its label; a value that
+is words comes after its label. When a document can no longer be read its cards go with its count. A chip of an
+agent with cards, or a click on its robot, scrolls to its first card; one with nothing to show opens nothing and
+shows its tooltip.
+
+**Sweeper** (Data Hygiene) is the first department agent that reports. The scheduled task *RevOps Sweeper (Data
+Hygiene) v2* (`trig_01GpwNGpzPTi7yjWqsK8GcFp`, bound to its own session; instructions in `hub/sweeper-worker.md`, held
+by `hub/test/sweeper-prompt.test.js`) runs Mondays and Fridays at 06:50 Stockholm and writes `hub/sweeper` and its own
+`hub/sweeper-state`. It asks Salesforce for counts only, team by team, and reads no record: the ask on Monday, where
+it stands on Friday. It is on trial (`TRIAL: yes` in its instructions), so nothing it prepares can be sent. A task's
+instructions can be changed only from the task's own conversation, so a change is a new task bound to the same
+session with the old one paused (the first version, `trig_01PecZZgUi6ajDpCEne1uAQh`, is paused). Going live is such a
+change: the same instructions with `TRIAL: no`.
 
 Under the picture is one chip per agent: when it last wrote and what waits (a narrow page keeps only what waits). A
 chip, or a click on its robot, opens that agent's tab or pane: Desk the Hub pane, Instinct and Muse their pane, Decide
@@ -201,7 +217,8 @@ not the cockpit's: what a button on them does is said above.)
   card), from the documents `dashboard/os-core.js` reads (`OS.sense`). Which of an agent's items are cards is the
   reader's rule (`OS.sense.cards`): the lane draws them, and the cockpit marks the chip that leads to them by the same
   rule, so the two agree whichever is drawn first (back on Today from another tab, the chips are drawn before the
-  lane). `tools/harness/test38.js` covers the cards, `test39.js` the fifteen documents the page subscribes to.
+  lane). A chip is marked only while its room's lane stands on the page: with the lane deleted there is no card to
+  lead to. `tools/harness/test38.js` covers the cards, `test39.js` the fifteen documents the page subscribes to.
 - **Preview the scene** alone, with the made-up crews of `tools/cockpit-preview/fixtures.js` (the departments' rooms
   are `hygiene`, `arr` and `exec`; `doors` walks through all four rooms on one canvas):
   `node tools/cockpit-preview/shoot.js --out <dir> [--fx morning,trouble] [--widths 400,888,1280]` saves one PNG per

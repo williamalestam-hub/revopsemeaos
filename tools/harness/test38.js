@@ -138,6 +138,13 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
   ok(atOnce === 'sense,ck-lane' && afterDept === atOnce, 'a reaction asks for the pane and the lane at once, so the card goes without waiting for the cockpit; a department\'s document asks for neither (the cockpit draws the lane with its chips)', asked);
   ok(afterWritten === 'sense,ck-lane,sense,ck-lane' && afterUnread === 'sense,ck-lane,sense,ck-lane,sense,ck-lane' && unread === 'error' && asked.join() === 'sense,ck-lane,sense,ck-lane,sense,ck-lane,sense,ck-lane' && OS.sense.state('muse') === 'ok',
     'a document of Instinct or Muse asks for their pane at once, as before the doors: when it is written, when it can no longer be read, and when it is back', asked);
+  // (the line above tries it on Muse's document; the same holds for Instinct's)
+  { const again = [];
+    dash.draw = (n, fn) => { if (!fn) again.push(n); return register(n, fn); };
+    DB.errs['hub/instinct']({ code: 'unavailable' }); const lost = again.join(), was = OS.sense.state('instinct');
+    sub('hub/instinct')[0](snapOf('hub/instinct', INST)); dash.draw = register;
+    ok(lost === 'sense,ck-lane' && was === 'error' && again.join() === 'sense,ck-lane,sense,ck-lane' && OS.sense.state('instinct') === 'ok',
+      'so does Instinct\'s own document: when it can no longer be read its pane is asked for at once, and again when it is back', again); }
   lc = draw('ck-lane', 'ul', { ckRoom: 'hygiene' }).children;
   const on = label(lc[0], 'Post the ask via Claude');
   ok(!!on && !on.disabled && lc[0].children[0].children.map((x) => x.textContent).join('|') === 'Sweeper|06:50 · All EMEA · New Business and Upsell' && !/Trial/.test(lc[0].textContent), 'off trial the button is on and the Trial mark is gone');
@@ -214,15 +221,41 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
   const instinctReads = (d) => { sub('hub/instinct')[0](snapOf('hub/instinct', d)); return OS.sense.state('instinct') + ' ' + OS.sense.items('instinct').length; };
   ok([{ at: '2026-11-05T07:07:00Z' }, { at: '2026-11-05T07:07:00Z', status: 'error' }, { at: '2026-11-05T07:07:00Z', status: 'ok', items: 'none' }, {}].map(instinctReads).join() === Array(4).fill('missing 0').join() && instinctReads({ items: [] }) === 'ok 0',
     'an Instinct document is a result only when it lists its items, as before the doors: a time or a status alone, which makes a department\'s document one, does not');
+  const museReads = (d) => { sub('hub/muse')[0](snapOf('hub/muse', d)); return OS.sense.state('muse') + ' ' + OS.sense.items('muse').length; };
+  ok([{ at: '2026-11-05T07:07:00Z' }, { at: '2026-11-05T07:07:00Z', status: 'error' }, { at: '2026-11-05T07:07:00Z', status: 'ok', items: 'none' }, {}].map(museReads).join() === Array(4).fill('missing 0').join() && museReads({ items: [] }) === 'ok 0' && museReads(many('muse-many-')) === 'ok 12',
+    'and so is a Muse document: a time or a status alone does not make it a result either');
   sub('hub/instinct')[0](snapOf('hub/instinct', { at: '2026-11-05T07:07:00Z', items: [{ id: 'ins-src', level: 'watch', title: 'A signal that names its source', why: 'It moved.', source: 'Salesforce, counted this morning' }] }));
   el = draw('sense', 'div'); ic = el.children[0].children.find((n) => n.tagName === 'UL').children;
   ok(ic.length === 1 && ic[0].children[0].className === 'lane-head' && ic[0].dataset.ckOf === undefined && /A signal that names its source/.test(ic[0].textContent) && !/From Salesforce/.test(ic[0].textContent) && !/Trial/.test(ic[0].textContent) && btns(ic[0]).map((b) => b.textContent).join('|') === 'Got it|Not useful',
     'an Instinct card is as it was: it opens with its level and title, does not say whose it is, and has no line saying where it is from, though its item names a source', ic[0] && ic[0].textContent);
+  // an item of Instinct or Muse whose id is empty stays, as before the doors: only a department agent's is left out
+  sub('hub/instinct')[0](snapOf('hub/instinct', { at: '2026-11-05T07:07:00Z', items: [{ id: '', level: 'watch', title: 'A signal without an id' }, { id: 'ins-with', level: 'watch', title: 'A signal with one' }] }));
+  sub('hub/muse')[0](snapOf('hub/muse', { at: '2026-11-05T07:07:00Z', items: [{ id: '', title: 'An idea without an id' }] }));
+  el = draw('sense', 'div'); ic = el.children[0].children.find((n) => n.tagName === 'UL').children; mc = el.children[1].children.find((n) => n.tagName === 'UL').children;
+  ok(OS.sense.items('instinct').map((x) => x.id).join('|') === '|ins-with' && OS.sense.items('muse').length === 1 && OS.sense.items('muse')[0].id === '' && ic.length === 2 && /A signal without an id/.test(ic[0].textContent) && mc.length === 1 && /An idea without an id/.test(mc[0].textContent),
+    'an item of Instinct or Muse whose id is empty stays, as before the doors: the reader keeps it and their pane shows it (only a department agent\'s item is left out for that)', [OS.sense.items('instinct').map((x) => x.id), OS.sense.items('muse').length]);
   DB.errs['data/users/' + UID + '/sense-acts']({ code: 'permission-denied' }); draws['ck-lane'](lane);
   ok(OS.sense.canWrite() === false && lane.children.length === 2 && lane.children[0] !== sent && !btns(lane).some((b) => /^(Got it|Not useful)$/.test(b.textContent)) && /Sent to Claude/.test(lane.children[0].textContent),
     'when his reactions can no longer be written, the cards are made anew without Got it and Not useful', btns(lane).map((b) => b.textContent));
   lane.replaceChildren(); draws['ck-lane'](lane);
   ok(lane.children.length === 2 && /Sent to Claude/.test(lane.children[0].textContent), 'a lane that was emptied (the dashboard empties a drawing that threw) is filled again at the next draw, though nothing its cards are made of has changed', lane.children.length);
+  // beside a reader that has no cards() (an older os-core.js, for the moment a new version of the page is being
+  // stored file by file): no card, and nothing thrown (the dashboard would report the drawing as stopped)
+  { const cardsOf = OS.sense.cards; delete OS.sense.cards;
+    let threw = null; try { draws['ck-lane'](lane); } catch (e) { threw = e; }
+    const without = lane.children.length; OS.sense.cards = cardsOf; draws['ck-lane'](lane);
+    ok(!threw && without === 0 && lane.children.length === 2 && /Sent to Claude/.test(lane.children[0].textContent), 'beside a reader that has no cards() the lane has no card and its drawing throws nothing; with the reader\'s cards() back, the cards are back', threw && threw.message); }
+  // ---- a lane card's evidence: a pill opens with its number; one whose value is words opens with its label ----
+  { const EV = [{ label: 'Stage 0 after a meeting', value: '41 · $1.2M' }, { label: 'No amount yet', value: 17 }, { label: 'Share of open deals', value: '12%' }, { label: 'Net pipeline', value: '−$1.1M' },
+      { label: 'No next step', value: 'no date 12, date passed 7' }, { label: 'Pilot end passed', value: '23 today; give it days of grace?' }, { label: 'This week', value: '41 then 38' }, { label: 'Left out: renewals' }];
+    // each pill of a card: its mark, then its parts in the order the card holds them
+    const pills = (card) => find(card, (n) => n.tagName === 'UL' && n.className === 'lane-ev')[0].children.map((li) => li.className + ':' + li.children.map((c) => c.className).join('+'));
+    const inLane = pills(renew({ at: '2026-11-05T05:50:40Z', status: 'ok', trial: false, items: [{ id: 'rn-ev', level: 'watch', title: 'Rules to set', evidence: EV }] }));
+    sub('hub/instinct')[0](snapOf('hub/instinct', { at: '2026-11-05T07:07:00Z', items: [{ id: 'ins-ev', level: 'watch', title: 'The same evidence on an Instinct card', evidence: EV }] }));
+    const inPane = pills(draw('sense', 'div').children[0].children.find((n) => n.tagName === 'UL').children[0]);
+    const plain = ':lane-ev-l+lane-ev-v', words = 'lane-ev-text' + plain;
+    ok(inLane.join() === [plain, plain, plain, plain, words, words, words, plain].join() && inPane.join() === Array(8).fill(plain).join(),
+      'in the lane a pill whose value is words is marked (lane-ev-text), so that it opens with its label and not with the answer; a figure ("41 · $1.2M", 17, "12%", "−$1.1M") and a row with no value are not marked; on an Instinct card nothing is marked: its evidence is as it was', [inLane, inPane]); }
   console.log(`\n${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.log('FAIL crashed', e && e.stack); process.exit(1); });

@@ -324,6 +324,8 @@ const staticChecks = () => {
     'os-cockpit.css: the lane may be narrower than what it holds, and a word too long for a card is broken: a long link in a card does not make the pane, and the picture with it, wider than the page');
   ok(/\.ck-lane \.btn:disabled, \.ck-lane \.btn:disabled:hover\s*\{[^}]*box-shadow:\s*none;[^}]*transform:\s*none;[^}]*opacity:\s*1/.test(css), 'os-cockpit.css: a send button that is off (its agent is on trial) is flat: no glow, no lift on hover, not see-through');
   ok(/\.ck-lane \.lane-ev li\s*\{[^}]*flex-direction:\s*row;[^}]*flex-wrap:\s*wrap/.test(css) && /\.ck-lane \.lane-ev-v\s*\{[^}]*order:\s*-1/.test(css), 'os-cockpit.css: in the lane the evidence is a row of pills with the number first; in a narrow pill the words go under the number');
+  ok(/(^|\n)\.ck-lane \.lane-ev-text \.lane-ev-v\s*\{[^}]*order:\s*0;[^}]*font-weight:\s*inherit/.test(css) && /(^|\n)\.ck-lane \.lane-ev-text \.lane-ev-l\s*\{[^}]*font-weight:\s*var\(--cds-font-weight-medium\)/.test(css),
+    'os-cockpit.css: a pill whose value is words (the card marks it lane-ev-text) opens with its label: the value keeps its place after the label and its weight goes to the label, so the answer is not read before what it is about');
   ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\.html\(|createContextualFragment|DOMParser|eval\(|new Function/.test(wiring), 'os-cockpit.js writes no HTML: no innerHTML, outerHTML, insertAdjacentHTML, document.write');
   ok(!/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|import\(|\bawait\b(?![^\n]*\buse\('db'\))/.test(wiring.replace(/\/\/[^\n]*/g, '')), 'os-cockpit.js keeps nothing in the browser and calls no other host; its one await is claude.use(\'db\')');
   ok(!/setAttribute\('(role|aria-label)'/.test(wiring.replace(/setAttribute\('role', 'tooltip'\)/, '')) && /setAttribute\('aria-hidden', 'true'\)/.test(wiring), 'os-cockpit.js gives the canvas no role and no label: it is hidden from assistive technology');
@@ -336,6 +338,11 @@ const staticChecks = () => {
     'README: from 1 January 2027 the tooltips of Pacing and Rundown say only that they are not linked; the sentence on what the agent does is left out as well');
   ok(/Every other result has to list its `items` \(an empty list when it has none, which reads as nothing waiting\); one where `items` is left out or is not a list reads "no data"/.test(readme) && /An item whose `id` is empty is left out: it is not counted and gets no card/.test(readme),
     'README: a result has to list its items (else "no data"), and an item needs an id that is not empty (else it is left out)');
+  ok(/reads "no data", and so does one of whose items none has an id\. The chair is then empty and the tooltip says "Can't read the database here", as Desk's does for a summary without a count; nothing else is said of the agent meanwhile, not that a run is due, late or under way\./.test(readme)
+    && /An empty chair: no data \(its document can't be read, was never written, or does not say what waits\)/.test(readme),
+    'README: a result of whose items none has an id reads "no data" too; it says what the tooltip then says, that nothing else is said of the agent meanwhile, and names this third reason for an empty chair');
+  ok(/A department's room goes on waiting for your reactions past the 2\.5 seconds, however long they take: its cards are not shown before them, so its chips, its door and its robots wait with them/.test(readme),
+    'README: a department\'s room waits for his reactions also past the 2.5 seconds: no count stands over an empty lane');
 
   // ---- 2. the store ----
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'os-store-'));
@@ -556,6 +563,12 @@ const standIns = async () => {
       'sweeper: a result that lists no items (the field is left out, or is not a list) is no data (error), not zero and "all clear", as a summary without a count is for Desk', sweeperWith('ok', { ...DOC, items: 'two things' }));
     ok(same(sweeperWith('ok', { ...DOC, items: [] }), { src: 'ok', at: '2026-11-23T05:50:40Z', status: 'ok', waiting: 0, trial: true }) && same(['error', 'failed'].map((status) => { const f = sweeperWith('ok', { ...DOC, status, items: 'none' }); return [f.src, f.status]; }), [['ok', 'failed'], ['ok', 'failed']]),
       'sweeper: an empty list is a result with nothing waiting; and only a run that failed may list nothing: it still reads as failed', sweeperWith('ok', { ...DOC, items: [] }));
+    // a list of which the reader keeps nothing (the real reader leaves out an item whose id is empty: here it is told to keep none)
+    { const keeps = osStandIn.sense.items; osStandIn.sense.items = (k) => (k === 'sweeper' ? [] : keeps(k));
+      const none = sweeperWith('ok', DOC), empty = sweeperWith('ok', { ...DOC, items: [] }), failedRun = sweeperWith('ok', { ...DOC, status: 'error' });
+      osStandIn.sense.items = keeps;
+      ok(same(none, { src: 'error', at: '2026-11-23T05:50:40Z', status: 'ok', waiting: 0, trial: true }) && same(empty, { src: 'ok', at: '2026-11-23T05:50:40Z', status: 'ok', waiting: 0, trial: true }) && same([failedRun.src, failedRun.status], ['ok', 'failed']) && same(sweeperWith('ok', DOC), { src: 'ok', at: '2026-11-23T05:50:40Z', status: 'ok', waiting: 2, trial: true }),
+        'sweeper: a list of which the reader keeps no item (not one has an id) is no data (error) too, not zero and "all clear"; an empty list stays a result, a run that failed stays failed, and a list the reader keeps items of counts them', none); }
     ok(same(['loading', 'nodb', 'error', 'missing'].map((s) => sweeperWith(s, null)), ['loading', 'nodb', 'error', 'missing'].map((src) => ({ src, at: null, status: '', waiting: 0, trial: false }))), 'sweeper: loading, no database, an error and a document never written are passed on as they are');
     const state = osStandIn.sense.state; osStandIn.sense.state = (k) => { if (k === 'sweeper') throw new Error('no reader'); return state(k); }; bus.changed();
     ok(same(facts().sweeper, { src: 'error', at: null, status: '', waiting: 0 }) && same(facts().instinct, { src: 'ok', at: '2026-11-24T07:30:00Z', status: '', waiting: 2 }) && TYPE.thrown.length === 0, 'sweeper: a reader that throws is no data for that agent only', facts().sweeper);
@@ -664,7 +677,19 @@ const standIns = async () => {
       osStandIn.sense.cards = kept; bus.changed(); const again = leads('sweeper');
       SN.cards = {}; bus.changed();
       ok(same(elsewhere, [true, false, false, false]) && same([without, threw, text, again, leads('sweeper')], [false, false, false, true, false]) && TYPE.thrown.length === 0,
-        'only a chip of the open department is marked: not one of another room that is on show, and never one of his five; a reader with no word on cards, one that throws, or one whose word is not a list marks nothing, and nothing is thrown', [elsewhere, without, threw, text, again]); }
+        'only a chip of the open department is marked: not one of another room that is on show, and never one of his five; a reader with no word on cards, one that throws, or one whose word is not a list marks nothing, and nothing is thrown', [elsewhere, without, threw, text, again]);
+      // the mark needs the open room's lane on the page, not under hidden: a person may delete the lane or move it,
+      // and then the reader's card can be led to nowhere
+      SN.cards = { sweeper: [{ id: 's1' }] }; bus.changed(); const withLane = leads('sweeper');
+      const gone = laneOf('hygiene'), parent = gone.parentNode, at = parent.childNodes.indexOf(gone);
+      gone.remove(); bus.changed(); const noLane = leads('sweeper');
+      scrolled.length = 0; chip('sweeper').click(); flush(); const pressed = [scrolled.length, tipEl.hidden]; s1.opts.onHover(null);
+      laneOf('arr').hidden = false; bus.changed(); const otherLane = leads('sweeper'); laneOf('arr').hidden = true; // another room's lane on show does not stand in for it
+      parent.childNodes.splice(at, 0, gone); gone.parentNode = parent; bus.changed(); const back = leads('sweeper');
+      gone.hidden = true; bus.changed(); const underHidden = leads('sweeper'); gone.hidden = false;
+      SN.cards = {}; bus.changed();
+      ok(same([withLane, noLane, otherLane, back, underHidden, leads('sweeper')], [true, false, false, true, false, false]) && same(pressed, [0, false]) && laneOf('hygiene') === gone && same(openRoom(), ['hygiene', 'hygiene', 'hygiene']) && TYPE.thrown.length === 0,
+        'the mark needs the open room\'s lane on the page: with the lane deleted (a person may delete any element) or under hidden the chip is not marked, though the reader has a card, and a press on it shows its tooltip; another room\'s lane does not stand in for it; with the lane back, so is the mark', [withLane, noLane, otherLane, back, underHidden, pressed]); }
     // the timer, and the open door itself, in a department's room
     const n2 = model.calls.length, c2 = s1.crews.length;
     tickNow();
@@ -936,11 +961,24 @@ const standIns = async () => {
     ok(scene().crew.length === 0 && lineOf('desk') === '—' && model.calls.length === calls, 'reactions that never answer: 2.499 seconds on, the crew is still held', [scene().crew.length, lineOf('desk')]);
     advance(1);
     ok(scene().crew.length === 5 && whatOf('desk') === 'needs 113' && timeouts.size === 0, '... and at 2.5 seconds it is shown with what is known', [scene().crew.length, lineOf('desk')]);
+    // That is his own room. A department's room waits on, however long his reactions take: its lane shows no card
+    // before them, so its door, its chips and its robots are not shown either (a count would stand over an empty lane)
+    SN.state.sweeper = 'ok'; SN.docs.sweeper = { at: '2026-11-23T05:50:40Z', status: 'ok', trial: true, items: [{ id: 's1' }, { id: 's2' }] }; bus.changed();
+    const doorNow = () => [pipsOf('hygiene').join(), countOf('hygiene'), saidBy(door('hygiene'))];
+    const late = doorNow(), mineNow = [pipsOf('mine').every((p) => p !== ''), countOf('mine') !== ''];
+    door('hygiene').click(); const inside = [scene().crew.length].concat(DEPT.hygiene.map(lineOf), DEPT.hygiene.map((id) => stateOf(chip(id)).length));
+    SN.acted = { ...SN.acted, s2: { action: 'ack' } }; SN.ready = true; bus.changed(); // they answer: he had handled one of the two
+    const then = doorNow().concat([scene().crew.map((a) => a.id).join(), lineOf('sweeper')]);
+    door('mine').click();
+    ok(same(late, [',', '', 'Data Hygiene, 2 agents']) && same(mineNow, [true, true]) && same(inside, [0, '—', '—', 0, 0]) && same(then, ['is-needs,is-unknown', '1', 'Data Hygiene, 2 agents, 1 waiting on you', 'sweeper,accounts', '05:50 · needs 1']),
+      'past the 2.5 seconds a department\'s room still waits for his reactions (its lane shows no card before them): its door stays bare, its chips at their dash and its room empty, while his own room is shown; when they answer the door counts 1, never 2', [late, mineNow, inside, then]);
+    delete SN.state.sweeper; delete SN.docs.sweeper; delete SN.acted.s2;
     SN.ready = true;
     const ready = osStandIn.sense.ready; delete osStandIn.sense.ready; LN.ready = false; H.state = 'loading';
     load('os-cockpit.js'); await tick(); await tick(); push('hub/weekly', { at: '2026-11-23T06:46:19Z', slack: { ts: '1.2' } }); TYPE.all();
     const stillHeld = scene().crew.length === 0; H.state = 'ok'; bus.changed(); const waits = scene().crew.length === 0; LN.ready = true; bus.fire();
     ok(stillHeld && waits && scene().crew.length === 5, 'a module that has no ready() is not waited for; a loading document and one that is not ready are', [stillHeld, waits, scene().crew.length]);
+    ok(same(pipsOf('hygiene'), ['is-unknown', 'is-unknown']) && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, no data', '... and a reader that has no ready() does not keep a department\'s room waiting either: its door is drawn with the crew', [pipsOf('hygiene'), saidBy(door('hygiene'))]);
     osStandIn.sense.ready = ready;
     // a department agent's document holds the first crew too, whichever room is open: a door shows its room's count
     SN.state.sweeper = 'loading';
@@ -1262,6 +1300,10 @@ const realRun = async () => {
       'an item whose id is empty is left out: the door counts 1, not 2, and the lane has the one card that Got it can take away', roomNow());
     btn(cardsIn('hygiene')[0], 'Got it').click(); await tick(); flush();
     ok(same(roomNow(), ['ok', 'Mon 06:50 · trial', 'sweeper idle 0', 0, '', 'is-idle is-unknown', 'Data Hygiene, 2 agents, nothing waiting', false]), '... and once that one is handled the door\'s count is gone: nothing is left that he cannot act on', roomNow());
+    // a list of which not one item has an id: nothing of it can be counted or shown, so it is no data, not a clean run
+    const noIds = [true, false].map((trial) => { push('hub/sweeper', { ...SWEEP, trial, items: SWEEP.items.map((x) => ({ ...x, id: '' })) }); return roomNow(); });
+    ok(same(noIds, Array(2).fill(['ok', 'no data', 'sweeper unknown 0', 0, '', 'is-unknown is-unknown', 'Data Hygiene, 2 agents, no data', false])),
+      'a result of whose items none has an id, on trial or off: "no data", an empty chair, a hollow dot and no card; not "trial" or "all clear" with "nothing waiting"', noIds);
     OS.sense.act('sw-1', null); await tick(); flush(); push('hub/sweeper', SWEEP);
     fail('hub/sweeper');
     ok(lineOf('sweeper') === 'no data' && cardsIn('hygiene').length === 0 && countOf('hygiene') === '' && same(pipsOf('hygiene'), ['is-unknown', 'is-unknown']) && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, no data' && !chip('sweeper').classList.contains('ck-leads'), 'when Sweeper\'s document can no longer be read: "no data", no cards (the lane shows what the chip counts), nothing on the door', [lineOf('sweeper'), cardsIn('hygiene').length, saidBy(door('hygiene'))]);
@@ -1379,6 +1421,23 @@ const realRun = async () => {
   ok(timers.size === 1 && alive().length === 1 && scenes.length === n + 1, '... one timer and one scene', [timers.size, alive().length]);
   ok($$('[data-ck]').every((c) => c.heard('click') === 1 && c.heard('focus') === 1) && $$('[data-ck-door]').every((d) => d.heard('click') === 1) && docHeard('keydown') === 2 && winOn.length === 0, '... and still one cockpit listener of each kind, on the doors too (the document\'s two keydowns are the page\'s and the cockpit\'s)', [docHeard('keydown'), winOn.length]);
   ok(same(crew(), [['desk', 'needs', 113], ['decide', 'needs', 17], ['instinct', 'needs', 3], ['muse', 'needs', 2], ['review', 'idle', 0]]) && TYPE.thrown.length === 0, '... and the picture follows the documents as before', [crew(), TYPE.thrown.map(String)]);
+  // His reactions to Instinct, Muse and the departments' items answer later than the 2.5 seconds the first crew is
+  // held (every script is run once more). His own room is then shown with what is known. A department's room waits
+  // on: its lane shows no card before his reactions, so its chips and its door do not count meanwhile (they would
+  // count an item he has handled, over an empty lane).
+  boot(); await tick(); await tick(); await tick(); await tick();
+  push('hub/today', TODAY); push('hub/decisions', { at: '2026-11-24T06:44:12Z', items: lane(10, 'dec-') }); push('hub/leo', { at: '2026-11-24T06:44:12Z', items: lane(7, 'leo-') });
+  push('hub/instinct', { at: '2026-11-24T07:30:00Z', items: lane(3, 'ins-') }); push('hub/muse', { at: '2026-11-24T07:30:00Z', items: lane(2, 'muse-') }); push('hub/weekly', WEEKLY);
+  push('hub/sweeper', SWEEP); for (const id of DEPT_DOCS.slice(1)) push('hub/' + id, undefined);
+  for (const p of ['hub-actions', 'decisions', 'leo-acts']) push(U + p, null);
+  TYPE.all(); door('hygiene').click();
+  advance(2500);
+  const lateRoom = () => [DEPT.hygiene.map(lineOf).join('|'), laneOf('hygiene').children.length, countOf('hygiene'), pipsOf('hygiene').join(), saidBy(door('hygiene')), scene().crew.length, chip('sweeper').classList.contains('ck-leads')];
+  const waitsOn = lateRoom(), mineShown = [countOf('mine'), pipsOf('mine').join()];
+  push(U + 'sense-acts', { acts: { 'sw-2': { action: 'ack', at: '2026-11-23T08:00:00Z' } } });
+  ok(OS.sense.items('sweeper').length === 2 && same(waitsOn, ['—|—', 0, '', ',', 'Data Hygiene, 2 agents', 0, false]) && same(mineShown, ['135', 'is-needs,is-needs,is-needs,is-needs,is-idle'])
+    && same(lateRoom(), ['Mon 06:50 · trial · 1 for you|not run yet', 1, '1', 'is-needs,is-unknown', 'Data Hygiene, 2 agents, 1 waiting on you', 2, true]) && TYPE.thrown.length === 0,
+    'his reactions answer later than the 2.5 seconds: his own door then counts what is known, while Data Hygiene, open, stays empty (chips at their dash, a bare door, no card); when they answer, Sweeper has its one card and counts 1, never 2', [waitsOn, mineShown, lateRoom()]);
   ok(same([...unsupported].filter((s) => !/\s/.test(s)), []), 'no selector the stand-in document could not read was needed by this run', [...unsupported]);
 };
 

@@ -1243,12 +1243,19 @@ dash.draw('hub-note', () => { const s = OS.hub.state(); pickNote('hub', noteOf(s
 const LANE_SEV = ['critical', 'high', 'normal', 'low'];
 const laneWhen = (iso) => OS.hub.when(iso);
 const laneSends = (b) => (b && Array.isArray(b.sends) ? b.sends.filter((m) => m && typeof m === 'object' && typeof m.body === 'string' && m.body.trim()) : []);
-const laneEvidence = (ev) => {
+// a value that is a figure, or figures joined by " · " ("41 · $1.2M", "17", "12%"): digits and their separators,
+// with at most a sign, a currency sign, a scale letter and a percent sign. Anything else is words.
+const laneFigure = (v) => v.split(' · ').every((p) => /^[-+−]?[$€£]?\d[\d.,]*(?:[KMBkm]|bn)?%?$/.test(p));
+// `lane` is true for a card of the cockpit's lane, where the evidence is a row of pills that open with their number.
+// There a value that is words, not a figure, is marked (lane-ev-text): its pill opens with the label and the value
+// follows it (os-cockpit.css), or the answer would be read before what it is about. Every other card is as it was.
+const laneEvidence = (ev, lane) => {
   const ul = OS.el('ul', 'lane-ev');
   for (const e of (Array.isArray(ev) ? ev : []).slice(0, 8)) {
     if (!e || typeof e !== 'object') continue;
-    const li = OS.el('li');
-    li.append(OS.el('span', 'lane-ev-l', String(e.label || '')), OS.el('b', 'lane-ev-v', String(e.value == null ? '' : e.value)));
+    const value = String(e.value == null ? '' : e.value);
+    const li = OS.el('li', lane && value.trim() && !laneFigure(value.trim()) ? 'lane-ev-text' : '');
+    li.append(OS.el('span', 'lane-ev-l', String(e.label || '')), OS.el('b', 'lane-ev-v', value));
     if (e.source) li.append(OS.el('span', 'lane-ev-s', String(e.source)));
     ul.append(li);
   }
@@ -1428,7 +1435,7 @@ const senseCard = (x, kind, of) => {
     li.append(OS.el('p', 'sense-change', (x.change.label ? x.change.label + ': ' : '') + String(x.change.from ?? '—') + ' → ' + String(x.change.to ?? '—')));
   }
   for (const k of ['why', 'idea', 'whyNow']) if (typeof x[k] === 'string' && x[k]) li.append(OS.el('p', k === 'why' || k === 'whyNow' ? 'hub-why' : 'sense-idea', x[k]));
-  const ev = laneEvidence(x.evidence); if (ev) li.append(ev);
+  const ev = laneEvidence(x.evidence, !!of); if (ev) li.append(ev);
   if (typeof x.firstStep === 'string' && x.firstStep) { const p = OS.el('p', 'leo-ask'); p.append(OS.el('b', '', 'First step: '), x.firstStep); li.append(p); }
   if (typeof x.challenge === 'string' && x.challenge) li.append(OS.el('p', 'sense-challenge', x.challenge));
   const links = (Array.isArray(x.links) ? x.links : []).map(senseLink).filter(Boolean).slice(0, 6);
@@ -1486,7 +1493,8 @@ dash.draw('sense', (el) => {
 // reactions have answered (one he had handled would show and go), nor for a document that can't be read now (its
 // chip says "no data", and counts nothing). That rule is the reader's (OS.sense.cards): the cockpit asks it too, to
 // mark the chip that leads to these cards. The cards are made anew only when something in them changed, so that the
-// keyboard's place among them is not lost every time the cockpit redraws.
+// keyboard's place among them is not lost every time the cockpit redraws. Beside a reader that has no cards() (an
+// older os-core.js, for the moment a new version of the page is being stored file by file) the lane has no card.
 const laneDrawn = new WeakMap(); // each lane's cards, as last made: what they were made of
 dash.draw('ck-lane', (ul) => {
   const crew = window.OSCrew, room = crew && Array.isArray(crew.ROOMS) ? crew.ROOMS.find((r) => r && r.id === ul.dataset.ckRoom) : null;
@@ -1495,7 +1503,7 @@ dash.draw('ck-lane', (ul) => {
   for (const a of (room && room !== crew.ROOMS[0] && Array.isArray(room.agents) ? room.agents : [])) {
     const d = OS.sense.doc(a.id), trial = !!d && d.trial === true;
     const meta = d ? [laneWhen(d.at), typeof d.scope === 'string' ? d.scope.slice(0, 80) : ''].filter(Boolean).join(' · ') : '';
-    for (const x of OS.sense.cards(a.id)) {
+    for (const x of (typeof OS.sense.cards === 'function' ? OS.sense.cards(a.id) : [])) {
       cards.push(() => senseCard(x, 'instinct', { id: a.id, name: a.name, trial, meta }));
       key.push([a.id, trial, meta, x, OS.sense.acted(x.id)]);
     }

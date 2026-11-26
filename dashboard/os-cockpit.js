@@ -47,9 +47,10 @@
   // his desk and turn back. So the first crew is held (an empty room, the chips at their dash) until every document
   // has answered and each module says its reactions have (ready() on OS.hub, OS.sense and OS.lanes), or for HOLD.
   // The departments' documents are waited for as well, whichever room is open: a door shows its room's count.
+  // (a module's reactions have answered when it says so; one that has no ready(), an older file, is not waited for)
+  const ready = (m) => { try { return !m || typeof m.ready !== 'function' || !!m.ready(); } catch (e) { return true; } };
   const answered = () => {
     const os = window.OS || {};
-    const ready = (m) => { try { return !m || typeof m.ready !== 'function' || !!m.ready(); } catch (e) { return true; } };
     let loading = S.review.src === 'loading';
     // (a department agent's document is one of OS.sense's; one the page does not read is not waited for)
     try { loading = loading || [os.hub.state(), os.sense.state('instinct'), os.sense.state('muse'), os.lanes.state('decisions'), os.lanes.state('leo')].concat(DEPT.map((a) => os.sense.state(a.id))).includes('loading'); } catch (e) { /* a module is missing: nothing of it to wait for */ }
@@ -113,11 +114,12 @@
     // waits is its items William has not reacted to. A run that ended in an error is a failed one to the model. One
     // whose document the page does not read (it posts by itself, and says nothing here yet) is missing. A result
     // that lists no items (the field is left out, or is not a list) is no data, not "all clear", as a summary without
-    // a count is for Desk; only a run that failed may leave none.
+    // a count is for Desk; only a run that failed may leave none. So is a list of which the reader keeps nothing
+    // (not one of its items has an id): read as a run with nothing to show, it would be a false "all clear".
     for (const a of DEPT) {
       try {
         const sense = os.sense, src = sense.state(a.id), d = sense.doc(a.id), status = str(d && d.status) || '';
-        const failed = status === 'error' || status === 'failed', listed = !!d && Array.isArray(d.items);
+        const failed = status === 'error' || status === 'failed', listed = !!d && Array.isArray(d.items) && (d.items.length === 0 || sense.items(a.id).length > 0);
         f[a.id] = typeof src !== 'string' ? { src: 'missing', at: null, status: '', waiting: 0 }
           : { src: src === 'ok' && !failed && !listed ? 'error' : src, at: str(d && d.at), status: failed ? 'failed' : status, waiting: sense.items(a.id).filter((x) => !sense.acted(x.id)).length, trial: !!d && d.trial === true };
       } catch (e) { f[a.id] = unread(); }
@@ -144,15 +146,20 @@
   // Whether an agent of the open department has cards in its lane: asked of the reader, by the lane's own rule
   // (OS.sense.cards), not of the lane as it stands. When Today comes back from another tab the dashboard draws the
   // chips' lines before the lane, which then still holds the cards it had when the tab was left. (A press and the
-  // pointer look for the card itself, cardOf: by then the lane is drawn.)
-  const carded = (id) => { try { const c = S.room !== MINE && roomOf(id) === S.room ? window.OS.sense.cards(id) : null; return Array.isArray(c) && c.length > 0; } catch (e) { return false; } };
+  // pointer look for the card itself, cardOf: by then the lane is drawn.) The reader is asked only while that room's
+  // lane stands on the page, not under hidden: without it (a person may delete or move it) no card can be led to.
+  const laneUp = () => [...document.querySelectorAll('.ck-lane')].some((u) => u.dataset.ckRoom === S.room.id && !u.closest('[hidden]'));
+  const carded = (id) => { try { const c = S.room !== MINE && roomOf(id) === S.room && laneUp() ? window.OS.sense.cards(id) : null; return Array.isArray(c) && c.length > 0; } catch (e) { return false; } };
   // a chip that stands for two tabs (data-ck-alt): nothing left for its own tab and something for the other one
   const wantsAlt = (id) => { try { const p = facts()[id].parts; return Array.isArray(p) && p.length > 1 && !p[0].n && p.slice(1).some((x) => x.n > 0); } catch (e) { return false; } };
 
   // what the model makes of a room's facts now; while the first crew is held, nothing; in the middle of a burst of
   // changes, what it made of them before the burst. His own room is asked for as it always was: the model's own five.
+  // A department's room waits on past HOLD for as long as his reactions to its agents' items have not answered: its
+  // lane shows no card before them (OS.sense.cards), so a chip, a door and a robot that counted meanwhile would count
+  // items he has handled, with no card under them.
   const derive = (room) => {
-    if (!open()) return NOTHING;
+    if (!open() || (room !== MINE && !ready((window.OS || {}).sense))) return NOTHING;
     if (S.soon !== null && S.outs[room.id]) return S.outs[room.id];
     const out = room === MINE ? Crew.derive(facts(), Date.now(), names(room)) : Crew.derive(facts(), Date.now(), names(room), room.agents);
     S.outs[room.id] = out && typeof out === 'object' ? out : {};

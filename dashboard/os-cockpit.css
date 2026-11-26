@@ -77,7 +77,9 @@
    Empty, it takes no room. Like the doors, the stage and the bar it may be narrower than what it holds (min-width),
    and a word too long for a card (a link, say) is broken: nothing in a card makes the pane, and the picture with it,
    wider than the page. A card opens with whose it is; its evidence is a row of small pills, the number first
-   (in a narrow pill the words go under the number, and neither is broken in the middle while it fits on a line). */
+   (in a narrow pill the words go under the number, and neither is broken in the middle while it fits on a line).
+   A pill whose value is words, not a number (the card marks it lane-ev-text), opens with its label instead, and
+   the label carries the weight: the answer is read after what it is about. */
 .ck-lane { min-width: 0; margin: 0 var(--cds-pad-md) var(--cds-pad-md); }
 .ck-lane:empty { display: none; }
 .ck-lane .lane-card { overflow-wrap: anywhere; }
@@ -88,6 +90,8 @@
 .ck-lane .lane-ev-v { order: -1; font: inherit; font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; }
 .ck-lane .lane-ev-v:empty { display: none; }
 .ck-lane .lane-ev-l { font-size: inherit; color: var(--color-fg); }
+.ck-lane .lane-ev-text .lane-ev-v { order: 0; font-weight: inherit; }
+.ck-lane .lane-ev-text .lane-ev-l { font-weight: var(--cds-font-weight-medium); }
 /* a send that is off (its agent is on trial): flat and grey, with no glow and no lift, so that it does not ask to be pressed */
 .ck-lane .btn:disabled, .ck-lane .btn:disabled:hover { border-color: transparent; background: color-mix(in srgb, var(--color-fg-muted) 55%, var(--color-panel)); color: var(--color-panel); box-shadow: none; transform: none; opacity: 1; }
 @media (prefers-reduced-motion: no-preference) {
