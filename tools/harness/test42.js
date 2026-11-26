@@ -396,7 +396,7 @@ const staticChecks = () => {
     'os-cockpit.css: a pill whose value is words (the card marks it lane-ev-text) opens with its label: the value keeps its place after the label and its weight goes to the label, so the answer is not read before what it is about');
   // the draft on a department's card ("Read the draft"): a quiet summary that shows the keyboard's focus; the message wraps
   const pageCss = fs.readFileSync(D + 'os.css', 'utf8');
-  ok(/(^|\n)\.ck-lane \.lane-draft summary\s*\{[^}]*width:\s*fit-content;[^}]*color:\s*var\(--color-fg-muted\);[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*cursor:\s*pointer/.test(css) && /\.lane-meta\s*\{[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*color:\s*var\(--color-fg-muted\)/.test(pageCss)
+  ok(/(^|\n)\.ck-lane \.lane-draft summary\s*\{[^}]*width:\s*fit-content;[^}]*padding:\s*6px 0;[^}]*color:\s*var\(--color-fg-muted\);[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*cursor:\s*pointer/.test(css) && /\.lane-meta\s*\{[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*color:\s*var\(--color-fg-muted\)/.test(pageCss)
     && /(^|\n)\.ck-lane \.lane-draft summary:focus-visible\s*\{[^}]*outline:\s*2px solid/.test(css) && !/\.lane-draft[^{}]*\{[^}]*(display:\s*none|list-style:\s*none|pointer-events|outline:\s*(none|0))/.test(css),
     'os-cockpit.css: the draft\'s summary is a quiet line, the size and colour of a card\'s grey lines (os.css: .lane-meta), with the pointer, and no wider than its words (width: fit-content: a press beside them opens nothing); it shows the keyboard\'s focus, and nothing hides it or its marker');
   ok(/\.lane-body\s*\{[^}]*white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere/.test(pageCss) && !/\.lane-(draft|msgs|body)[^{}]*\{[^}]*(white-space|overflow|(min-|max-)?width:\s*\d)/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')),
@@ -425,7 +425,7 @@ const staticChecks = () => {
   ok(/An agent's cards do not repeat what they share: only its first card in the lane says for what the document was written \(its `scope`\), and a card ends with where its item is from \("From …", its `source`\) only when the card before it, of the same agent, does not name the same source\. First and before are counted among the cards in the lane now: when you handle the first card, the next one says the scope and the source\./.test(readme)
     && /A card is made anew only when what it is made of changed \(whether it carries those two lines is part of that\); every other card is left untouched, so an open draft stays open and the keyboard keeps its place\./.test(readme) && !/says Trial, when and for what the document was written/.test(readme),
     'README: the scope is on an agent\'s first card only and where an item is from is said once; first and before are counted among the cards now in the lane; a card that is made of the same is left untouched');
-  ok(/The Today, Decide and For Leo tabs each show a number while something waits on you: Needs you less what you have handled on this tab; the decisions you have not answered; the points for Leo you have not acted on\. At nothing the number goes\. The brief's headline stands under the four counts while the brief has one\./.test(readme)
+  ok(/The Today, Decide and For Leo tabs each show a number while something waits on you: Needs you less what you have handled on this tab; the decisions you have not answered; the points for Leo you have not acted on\. At nothing the number goes\. The brief's headline stands under the four counts while the brief has one and the summary was written today: a headline is its day's, so one from an earlier day is not shown \(it would read as today's before the morning run and at a weekend\), and it goes at midnight, with the cockpit's clock/.test(readme)
     && /the dashboard type runs no drawing under the `hidden` attribute: a drawing can hide itself, but it is never run again to show itself\. So beside each stands an empty drawing of the same name \(a `\.msg-slot`, in the tab's button or in the Hub pane\) that only sets `hidden` on it; when `hidden` comes off, the type draws it, and it writes its own number or headline\./.test(readme)
     && /The numbers' empty drawings stand in the tab row, so a number follows whichever tab is open; the headline's stands under Today, so the headline is drawn while Today is open and when it comes back\./.test(readme),
     'README: what the three tab numbers and the headline show, that each is a drawing stored hidden with an empty drawing of its name beside it to show it, and where those stand');
@@ -433,8 +433,8 @@ const staticChecks = () => {
     'README: a word too long for its line is broken in every list of cards and in the headline, so the page does not scroll sideways');
   ok(/The pane's columns are 20rem wide at least where there is room and never wider than the pane, so on a narrow phone its cards fit whatever the font size/.test(readme),
     'README: the columns of the Instinct and Muse pane are never wider than the pane, so its cards fit a narrow phone');
-  ok(/A number waits until your own reactions have been read, as the cockpit's counts do: before that it would count what you have handled already, and drop a moment later/.test(readme),
-    'README: a tab\'s number waits for his own reactions, as the cockpit\'s counts do');
+  ok(/A number waits until your own reactions have been read, however long that takes: before that it would count what you have handled already, and drop a moment later \(the cockpit holds its counts for the same reason;/.test(readme),
+    'README: a tab\'s number waits for his own reactions, however long they take; the cockpit holds its counts for the same reason');
   ok(/and the card says the same, "Trial: nothing can be sent\."; Got it and Not useful still work, and take the card away at once\./.test(readme) && !/Trial week/.test(readme),
     'README: on trial the card says what the tooltip says, "Trial: nothing can be sent."; nothing in the README says "Trial week" any more');
   ok(/What a card is made of is no more than it uses: a card on trial stays when Claude beside the page comes or goes \(it can send nothing either way\), and a card you sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names the day\./.test(readme),
@@ -1484,6 +1484,14 @@ const realRun = async () => {
   ok(scene().crews.length > before && same(crew()[0], ['desk', 'late', 113]) && lineOf('desk') === 'no result 13:13 · 113 for you' && same(stateOf(chip('desk')), ['is-late']), 'ten minutes on, no document changed: the timer alone has moved Desk to "no result 13:13"', [crew()[0], lineOf('desk')]);
   ok(same(runLine(), ['Worker: last run 07:15 · ok · no result from the 13:13 run', 'amber']), '... and the Hub pane\'s run line says the same, in amber (not "over 8 hours ago")', runLine());
   T = 0;
+  // the headline is its day's: the clock alone takes it away at midnight (the 30-second timer draws it again with
+  // the run line), a summary of the day before shows none in the morning, and the clock put back brings it back
+  push('hub/today', TODAY);
+  const headAt = (t) => { T = Date.parse(t) - NOW; tickNow(); return [shownOf('hub-brief'), numberOf('hub-brief').hidden]; };
+  const nights = [headAt('2026-11-24T22:59:40Z'), headAt('2026-11-24T23:00:10Z'), headAt('2026-11-25T05:55:00Z')];
+  T = 0; tickNow();
+  ok(same(nights, [['A headline.', false], [null, true], [null, true]]) && shownOf('hub-brief') === 'A headline.' && slotOf('hub-brief').childNodes.length === 0 && TYPE.thrown.length === 0,
+    'the headline is its day\'s: at 23:59:40 it stands; ten seconds past midnight, with nothing changed but the clock, the timer has hidden it; at 06:55 the next morning it is still hidden; with the clock back it shows again', [nights, shownOf('hub-brief')]);
   push('hub/today', { ...TODAY, lastRun: { at: '2026-11-24T12:15:58Z', status: 'failed' } });
   ok(same(crew()[0], ['desk', 'error', 113]) && lineOf('desk') === 'failed 13:15 · 113 for you' && same(stateOf(chip('desk')), ['is-error']) && same(runLine(), ['Worker: last run 13:15 · failed', 'red']), 'a failed run: Desk shows the fault, "failed 13:15", and the run line is red', [crew()[0], lineOf('desk'), runLine()]);
   push('hub/today', { ...TODAY, lastRun: { at: '2026-11-24T12:15:58Z', status: 'partial' } });

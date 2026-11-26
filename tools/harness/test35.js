@@ -231,6 +231,27 @@ const DOC = {
     'the headline follows the brief: a new one; hidden when there is none; back when there is one again (trimmed); hidden for a brief that is missing or whose headline is no text', said);
   push(DOC);
   ok(JSON.stringify([tabNow(), headNow()]) === JSON.stringify([[true, '3'], DOC.brief.headline]), 'with the first document back the tab reads 3 and the headline is the first one again', [tabNow(), headNow()]);
+  // the headline is its day's: the summary's own time says which day, its last run's when it has none of its own.
+  // One of another day is not shown: before the morning run and at a weekend it would read as today's.
+  // (NOW is Thursday 5 November, 10:00 in Stockholm: 23:30Z the evening before is 00:30 on that Thursday there.)
+  const H = DOC.brief.headline, ranToday = { at: iso(NOW - 60e3), status: 'ok' };
+  const days = [
+    ['written half an hour ago', DOC, H],
+    ['written at 00:30 today', { ...DOC, at: '2026-11-04T23:30:00Z' }, H],
+    ['written at 23:30 yesterday', { ...DOC, at: '2026-11-04T22:30:00Z' }, null],
+    ['written four days ago, though its last run is of today', { ...DOC, at: iso(NOW - 4 * 864e5), lastRun: ranToday }, null],
+    ['no time of its own, last run today', { ...DOC, at: undefined, lastRun: ranToday }, H],
+    ['a time that is no time, last run today', { ...DOC, at: 'soon', lastRun: ranToday }, H],
+    ['a time that is no text, last run today', { ...DOC, at: 20261105, lastRun: ranToday }, H],
+    ['no time of its own, last run yesterday', { ...DOC, at: undefined, lastRun: { at: iso(NOW - 26 * 36e5), status: 'ok' } }, null],
+    ['no time of its own, a last run that is no time', { ...DOC, at: undefined, lastRun: { at: 7, status: 'ok' } }, null],
+    ['no time at all', { ...DOC, at: undefined, lastRun: undefined }, null],
+    ['written tomorrow (a clock that is wrong)', { ...DOC, at: iso(NOW + 864e5) }, null],
+  ].map(([what, d, want]) => { push(d); return [what, headNow(), want]; });
+  ok(days.every(([, got, want]) => got === want),
+    'the headline is its day\'s: shown for a summary written today (its own time, or its last run\'s when it has none), not for one of another day or one with no readable time', days.filter(([, got, want]) => got !== want));
+  push(DOC);
+  ok(headNow() === H, 'with the first document back the headline is there again', headNow());
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: false }), 'ok: no sentence shows', notes());
 }
 

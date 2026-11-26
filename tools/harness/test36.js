@@ -62,7 +62,7 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   // The summary is there; his own actions have not answered yet. The tab's number waits for them: until then it would
   // count what he has handled already and drop a moment later (seen in Chromium: "Today 4" for a second, then "Today 1").
   { const early = [OS.hub.ready(), draw('hub-count', 'b', { field: 'waiting' }).textContent, tabNumber()];
-    DB.subs['data/users/' + UID + '/hub-actions'][0](snapOf('x', { actions: { 'sl-D1-1': { action: 'done', at: '2026-11-05T08:30:00Z', title: 'Vicky asks about round robins' } } }));
+    DB.subs['data/users/' + UID + '/hub-actions'][0](snapOf('x', { actions: { [DOC.top[0].id]: { action: 'done', at: '2026-11-05T08:30:00Z', title: DOC.top[0].title } } }));
     const first = [OS.hub.ready(), tabNumber()];
     ok(JSON.stringify(early) === JSON.stringify([false, '2', 'hidden']) && JSON.stringify(first) === JSON.stringify([true, '1']),
       'the summary has arrived, his own actions have not answered: the Today tab shows no number yet (it would count what he has handled, and drop); they answer, one item done earlier today: the first number the tab shows is 1, never 2', [early, first]); }

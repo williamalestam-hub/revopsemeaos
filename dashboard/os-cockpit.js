@@ -336,8 +336,9 @@
   // ---------- Listening ----------
   // the clock: one timer for the page's life, whether or not the picture is mounted, so the chips keep time without
   // it and a stage that was taken out and put back is drawn again within one tick
-  // (the Hub pane's run line reads the same schedule, so it is drawn again with the clock too)
-  S.timer = setInterval(() => { rerun(); try { dash.draw('hub-run'); } catch (e) { /* not on this page */ } }, TICK);
+  // (the Hub pane's run line reads the same schedule, so it is drawn again with the clock too; so is its headline,
+  // which is its day's and goes at midnight)
+  S.timer = setInterval(() => { rerun(); for (const name of ['hub-run', 'hub-brief']) { try { dash.draw(name); } catch (e) { /* not on this page */ } } }, TICK);
   S.hold = setTimeout(() => { S.hold = null; if (!S.open) { S.open = true; rerun(); } }, HOLD); // the first crew has waited long enough
   // the page's own documents: OS.hub, OS.sense and OS.lanes say when one of them, or William's reactions, changed
   try { if (window.OS.docs && typeof window.OS.docs.on === 'function') S.off = window.OS.docs.on(changed); } catch (e) { S.off = null; }

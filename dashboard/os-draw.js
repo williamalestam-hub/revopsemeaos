@@ -1213,10 +1213,15 @@ dash.draw('hub-top', (ul) => {
     return li;
   }));
 });
-// the brief's headline: shown, and hidden when there is none, by the empty drawing beside it (see showsTwin)
+// the brief's headline: shown, and hidden when there is none, by the empty drawing beside it (see showsTwin). A
+// headline is its day's: one the summary was written with on another day is not shown (before the morning run and
+// at a weekend it would read as today's). The day is the summary's own time, or its last run's when it has none;
+// with neither there is no telling, and no headline. The cockpit's clock draws this again, so it goes at midnight.
 dash.draw('hub-brief', (el) => {
   const d = OS.hub.doc();
-  const h = d && d.brief && typeof d.brief.headline === 'string' ? d.brief.headline.trim() : '';
+  const at = d ? (Number.isFinite(Date.parse(typeof d.at === 'string' ? d.at : '')) ? d.at : d.lastRun && d.lastRun.at) : '';
+  const today = /^\d\d:\d\d$/.test(OS.hub.when(typeof at === 'string' ? at : '')); // "07:13" for a time of today, a day with it for any other
+  const h = today && d.brief && typeof d.brief.headline === 'string' ? d.brief.headline.trim() : '';
   if (!showsTwin(el, 'hub-brief', !!h)) el.textContent = h;
 });
 // The worker's last run: red when it failed; amber for anything else that is not ok (partial, a run still marked

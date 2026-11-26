@@ -48,17 +48,19 @@ the document carries the Hub's URL (the link's address is fixed in `index.html`;
 **The numbers on the tabs, and the headline.** The Today, Decide and For Leo tabs each show a number while something
 waits on you: Needs you less what you have handled on this tab; the decisions you have not answered; the points for
 Leo you have not acted on. At nothing the number goes. The brief's headline stands under the four counts while the
-brief has one. A number waits until your own reactions have been read, as the cockpit's counts do: before that it
-would count what you have handled already, and drop a moment later (`test36.js` and `test42.js` hold that). Each of
-these four is a drawing that is stored hidden, and the dashboard type runs no drawing under the
-`hidden` attribute: a drawing can hide itself, but it is never run again to show itself. So beside each stands an
-empty drawing of the same name (a `.msg-slot`, in the tab's button or in the Hub pane) that only sets `hidden` on it;
-when `hidden` comes off, the type draws it, and it writes its own number or headline. A tab's number is displayed by
-the class `is-on` (`os.css`), which its drawing sets. The numbers' empty drawings stand in the tab row, so a number
-follows whichever tab is open; the headline's stands under Today, so the headline is drawn while Today is open and
-when it comes back. `tools/harness/test35.js`, `test36.js` and `test42.js` draw these as the type does (nothing is
-run while hidden); `test42.js` also holds that nothing else on the page is stored hidden where only a drawing on it
-or under it could show it.
+brief has one and the summary was written today: a headline is its day's, so one from an earlier day is not shown (it
+would read as today's before the morning run and at a weekend), and it goes at midnight, with the cockpit's clock
+(`test35.js` and `test42.js` hold the rule). A number waits until your own reactions have been read, however long that takes: before that it would
+count what you have handled already, and drop a moment later (the cockpit holds its counts for the same reason;
+`test36.js` and `test42.js` hold the rule). Each of these four is a drawing that is stored hidden, and the dashboard
+type runs no drawing under the `hidden` attribute: a drawing can hide itself, but it is never run again to show
+itself. So beside each stands an empty drawing of the same name (a `.msg-slot`, in the tab's button or in the Hub
+pane) that only sets `hidden` on it; when `hidden` comes off, the type draws it, and it writes its own number or
+headline. A tab's number is displayed by the class `is-on` (`os.css`), which its drawing sets. The numbers' empty
+drawings stand in the tab row, so a number follows whichever tab is open; the headline's stands under Today, so the
+headline is drawn while Today is open and when it comes back. `tools/harness/test35.js`, `test36.js` and `test42.js`
+draw these as the type does (nothing is run while hidden); `test42.js` also holds that nothing else on the page is
+stored hidden where only a drawing on it or under it could show it.
 **Acting from Today**: click an item to open it in place: why it matters, the summary, and the prepared draft in an
 editable box. From there, **Send on Slack / Create Gmail draft / Create Google Doc / Create Notion page via Claude** hands
 the Claude chat beside the page the exact (edited) text and the recipient with ids, and Claude shows it and waits for your
@@ -197,10 +199,10 @@ the card before it, of the same agent, does not name the same source. First and 
 in the lane now: when you handle the first card, the next one says the scope and the source. A card is made anew
 only when what it is made of changed (whether it carries those two lines is part of that); every other card is left
 untouched, so an open draft stays open and the keyboard keeps its place. What a card is made of is no more than it
-uses: a card on trial stays when Claude beside the page comes or goes (it can send nothing either way), and a card
-you sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names
-the day. When a document can no longer be read its cards go with its count. A chip of an agent with cards, or a click on its robot, scrolls to its first card; one with
-nothing to show opens nothing and shows its tooltip.
+uses: a card on trial stays when Claude beside the page comes or goes (it can send nothing either way), and a card you
+sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names the day.
+When a document can no longer be read its cards go with its count. A chip of an agent with cards, or a click on its
+robot, scrolls to its first card; one with nothing to show opens nothing and shows its tooltip.
 
 **Sweeper** (Data Hygiene) is the first department agent that reports. The scheduled task *RevOps Sweeper (Data
 Hygiene) v2* (`trig_01GpwNGpzPTi7yjWqsK8GcFp`, bound to its own session; instructions in `hub/sweeper-worker.md`, held
