@@ -76,8 +76,13 @@ class El {
   get innerHTML() { throw new Error('innerHTML was read'); } set innerHTML(v) { throw new Error('innerHTML was written'); }
   append(...nodes) { for (const x of nodes) { const n = x instanceof El || x instanceof Tx ? x : new Tx(x); if (n.parentNode) n.parentNode.childNodes.splice(n.parentNode.childNodes.indexOf(n), 1); n.parentNode = this; this.childNodes.push(n); } }
   appendChild(n) { this.append(n); return n; }
-  remove() { if (this.parentNode) { const i = this.parentNode.childNodes.indexOf(this); if (i >= 0) this.parentNode.childNodes.splice(i, 1); this.parentNode = null; } }
-  replaceChildren(...nodes) { for (const c of this.childNodes) c.parentNode = null; this.childNodes = []; this.append(...nodes.filter((n) => n != null)); }
+  // (as in a browser, an element that is taken out of its parent loses the keyboard: so does one that is taken out and put back)
+  _left() { this.parentNode = null; if (document.activeElement instanceof El && this.contains(document.activeElement)) document.activeElement = null; }
+  remove() { if (this.parentNode) { const i = this.parentNode.childNodes.indexOf(this); if (i >= 0) this.parentNode.childNodes.splice(i, 1); this._left(); } }
+  // one child taken out, one put in before another (a node that has a parent is moved), as the lane's drawing does
+  removeChild(n) { if (!n || n.parentNode !== this) throw new Error('removeChild: not a child'); n.remove(); return n; }
+  insertBefore(n, ref) { if (ref != null && ref.parentNode !== this) throw new Error('insertBefore: the reference is not a child'); n.remove(); n.parentNode = this; this.childNodes.splice(ref == null ? this.childNodes.length : this.childNodes.indexOf(ref), 0, n); return n; }
+  replaceChildren(...nodes) { for (const c of this.childNodes) { if (c instanceof El) c._left(); else c.parentNode = null; } this.childNodes = []; this.append(...nodes.filter((n) => n != null)); }
   setAttribute(k, v) { this.attrs.set(k, String(v)); } getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; }
   removeAttribute(k) { this.attrs.delete(k); } hasAttribute(k) { return this.attrs.has(k); }
   matches(sel) { return parseSel(sel).some((t) => t(this)); }
@@ -284,9 +289,11 @@ const staticChecks = () => {
   ok(same(roles.slice(0, 5).map((r) => r.dataset.ckRole), IDS) && roles.every((r) => r.textContent.trim().length > 10 && r.closest('[hidden]') && ck.contains(r) && !r.closest('[data-draw]')), 'one role sentence per agent of his own room, in the HTML, kept hidden', roles.map((r) => r.dataset.ckRole));
   ok(same(roles.slice(5).map((r) => r.dataset.ckRole), DEPT_IDS) && roles.slice(5).every((r) => r.textContent.length <= 70 && r.textContent === r.textContent.trim() && !/[—→]/.test(r.textContent)) && ['pacing', 'rundown'].every((id) => /by itself\.$/.test(roles.find((r) => r.dataset.ckRole === id).textContent)),
     'and one per department agent after them, each at most 70 characters; Pacing\'s and Rundown\'s say that they post by themselves', roles.slice(5).map((r) => [r.dataset.ckRole, r.textContent.length]));
+  ok(same(['sweeper', 'forecast', 'renewals'].map((id) => roles.filter((r) => r.dataset.ckRole === id).map((r) => r.textContent).join('|')), ['Counts open deals that break your hygiene rules, by team.', 'Compares the directors\' roll-up, Leo\'s call and Salesforce.', 'Lists late renewals.']),
+    'the role sentences of Sweeper, Forecast and Renewals are the short ones, to the letter', roles.slice(5).map((r) => r.textContent));
   const help = $$('[data-ck-help]'), legend = help.length === 1 ? $$('[id="' + help[0].getAttribute('aria-controls') + '"]') : [];
   ok(help.length === 1 && help[0].getAttribute('aria-expanded') === 'false' && !!help[0].getAttribute('aria-label') && legend.length === 1 && legend[0].hidden && ck.contains(legend[0]), 'the ? button controls one legend, stored hidden');
-  ok(legend[0].textContent === 'At its desk: a run is under way or due; amber means no result yet, red means it failed. At your desk: waiting on you. By the coffee: nothing needs you. An empty chair: no data. A door shows another room: one dot per agent, hollow when it has no data.', 'the legend names every place and both lamp colours, and says what a door and a hollow dot are', legend[0].textContent);
+  ok(legend[0].textContent === 'At its desk: a run is under way or due; amber means no result yet, red means it failed. At your desk: waiting on you. By the coffee: nothing needs you. An empty chair: no data. Doors: one dot per agent, hollow for no data.', 'the legend names every place and both lamp colours, and says what a door\'s dots and a hollow dot are', legend[0].textContent);
   ok(strips.filter((u) => !u.hidden).length === 1 && strips[0] === strip('mine') && !strips[0].hidden && !!strips[0].getAttribute('aria-label'), 'the chips on show are one labelled list: his own room\'s');
   ok(same(strips.map((u) => [u.dataset.ckRoom, u.getAttribute('aria-label'), u.hidden, u.tagName, u.parentNode === strips[0].parentNode]), [['mine', 'Agents', false, 'UL', true], ['hygiene', 'Data Hygiene agents', true, 'UL', true], ['arr', 'ARR agents', true, 'UL', true], ['exec', 'Executive agents', true, 'UL', true]]),
     'one labelled list per room, side by side in the bar; a department\'s is named after it and stored hidden', strips.map((u) => [u.dataset.ckRoom, u.getAttribute('aria-label'), u.hidden]));
@@ -326,16 +333,25 @@ const staticChecks = () => {
   ok(/\.ck-lane \.lane-ev li\s*\{[^}]*flex-direction:\s*row;[^}]*flex-wrap:\s*wrap/.test(css) && /\.ck-lane \.lane-ev-v\s*\{[^}]*order:\s*-1/.test(css), 'os-cockpit.css: in the lane the evidence is a row of pills with the number first; in a narrow pill the words go under the number');
   ok(/(^|\n)\.ck-lane \.lane-ev-text \.lane-ev-v\s*\{[^}]*order:\s*0;[^}]*font-weight:\s*inherit/.test(css) && /(^|\n)\.ck-lane \.lane-ev-text \.lane-ev-l\s*\{[^}]*font-weight:\s*var\(--cds-font-weight-medium\)/.test(css),
     'os-cockpit.css: a pill whose value is words (the card marks it lane-ev-text) opens with its label: the value keeps its place after the label and its weight goes to the label, so the answer is not read before what it is about');
+  // the draft on a department's card ("Read the draft"): a quiet summary that shows the keyboard's focus; the message wraps
+  const pageCss = fs.readFileSync(D + 'os.css', 'utf8');
+  ok(/(^|\n)\.ck-lane \.lane-draft summary\s*\{[^}]*color:\s*var\(--color-fg-muted\);[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*cursor:\s*pointer/.test(css) && /\.lane-meta\s*\{[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*color:\s*var\(--color-fg-muted\)/.test(pageCss)
+    && /(^|\n)\.ck-lane \.lane-draft summary:focus-visible\s*\{[^}]*outline:\s*2px solid/.test(css) && !/\.lane-draft[^{}]*\{[^}]*(display:\s*none|list-style:\s*none|pointer-events|outline:\s*(none|0))/.test(css),
+    'os-cockpit.css: the draft\'s summary is a quiet line, the size and colour of a card\'s grey lines (os.css: .lane-meta), with the pointer; it shows the keyboard\'s focus, and nothing hides it or its marker');
+  ok(/\.lane-body\s*\{[^}]*white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere/.test(pageCss) && !/\.lane-(draft|msgs|body)[^{}]*\{[^}]*(white-space|overflow|(min-|max-)?width:\s*\d)/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')),
+    'the draft\'s message keeps its line breaks and wraps, also in the middle of a long word (os.css: .lane-body), and nothing in os-cockpit.css changes how it wraps or gives it a width: a long line does not make the card, or the page, wider');
   ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\.html\(|createContextualFragment|DOMParser|eval\(|new Function/.test(wiring), 'os-cockpit.js writes no HTML: no innerHTML, outerHTML, insertAdjacentHTML, document.write');
   ok(!/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|import\(|\bawait\b(?![^\n]*\buse\('db'\))/.test(wiring.replace(/\/\/[^\n]*/g, '')), 'os-cockpit.js keeps nothing in the browser and calls no other host; its one await is claude.use(\'db\')');
   ok(!/setAttribute\('(role|aria-label)'/.test(wiring.replace(/setAttribute\('role', 'tooltip'\)/, '')) && /setAttribute\('aria-hidden', 'true'\)/.test(wiring), 'os-cockpit.js gives the canvas no role and no label: it is hidden from assistive technology');
 
   // what the README says of the cockpit, where a writer of an agent's document or a reader of a chip would be misled
   const readme = fs.readFileSync(path.join(D, '..', 'README.md'), 'utf8').replace(/\s+/g, ' ');
-  ok(/its chip says "trial" beside its last result \(not while a run is due, late, under way or failed\), its tooltip says "On trial: nothing it prepared can be sent" in all of those states/.test(readme) && !/its chip says "trial", its tooltip/.test(readme),
-    'README: an agent on trial says "trial" on its chip beside its last result only, as "partial" is said (the model\'s rule, pinned in test40); its tooltip says it in those states too');
-  ok(/from 1 January 2027 their tooltips say only "Not linked to the cockpit yet"\. "Runs today and posts by itself" is gone, and so is the sentence on what the agent does/.test(readme) && !/their tooltips no longer say "Runs today and posts by itself", only/.test(readme),
-    'README: from 1 January 2027 the tooltips of Pacing and Rundown say only that they are not linked; the sentence on what the agent does is left out as well');
+  ok(/its chip says "trial" beside its last result \(not while a run is due, late, under way or failed\), its tooltip says "Trial: nothing can be sent" in all of those states/.test(readme) && !/its chip says "trial", its tooltip/.test(readme) && !/On trial: nothing it prepared can be sent/.test(readme),
+    'README: an agent on trial says "trial" on its chip beside its last result only, as "partial" is said (the model\'s rule, pinned in test40); its tooltip says "Trial: nothing can be sent" in those states too');
+  ok(/from 1 January 2027 their tooltips say only "Not linked to the cockpit yet": the sentence on what the agent does \(which says that it posts\) is left out, since the model marks the agent as stopped/.test(readme) && !/their tooltips no longer say "Runs today and posts by itself", only/.test(readme),
+    'README: from 1 January 2027 the tooltips of Pacing and Rundown say only that they are not linked; the sentence on what the agent does is left out');
+  ok(/their chips read "not linked yet", and their tooltips say what the agent does \(its role sentence in `index\.html`\) and then "Not linked to the cockpit yet"\. Neither says that its agent runs today: Pacing runs on weekdays only\./.test(readme) && !/Runs today|run today/.test(readme),
+    'README: before that the tooltips of Pacing and Rundown are the role sentence and "Not linked to the cockpit yet"; nothing in the README says any more that an agent runs today');
   ok(/Every other result has to list its `items` \(an empty list when it has none, which reads as nothing waiting\); one where `items` is left out or is not a list reads "no data"/.test(readme) && /An item whose `id` is empty is left out: it is not counted and gets no card/.test(readme),
     'README: a result has to list its items (else "no data"), and an item needs an id that is not empty (else it is left out)');
   ok(/reads "no data", and so does one of whose items none has an id\. The chair is then empty and the tooltip says "Can't read the database here", as Desk's does for a summary without a count; nothing else is said of the agent meanwhile, not that a run is due, late or under way\./.test(readme)
@@ -343,6 +359,11 @@ const staticChecks = () => {
     'README: a result of whose items none has an id reads "no data" too; it says what the tooltip then says, that nothing else is said of the agent meanwhile, and names this third reason for an empty chair');
   ok(/A department's room goes on waiting for your reactions past the 2\.5 seconds, however long they take: its cards are not shown before them, so its chips, its door and its robots wait with them/.test(readme),
     'README: a department\'s room waits for his reactions also past the 2.5 seconds: no count stands over an empty lane');
+  ok(/On trial and off, a card whose action has messages has \*\*Read the draft\*\* under its buttons: closed until you press it, it shows each message as text \(what it is, to whom when the document names someone, its subject, and its body to the letter\)\. Opening it sends nothing and writes nothing, and nothing in it can be pressed\./.test(readme),
+    'README: what a card\'s action would send can be read on the card, on trial and off; opening the draft does nothing else');
+  ok(/An agent's cards do not repeat what they share: only its first card in the lane says for what the document was written \(its `scope`\), and a card ends with where its item is from \("From …", its `source`\) only when the card before it, of the same agent, does not name the same source\. First and before are counted among the cards in the lane now: when you handle the first card, the next one says the scope and the source\./.test(readme)
+    && /A card is made anew only when what it is made of changed \(whether it carries those two lines is part of that\); every other card is left untouched, so an open draft stays open and the keyboard keeps its place\./.test(readme) && !/says Trial, when and for what the document was written/.test(readme),
+    'README: the scope is on an agent\'s first card only and where an item is from is said once; first and before are counted among the cards now in the lane; a card that is made of the same is left untouched');
 
   // ---- 2. the store ----
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'os-store-'));
@@ -620,7 +641,7 @@ const standIns = async () => {
     ok(lineOf('sweeper') === '05:50 · needs 1' && same(stateOf(chip('sweeper')), ['is-needs']) && lineOf('accounts') === 'unknown 0' && same(stateOf(chip('accounts')), ['is-unknown']) && lineOf('desk') === deskLine, 'the chips of the open room get their lines and states; his own, now hidden, keep what they had', DEPT.hygiene.map(lineOf));
     // pointing at a department's robot: its tooltip, with the role sentence from the HTML
     s1.anchors.sweeper = { x: 300, y: 100 }; s1.opts.onHover('sweeper');
-    ok(tipEl.hidden === false && same(tipEl.children.flatMap((x) => (x.children.length ? x.children : [x]).map((y) => y.textContent)), ['Sweeper', 'Counts the open deals that break your hygiene rules, team by team.', 'Now: needs', 'Last result 2026-11-23T05:50:40Z', 'Next run soon']) && same(described(), ['sweeper']) && s1.canvas.style.cursor === '',
+    ok(tipEl.hidden === false && same(tipEl.children.flatMap((x) => (x.children.length ? x.children : [x]).map((y) => y.textContent)), ['Sweeper', 'Counts open deals that break your hygiene rules, by team.', 'Now: needs', 'Last result 2026-11-23T05:50:40Z', 'Next run soon']) && same(described(), ['sweeper']) && s1.canvas.style.cursor === '',
       'a department\'s robot has its tooltip too: name, role sentence, the model\'s lines; with no card in the lane its chip leads nowhere (plain cursor)', tipEl.textContent);
     s1.opts.onHover(null);
     // an agent whose task has stopped (the model marks its tooltip entry): the sentence on what it does is left out,
@@ -629,7 +650,7 @@ const standIns = async () => {
       modelStandIn.derive = (...a) => { const o = real(...a); if (o.tips.sweeper) o.tips.sweeper.stopped = true; if (o.tips.accounts) o.tips.accounts.stopped = 'true'; return o; }; bus.changed();
       s1.opts.onHover('sweeper'); const stopped = words(); s1.opts.onHover('accounts'); const notTrue = words();
       modelStandIn.derive = real; bus.changed(); s1.opts.onHover('sweeper'); const running = words(); s1.opts.onHover(null);
-      ok(same(stopped, ['Sweeper', 'Now: needs', 'Last result 2026-11-23T05:50:40Z', 'Next run soon']) && same(notTrue, ['Accounts', 'Finds accounts and records without the right owner.', 'Now: unknown', 'Next run soon']) && running[1] === 'Counts the open deals that break your hygiene rules, team by team.',
+      ok(same(stopped, ['Sweeper', 'Now: needs', 'Last result 2026-11-23T05:50:40Z', 'Next run soon']) && same(notTrue, ['Accounts', 'Finds accounts and records without the right owner.', 'Now: unknown', 'Next run soon']) && running[1] === 'Counts open deals that break your hygiene rules, by team.',
         'an agent the model marks as stopped: its tooltip leaves out the role sentence and keeps the rest; only the value true marks it, and when the mark is gone the sentence is back', [stopped, notTrue]); }
     // a press on a chip, or its robot: to the agent's first card in the lane when it has one, else its tooltip
     shell.length = 0; clicks.length = 0; scrolled.length = 0;
@@ -1065,12 +1086,12 @@ const standIns = async () => {
       'real model, stand-in page: Data Hygiene: Sweeper reads "Mon 06:50 · trial · 1 for you", Accounts is an empty chair that reads "not run yet"', [scene().crew.map((a) => [a.id, a.state]), DEPT.hygiene.map(lineOf)]);
     const tipNow = () => stage().children.find((x) => x.tagName !== 'CANVAS').children.flatMap((x) => (x.children.length ? x.children : [x]).map((y) => y.textContent));
     scene().opts.onHover('sweeper');
-    ok(same(tipNow(), ['Sweeper', 'Counts the open deals that break your hygiene rules, team by team.', '1 waiting on you. On trial: nothing it prepared can be sent', 'Last result yesterday 06:50', 'Next run Fri 06:50']), 'real model, stand-in page: Sweeper\'s tooltip says what the trial means', tipNow());
+    ok(same(tipNow(), ['Sweeper', 'Counts open deals that break your hygiene rules, by team.', '1 waiting on you. Trial: nothing can be sent', 'Last result yesterday 06:50', 'Next run Fri 06:50']), 'real model, stand-in page: Sweeper\'s tooltip says what the trial means', tipNow());
     scene().opts.onHover('accounts');
     ok(same(tipNow(), ['Accounts', 'Finds accounts and records without the right owner.', 'Has not run yet']), 'real model, stand-in page: Accounts has not run yet: no last result, and no next run is promised', tipNow());
     door('arr').click(); scene().opts.onHover('pacing');
-    ok(same(DEPT.arr.map(lineOf), ['not linked yet', 'not run yet', 'not run yet']) && same(tipNow(), ['Pacing', 'Posts the Q4 pacing each weekday morning, by itself.', 'Runs today and posts by itself. Not linked to the cockpit yet']) && scene().crew.length === 3 && scene().crew.every((a) => a.state === 'unknown'),
-      'real model, stand-in page: ARR: Pacing, which runs and posts by itself, is "not linked yet" (it is not said to have not run); Forecast and Renewals have not run; three empty chairs', [DEPT.arr.map(lineOf), tipNow()]);
+    ok(same(DEPT.arr.map(lineOf), ['not linked yet', 'not run yet', 'not run yet']) && same(tipNow(), ['Pacing', 'Posts the Q4 pacing each weekday morning, by itself.', 'Not linked to the cockpit yet']) && scene().crew.length === 3 && scene().crew.every((a) => a.state === 'unknown'),
+      'real model, stand-in page: ARR: Pacing, which posts by itself, is "not linked yet" (it is not said to have not run, nor to run today): its tooltip is its role sentence and "Not linked to the cockpit yet"; Forecast and Renewals have not run; three empty chairs', [DEPT.arr.map(lineOf), tipNow()]);
     scene().opts.onHover(null);
     // an agent whose document does not exist is never due or late: a week on, nothing has changed but the clock
     T = 7 * 864e5; tickNow();
@@ -1080,11 +1101,11 @@ const standIns = async () => {
     // Pacing's task stops with the year: from 1 January nothing says that it still runs (the open room is ARR)
     T = Date.parse('2026-12-31T22:59:00Z') - NOW; tickNow(); scene().opts.onHover('pacing'); const eve = tipNow();
     T = Date.parse('2026-12-31T23:00:00Z') - NOW; tickNow(); scene().opts.onHover('pacing');
-    ok(same([eve, tipNow()], [['Pacing', 'Posts the Q4 pacing each weekday morning, by itself.', 'Runs today and posts by itself. Not linked to the cockpit yet'], ['Pacing', 'Not linked to the cockpit yet']]) && lineOf('pacing') === 'not linked yet',
-      'real model, stand-in page: at 23:59 on 31 December Pacing still "runs today"; from midnight its tooltip says only that it is not linked: not that it runs, and not the sentence on what it does, which says that it posts (its chip reads "not linked yet" throughout)', [eve, tipNow()]);
+    ok(same([eve, tipNow()], [['Pacing', 'Posts the Q4 pacing each weekday morning, by itself.', 'Not linked to the cockpit yet'], ['Pacing', 'Not linked to the cockpit yet']]) && lineOf('pacing') === 'not linked yet',
+      'real model, stand-in page: at 23:59 on 31 December Pacing\'s tooltip still has the sentence on what it does, which says that it posts; from midnight it says only that it is not linked (its chip reads "not linked yet" throughout)', [eve, tipNow()]);
     scene().opts.onHover('forecast'); const beside = tipNow();
     door('exec').click(); scene().opts.onHover('rundown'); const rundown = tipNow(); scene().opts.onHover('prep');
-    ok(same([rundown, tipNow(), beside], [['Rundown', 'Not linked to the cockpit yet'], ['Prep', 'Prepares the material for Friday\'s leadership meeting.', 'Has not run yet'], ['Forecast', 'Sets the directors\' roll-up, Leo\'s call and Salesforce side by side.', 'Has not run yet']]),
+    ok(same([rundown, tipNow(), beside], [['Rundown', 'Not linked to the cockpit yet'], ['Prep', 'Prepares the material for Friday\'s leadership meeting.', 'Has not run yet'], ['Forecast', 'Compares the directors\' roll-up, Leo\'s call and Salesforce.', 'Has not run yet']]),
       'real model, stand-in page: the same for Rundown from that midnight on; the agents beside them, whose tasks have no end, keep their sentence', [rundown, tipNow(), beside]);
     scene().opts.onHover(null);
     T = 0; door('mine').click();
@@ -1259,8 +1280,16 @@ const realRun = async () => {
     ok(!!send && send.disabled === true && /Trial week: nothing can be sent\./.test(card.textContent) && !!btn(card, 'Got it') && !!btn(card, 'Not useful') && !btn(card, 'Got it').disabled, 'on trial the send button is there and is off, with the note "Trial week: nothing can be sent."; Got it and Not useful are on', card.querySelectorAll('button').map((b) => [b.textContent, !!b.disabled]));
     const writes = DB.writes.length; send.click(); await tick(); flush();
     ok(DB.writes.length === writes && same(crew()[0], ['sweeper', 'needs', 1]), 'a press on the button that is off sends nothing and marks nothing');
+    // the message he cannot send during the trial can be read: "Read the draft", closed, between the buttons and the source line
+    const draft = card.querySelectorAll('details');
+    ok(draft.length === 1 && draft[0].classList.contains('lane-draft') && !draft[0].hasAttribute('open') && same(draft[0].children.map((x) => [x.tagName, x.className]), [['SUMMARY', ''], ['DIV', 'lane-msgs']]) && draft[0].children[0].textContent === 'Read the draft'
+      && same(draft[0].children[1].children.map((x) => [x.tagName, x.textContent]), [['P', 'Slack message'], ['PRE', 'Team, this week\'s ask.']]) && draft[0].querySelectorAll('button').length + draft[0].querySelectorAll('a').length === 0
+      && same(card.children.slice(-3).map((x) => x.className), ['hub-acts', 'lane-draft', 'lane-meta']) && card.children[card.children.length - 1].textContent === 'From Salesforce, counted Monday 06:50 Stockholm',
+      'on trial the prepared message can be read on the card: "Read the draft", closed, after the buttons and before the source line, with what the message is and its text to the letter, and nothing in it to press', card.children.map((x) => x.className));
+    if (draft[0]) draft[0].setAttribute('open', ''); // he opens it (the browser sets the attribute; no script of the page does)
     tickNow(); OS.docs.changed(); flush();
     ok(cardsIn('hygiene')[0] === card, 'a redraw with nothing new in the cards keeps the very same card (the keyboard\'s place in it is not lost)');
+    ok(draft.length === 1 && card.querySelectorAll('details')[0] === draft[0] && draft[0].hasAttribute('open') && DB.writes.length === writes, 'the draft he opened is still open after the half-minute tick and a change of documents; opening it wrote nothing');
     scrolled.length = 0; const led = scene().opts.onPick('sweeper'); flush();
     ok(led === true && scrolled.length === 1 && scrolled[0].el === card && document.activeElement === card, 'a click on the Sweeper robot, or its chip, scrolls to its card and moves focus there', [led, scrolled.length]);
     const no = scene().opts.onPick('accounts'); flush();
@@ -1275,10 +1304,30 @@ const realRun = async () => {
       '... and at once nothing waits in the room: Sweeper idle ("trial" in place of "all clear"), the lane empty, no number on the door', [crew(), lineOf('sweeper'), countOf('hygiene')]);
     OS.sense.act('sw-1', null); await tick(); flush();
     // the trial over, and a new run: the first four items count and show
-    push('hub/sweeper', { ...SWEEP, at: '2026-11-24T05:50:30Z', trial: false, items: SWEEP.items.concat([{ id: 'sw-3' }, { id: 'sw-4' }, { id: 'sw-5' }, { id: 'sw-6' }]) });
+    // (the third item names the source the first one names; the others name none)
+    push('hub/sweeper', { ...SWEEP, at: '2026-11-24T05:50:30Z', trial: false, items: SWEEP.items.concat([{ id: 'sw-3', source: SWEEP.items[0].source }, { id: 'sw-4' }, { id: 'sw-5' }, { id: 'sw-6' }]) });
     const after = cardsIn('hygiene');
-    ok(after.length === 3 && after.every((x) => same(x.children[0].children.map((y) => y.textContent), ['Sweeper', '06:50 · All EMEA · New Business and Upsell'])) && !btn(after[0], 'Post the ask via Claude') && /Open the Claude chat beside this page to send from here\./.test(after[0].textContent) && lineOf('sweeper') === '06:50 · 3 for you' && same(crew()[0], ['sweeper', 'needs', 3]),
-      'off trial, a new run with six items: the first four count and show (one of them handled: three cards, "3 for you"), no Trial mark, and the usual note where Claude is not beside the page', [after.length, lineOf('sweeper')]);
+    const topOf = (x) => x.children[0].children.map((y) => y.textContent), fromOf = (x) => x.children.filter((y) => y.tagName === 'P' && y.className === 'lane-meta').map((y) => y.textContent);
+    ok(after.length === 3 && same(after.map(topOf), [['Sweeper', '06:50 · All EMEA · New Business and Upsell'], ['Sweeper', '06:50'], ['Sweeper', '06:50']]) && !btn(after[0], 'Post the ask via Claude') && /Open the Claude chat beside this page to send from here\./.test(after[0].textContent) && lineOf('sweeper') === '06:50 · 3 for you' && same(crew()[0], ['sweeper', 'needs', 3]),
+      'off trial, a new run with six items: the first four count and show (one of them handled: three cards, "3 for you"), no Trial mark, the scope on the first card only, and the usual note where Claude is not beside the page', [after.length, lineOf('sweeper'), after.map(topOf)]);
+    // the lane on the real page, drawn through the page's own dash.draw: a card that stays is the very same element
+    { const SAID = 'From Salesforce, counted Monday 06:50 Stockholm', off = after.length ? after[0].querySelectorAll('details') : [];
+      ok(same(after.map(fromOf), [[SAID], [], []]) && off.length === 1 && !off[0].hasAttribute('open') && off[0].querySelectorAll('pre')[0].textContent === 'Team, this week\'s ask.' && after.slice(1).every((x) => x.querySelectorAll('details').length === 0),
+        'off trial the first card says where it is from and lets him read the draft (closed); the second, whose item names the same source, does not say it again; the cards with nothing to send have no draft', after.map(fromOf));
+      if (off[0]) off[0].setAttribute('open', ''); // he opens the draft on the first card, and tabs to a button on the second
+      after[1].querySelectorAll('button')[0].focus();
+      const held = document.activeElement;
+      btn(after[2], 'Not useful').click();
+      const two = cardsIn('hygiene');
+      ok(two.length === 2 && two[0] === after[0] && two[1] === after[1] && off.length === 1 && off[0].hasAttribute('open') && off[0].parentNode === after[0] && !!held && document.activeElement === held && held.parentNode.parentNode === after[1],
+        'Not useful on the last card: the other two are the very same elements, left in the lane: the open draft is still open and the keyboard is still on its button', [two.length, document.activeElement === held]);
+      btn(after[0], 'Got it').click();
+      const one = cardsIn('hygiene');
+      ok(one.length === 1 && one[0] !== after[1] && same(topOf(one[0]), ['Sweeper', '06:50 · All EMEA · New Business and Upsell']) && same(fromOf(one[0]), [SAID]) && one[0].querySelectorAll('details').length === 0,
+        'Got it on the first card: the card that is now first is made anew, with the scope and the source line', [one.map(topOf), one.map(fromOf)]);
+      await tick(); flush(); OS.sense.act('sw-1', null); OS.sense.act('sw-4', null); await tick(); flush();
+      ok(same(cardsIn('hygiene').map(topOf), [['Sweeper', '06:50 · All EMEA · New Business and Upsell'], ['Sweeper', '06:50'], ['Sweeper', '06:50']]) && same(cardsIn('hygiene').map(fromOf), [[SAID], [], []]) && lineOf('sweeper') === '06:50 · 3 for you',
+        'with both reactions taken back the three cards are back: the scope and the source on the first only', [cardsIn('hygiene').map(topOf), cardsIn('hygiene').map(fromOf)]); }
     push('hub/sweeper', { at: '2026-11-24T05:50:30Z', status: 'error', trial: false, run: 'ask', errors: ['all seven checks failed'] });
     ok(same(crew()[0], ['sweeper', 'error', 0]) && lineOf('sweeper') === 'failed 06:50' && cardsIn('hygiene').length === 0 && same(pipsOf('hygiene'), ['is-error', 'is-unknown']) && saidBy(door('hygiene')) === 'Data Hygiene, 2 agents, 1 failed', 'a run that ended in an error and left no items: "failed 06:50", red on the door, and the door says "1 failed"; not "not run yet", and not "nothing waiting"', [crew()[0], lineOf('sweeper'), saidBy(door('hygiene'))]);
     // a placeholder is not a result; a document that can no longer be read shows nothing of what it held
@@ -1290,7 +1339,7 @@ const realRun = async () => {
     ok(same(unlisted, Array(3).fill(['ok', 'no data', 'sweeper unknown 0', 0, '', 'is-unknown is-unknown', 'Data Hygiene, 2 agents, no data', false])),
       'a result whose items are not a list (two items keyed 0 and 1 where a list was meant, a text, nothing): "no data", an empty chair, a hollow dot and no card; not "trial" with "nothing waiting"', unlisted[0]);
     scene().anchors.sweeper = { x: 300, y: 100 }; scene().opts.onHover('sweeper');
-    ok(same(tipWords(), ['Sweeper', 'Counts the open deals that break your hygiene rules, team by team.', 'Can\'t read the database here']), '... and its tooltip does not say "Nothing waiting on you", gives no last result and promises no run', tipWords());
+    ok(same(tipWords(), ['Sweeper', 'Counts open deals that break your hygiene rules, by team.', 'Can\'t read the database here']), '... and its tooltip does not say "Nothing waiting on you", gives no last result and promises no run', tipWords());
     scene().opts.onHover(null);
     push('hub/sweeper', { ...SWEEP, items: [] });
     ok(same(roomNow(), ['ok', 'Mon 06:50 · trial', 'sweeper idle 0', 0, '', 'is-idle is-unknown', 'Data Hygiene, 2 agents, nothing waiting', false]), 'an empty list is a run with nothing to show: "trial" in place of "all clear", and the door says "nothing waiting"', roomNow());

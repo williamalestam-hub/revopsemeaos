@@ -17,6 +17,15 @@ const NOW = Date.parse('2026-11-05T09:00:00Z');
 // clicks: keep each element's listeners so a test can fire them
 Node.prototype.addEventListener = function (type, fn) { (this._on = this._on || {})[type] = (this._on[type] || []).concat(fn); };
 const fire = (el, type, ev) => (el._on && el._on[type] || []).forEach((f) => f(Object.assign({ stopPropagation() {}, preventDefault() {} }, ev || {})));
+// what the cockpit's lane asks of its list beyond fakedom.js: one card taken out, one put in before another (a card
+// that is already in the list is moved). Each call is counted, so that a test can see which cards the lane touched.
+const TOUCHED = [];
+Node.prototype.removeChild = function (n) { const i = this.children.indexOf(n); if (i < 0) throw new Error('removeChild: not a child'); this.children.splice(i, 1); TOUCHED.push(['out', n]); return n; };
+Node.prototype.insertBefore = function (n, ref) {
+  const was = this.children.indexOf(n); if (was >= 0) this.children.splice(was, 1);
+  const at = ref == null ? this.children.length : this.children.indexOf(ref); if (at < 0) throw new Error('insertBefore: the reference is not a child');
+  this.children.splice(at, 0, n); TOUCHED.push(['in', n]); return n;
+};
 const D = require('path').join(__dirname, '../../dashboard/');
 const calcs = {}, draws = {};
 global.dash = { loader: () => {}, calc: (id, o) => { calcs[id] = o; }, draw: (n, fn) => { if (fn) draws[n] = fn; }, params: () => ({ region: 'All', mgr: '', person: '' }), setParams: () => {}, onData: () => {}, colors: Array(8).fill('#111'), setLink: () => {}, data: () => ({ status: 'loading', data: [] }) };
@@ -214,6 +223,108 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
   const sent = lane.children[0];
   ok(SENT.length === sentBefore + 1 && OS.sense.acted('rn-ask').action === 'sent' && sent !== back && lane.children.length === 2 && /Sent to Claude/.test(sent.textContent) && !btns(sent).some((b) => /via Claude/.test(b.textContent)),
     'when he sends an item on, its card in that same lane is made anew and says so: the send button is gone, so nothing is sent twice', btns(sent).map((b) => b.textContent));
+  // ---- an agent's cards do not repeat the same lines: its scope on its first card only, where an item is from once ----
+  {
+    const SCOPE = 'All EMEA · New Business and Upsell', SRC = 'Salesforce, counted Thursday 06:50 Stockholm', OTHER = 'Salesforce, counted Friday 06:52 Stockholm';
+    const BODY = 'Team, this week\'s ask:\n• Stage 0 after a meeting: 41\n\n  Please sort yours by Thursday.';
+    const ASK = { action: { label: 'Post the ask', sends: [{ type: 'slack', body: BODY }] } };
+    // a document with one item per source given (undefined: the item names no source); the first item has the action
+    const doc = (sources, more, first) => ({ at: '2026-11-05T05:50:40Z', status: 'ok', trial: true, scope: SCOPE, items: sources.map((s, i) => ({ id: 'q-' + (i + 1), level: 'watch', title: 'Item ' + (i + 1), ...(s === undefined ? {} : { source: s }), ...(i === 0 ? first || ASK : {}) })), ...more });
+    const hyg = draw('ck-lane', 'ul', { ckRoom: 'hygiene' });
+    const sweep = (d) => { sub('hub/sweeper')[0](snapOf('hub/sweeper', d)); draws['ck-lane'](hyg); TOUCHED.length = 0; return hyg.children.slice(); };
+    const top = (card) => card.children[0].children.map((x) => x.textContent).join('|');
+    const from = (card) => card.children.filter((c) => c.tagName === 'P' && c.className === 'lane-meta').map((c) => c.textContent).join('|');
+    const draftOf = (card) => card.children.filter((c) => c.tagName === 'DETAILS');
+    // what the lane did to its list since the last sweep: each card taken out or put in, in order
+    const did = (...want) => TOUCHED.length === want.length && want.every(([how, n], i) => TOUCHED[i][0] === how && TOUCHED[i][1] === n);
+    const press = async (card, text) => { TOUCHED.length = 0; fire(label(card, text), 'click'); await tick(); await tick(); draws['ck-lane'](hyg); };
+    const fresh = async () => { for (const id of ['q-1', 'q-2', 'q-3', 'q-4']) OS.sense.act(id, null); await tick(); await tick(); };
+    const LATER = 'Sweeper|Trial|06:50', FIRST = LATER + ' · ' + SCOPE;
+
+    const [c1, c2, c3, c4] = sweep(doc([SRC, SRC, SRC, SRC]));
+    ok(hyg.children.length === 4 && [c1, c2, c3, c4].map(top).join(' / ') === [FIRST, LATER, LATER, LATER].join(' / '),
+      'the scope is on the agent\'s first card in the lane only: its later cards open with the agent, Trial and when the document was written', [c1, c2, c3, c4].map(top));
+    ok([c1, c2, c3, c4].map(from).join(' / ') === ['From ' + SRC, '', '', ''].join(' / ') && c1.children[c1.children.length - 1].textContent === 'From ' + SRC,
+      'four cards with one source say where they are from once: on the first card, as its last line', [c1, c2, c3, c4].map(from));
+    const fromsOf = (sources) => sweep(doc(sources)).map(from).join(' / ');
+    ok(fromsOf([SRC, OTHER, OTHER, SRC]) === ['From ' + SRC, 'From ' + OTHER, '', 'From ' + SRC].join(' / ') && fromsOf([SRC, undefined, SRC, SRC]) === ['From ' + SRC, '', 'From ' + SRC, ''].join(' / ')
+      && fromsOf([undefined, SRC, SRC, '']) === ['', 'From ' + SRC, '', ''].join(' / ') && fromsOf([SRC, 7, SRC, SRC]) === ['From ' + SRC, '', 'From ' + SRC, ''].join(' / '),
+      'a card says where it is from when the card before it, of the same agent, does not say the same: a new source is said, and so is one that comes back after another or after a card that names none (no text, or not text)', [fromsOf([SRC, OTHER, OTHER, SRC]), fromsOf([SRC, undefined, SRC, SRC])]);
+    // "first" and "before" are counted among the cards now in the lane
+    { const [a1, a2, a3, a4] = sweep(doc([SRC, SRC, SRC, SRC]));
+      await press(a1, 'Got it');
+      const [n2, k3, k4] = hyg.children;
+      ok(hyg.children.length === 3 && n2 !== a2 && /Item 2/.test(n2.textContent) && top(n2) === FIRST && from(n2) === 'From ' + SRC,
+        'when he handles the first card, the next one becomes the first: it is made anew with the scope and the source line', [hyg.children.length, top(n2), from(n2)]);
+      ok(k3 === a3 && k4 === a4 && top(k3) === LATER && from(k3) === '' && did(['out', a1], ['out', a2], ['in', n2]),
+        '... and the cards after it are the very same elements, left where they stand: the lane took out the handled card and the old second one, put the new one in, and touched nothing else', TOUCHED.map((t) => t[0]));
+      await press(k3, 'Not useful');
+      ok(hyg.children.length === 2 && hyg.children[0] === n2 && hyg.children[1] === a4 && did(['out', a3]),
+        'when a card in the middle goes, the cards around it are not made anew and not touched: only that card is taken out', TOUCHED.map((t) => t[0]));
+      TOUCHED.length = 0; draws['ck-lane'](hyg); draws['ck-lane'](hyg);
+      ok(hyg.children[0] === n2 && hyg.children[1] === a4 && TOUCHED.length === 0, 'a redraw with nothing changed takes no card out and puts none in', TOUCHED.map((t) => t[0]));
+      await fresh(); }
+    // what a card is made of includes whether it carries the source line
+    { const [b1, b2, b3, b4] = sweep(doc([SRC, OTHER, SRC, SRC])), before = [b1, b2, b3, b4].map(from).join(' / ');
+      await press(b2, 'Got it');
+      const m3 = hyg.children[1];
+      ok(before === ['From ' + SRC, 'From ' + OTHER, 'From ' + SRC, ''].join(' / ') && hyg.children.length === 3 && hyg.children[0] === b1 && m3 !== b3 && /Item 3/.test(m3.textContent) && from(m3) === '' && top(m3) === LATER && hyg.children[2] === b4 && did(['out', b2], ['out', b3], ['in', m3]),
+        'a card that now follows one with its own source is made anew without the source line (what a card is made of includes whether it carries it); the first card and the last, which carry what they carried, stay as they are', [before, hyg.children.map(from)]);
+      await fresh(); }
+    // two agents in one lane: each agent's first card says its own scope and where it is from
+    sub('hub/accounts')[0](snapOf('hub/accounts', { at: '2026-11-04T05:50:40Z', status: 'ok', trial: false, scope: 'All EMEA · accounts', items: [{ id: 'ac-1', title: 'Accounts one', source: SRC }, { id: 'ac-2', title: 'Accounts two', source: SRC }] }));
+    const both = sweep(doc([SRC, SRC]));
+    ok(both.map(top).join(' / ') === [FIRST, LATER, 'Accounts|yesterday 06:50 · All EMEA · accounts', 'Accounts|yesterday 06:50'].join(' / ') && both.map(from).join(' / ') === ['From ' + SRC, '', 'From ' + SRC, ''].join(' / '),
+      'with two agents in the lane, each agent\'s first card says its own scope and where it is from, also when the other agent\'s last card names the same source', [both.map(top), both.map(from)]);
+    sub('hub/accounts')[0](snapOf('hub/accounts', null));
+
+    // ---- the draft can be read: what a department card's action would send, under its buttons ----
+    const [d1, d2] = sweep(doc([SRC, SRC])), det = draftOf(d1)[0] || d1; // (without a draft the checks below fail on the card itself, and do not crash)
+    const shape = (n) => n.tagName + (n.className ? '.' + n.className : '') + (n.children.length ? '(' + n.children.map(shape).join(' ') + ')' : '');
+    ok(draftOf(d1).length === 1 && det.className === 'lane-draft' && d1.children.map((c) => c.className).slice(-3).join('|') === 'hub-acts|lane-draft|lane-meta' && shape(det) === 'DETAILS.lane-draft(SUMMARY DIV.lane-msgs(P.hub-to PRE.lane-body))'
+      && det.children[0].textContent === 'Read the draft' && det.children[1].children[0].textContent === 'Slack message' && det.children[1].children[1].textContent === BODY,
+      'a department card whose action has a message has "Read the draft" after the row of buttons and before the source line: what the message is, and its body to the letter (line breaks and spaces kept)', [d1.children.map((c) => c.className), shape(det)]);
+    ok(det.open !== true && det.attrs.open === undefined && label(d1, 'Post the ask via Claude').disabled === true && /Trial week: nothing can be sent\./.test(d1.textContent), 'the draft is closed when its card is made, and it is there on trial, beside the send button that is off');
+    ok(find(det, (n) => /^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(n.tagName)).length === 0 && find(det, (n) => n._on).length === 0 && find(det, (n) => n.tagName !== '#text').length === 5,
+      'nothing in the draft can be pressed: no button, no link, no field, and nothing listens there (it is text to read)');
+    ok(draftOf(d2).length === 0 && !/Read the draft/.test(d2.textContent), 'a card with nothing to send has no draft');
+    { const sent = SENT.length, writes = DB.writes.length;
+      fire(det.children[0], 'click'); fire(det, 'toggle'); det.open = true; await tick(); await tick(); // as a press on "Read the draft" leaves it
+      draws['ck-lane'](hyg); draws['ck-lane'](hyg);
+      ok(SENT.length === sent && DB.writes.length === writes && !OS.sense.acted('q-1'), 'opening the draft hands Claude nothing, writes nothing and marks nothing');
+      ok(hyg.children[0] === d1 && draftOf(hyg.children[0])[0] === det && det.open === true && TOUCHED.length === 0, 'an open draft stays open across redraws: its card is the very same element, and the lane does not touch it', TOUCHED.map((t) => t[0]));
+      await press(d2, 'Got it');
+      ok(hyg.children.length === 1 && hyg.children[0] === d1 && det.open === true && did(['out', d2]), '... and when another card goes: the card with the open draft is not made anew', TOUCHED.map((t) => t[0]));
+      const anew = sweep(doc([SRC, SRC], { at: '2026-11-05T05:51:40Z' }))[0];
+      ok(anew !== d1 && draftOf(anew).length === 1 && draftOf(anew)[0] !== det && draftOf(anew)[0].open !== true && draftOf(anew)[0].attrs.open === undefined, 'a card that is made anew (its document was written again) has its draft closed again');
+      await fresh(); }
+    // every message of the action, each with what it is, to whom, and its subject; one without a body is no message
+    const MAIL = { type: 'email', to: [{ name: 'Karl Stein', email: 'karl@example.com' }], subject: 'Your roll-up for Friday', body: 'Karl,\n  could you send your roll-up today?' };
+    const DM = { type: 'slack', to: [{ name: 'Karl Stein', slackId: 'U0KARL1234' }, { name: 'Ada Berg' }], channelName: 'emea-revops', body: 'Hello both.' };
+    const many = draftOf(sweep(doc([SRC], {}, { action: { label: 'Send them', sends: [MAIL, { type: 'slack', body: '  \n ' }, DM, null, { type: 'memo', body: 'A note.' }] } }))[0])[0];
+    ok(!!many && many.children[1].children.map((c) => c.tagName + ':' + c.textContent).join(' | ') === ['P:Email to Karl Stein · Your roll-up for Friday', 'PRE:' + MAIL.body, 'P:Slack message to Karl Stein, Ada Berg in #emea-revops', 'PRE:Hello both.', 'P:Message', 'PRE:A note.'].join(' | '),
+      'the draft holds every message of the action in order: what it is, to whom when the document names someone, where, its subject, then its body; an entry without a body is no message', many && many.children[1].children.map((c) => c.textContent));
+    const none = [{ action: { label: 'Post', sends: [] } }, { action: { label: 'Post', sends: [{ type: 'slack', body: '   ' }] } }, { action: { label: 'Post' } }, { message: 'Leo, a line for you.' }, {}].map((first) => sweep(doc([SRC], {}, first))[0]);
+    ok(none.every((c) => draftOf(c).length === 0 && !/Read the draft/.test(c.textContent)), 'an action without a message (no list, an empty one, only empty bodies), a line for Leo alone, or no action at all: no draft', none.map((c) => draftOf(c).length));
+    // on trial and off trial alike, and on a card he has sent on
+    const live = sweep(doc([SRC, SRC], { trial: false }))[0];
+    const wasSent = SENT.length;
+    ok(draftOf(live).length === 1 && draftOf(live)[0].children[1].children[1].textContent === BODY && label(live, 'Post the ask via Claude').disabled === false && live.children.map((c) => c.className).slice(-3).join('|') === 'hub-acts|lane-draft|lane-meta', 'off trial the draft is there just the same, under a send button that is on');
+    await press(live, 'Post the ask via Claude');
+    const gone = hyg.children[0];
+    ok(SENT.length === wasSent + 1 && SENT[SENT.length - 1].ask.includes('\n' + BODY + '\n') && gone !== live && /Sent to Claude/.test(gone.textContent) && draftOf(gone).length === 1 && draftOf(gone)[0].children[1].children[1].textContent === BODY && draftOf(gone)[0].open !== true,
+      'what a press hands Claude is the body the draft shows, to the letter; the card he sent on is made anew, says so, and still lets him read what went', draftOf(gone).length);
+    await fresh();
+    // back to the document the rest of this file reads
+    sub('hub/sweeper')[0](snapOf('hub/sweeper', { ...SWEEP, trial: false }));
+  }
+  // an Instinct or a Muse card has no draft and no source line, whatever its item carries: it is as it was
+  { sub('hub/instinct')[0](snapOf('hub/instinct', { at: '2026-11-05T07:07:00Z', items: [{ id: 'ins-plain', level: 'watch', title: 'A signal with a message to send', why: 'It moved.', source: 'Salesforce, counted this morning', action: { label: 'Ask the team', sends: [{ type: 'slack', body: 'Team, a question.' }] } }] }));
+    sub('hub/muse')[0](snapOf('hub/muse', { at: '2026-11-05T07:07:00Z', items: [{ id: 'muse-plain', title: 'An idea with a message', idea: 'Try it.', source: 'Salesforce', action: { label: 'Share it', sends: [{ type: 'slack', body: 'An idea.' }] } }] }));
+    const pane = draw('sense', 'div'), cards = pane.children.map((col) => col.children.find((n) => n.tagName === 'UL').children[0]);
+    ok(find(pane, (n) => n.tagName === 'DETAILS' || n.tagName === 'SUMMARY').length === 0 && !/Read the draft|From Salesforce/.test(pane.textContent) && cards.map((c) => c.children.map((x) => x.className).join('|')).join(' / ') === 'lane-head|hub-why|hub-acts / lane-head|sense-idea|hub-acts'
+      && cards.map((c) => btns(c).map((b) => b.textContent).join('|')).join(' / ') === 'Ask the team via Claude|Got it|Not useful / Share it via Claude|Keep|Not useful',
+      'an Instinct card and a Muse card whose action has a message have no draft to open and no source line: each ends with its row of buttons, as before', cards.map((c) => c.children.map((x) => x.className))); }
   // ---- Instinct and Muse are as they were ----
   const many = (pre) => ({ at: '2026-11-05T07:07:00Z', items: Array.from({ length: 13 }, (_, i) => ({ id: pre + i, title: 'Item ' + i })) });
   sub('hub/instinct')[0](snapOf('hub/instinct', many('ins-many-'))); sub('hub/muse')[0](snapOf('hub/muse', many('muse-many-')));

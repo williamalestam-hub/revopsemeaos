@@ -16,13 +16,14 @@
   // The rooms of the cockpit: his own five, then one room per department. A door on the page opens each. An agent's id
   // is its own in every room, no look or hue comes twice in a room, and no department robot looks like one of his
   // five. At most five agents a room: a sixth makes the picture taller on a phone. `missing` is what an agent says
-  // instead of "not run yet" while nothing of it can be read: [the chip's words, the tooltip's sentence, and the
-  // sentence from `until` on]. `until` is the moment the agent's task stops by its own instructions (a time with its
-  // zone): from then on nothing here says that it still runs, and its tooltip entry is marked `stopped`, so that the
-  // page leaves out its sentence on what the agent does.
+  // instead of "not run yet" while nothing of it can be read: [the chip's words, the tooltip's sentence]. Neither
+  // says that the agent runs: that is not so on every day (Pacing rests at the weekend), and what the agent does is
+  // the page's to say, in the sentence above this one in the tooltip. `until` is the moment the agent's task stops
+  // by its own instructions (a time with its zone): from then on its tooltip entry is marked `stopped`, so that the
+  // page leaves out that sentence, which reads as if the agent still ran.
   // Pacing and Rundown are tasks for the last quarter of 2026: they run in November and December, and their own
   // instructions tell them to post nothing after 31 December.
-  const LINK = ['not linked yet', 'Runs today and posts by itself. Not linked to the cockpit yet', 'Not linked to the cockpit yet'];
+  const LINK = ['not linked yet', 'Not linked to the cockpit yet'];
   const YEAR_END = '2027-01-01T00:00+01:00'; // the first moment of 2027 in Stockholm
   const ROOMS = [
     { id: 'mine', name: 'Your agents', agents: ROSTER },
@@ -176,9 +177,9 @@
       const trial = src === 'ok' && f.trial === true;
       // from its `until` on its task has stopped, by its own instructions (an `until` that is no time ends nothing)
       const stopped = now >= time(agent.until);
-      // its own words for a result that does not exist; once it has stopped, the sentence that no longer says it runs
+      // its own words for a result that does not exist: the chip's, then the tooltip's sentence (the same before and after `until`)
       const mis = Array.isArray(agent.missing) ? agent.missing.map((t, i) => cut(t, i ? 90 : 24)) : [];
-      const own = mis[0] && mis[1] ? { brief: mis[0], tip: (stopped && mis[2]) || mis[1], say: mis[0] } : null;
+      const own = mis[0] && mis[1] ? { brief: mis[0], tip: mis[1], say: mis[0] } : null;
       // a step ends without full stops: sentences are built around it
       const step = cut(p.step, 24).replace(/[.\u2026\s]+$/, '');
       const { prev, next } = runsAround(agent, now);
@@ -218,7 +219,7 @@
       out.lead[agent.id] = lead;
       out.brief[agent.id] = brief;
       out.tips[agent.id] = {
-        state: w.tip + (still ? '. ' + n + ' still waiting on you' : '') + (trial ? '. On trial: nothing it prepared can be sent' : ''),
+        state: w.tip + (still ? '. ' + n + ' still waiting on you' : '') + (trial ? '. Trial: nothing can be sent' : ''),
         last: src === 'ok' && real(last) ? 'Last result ' + when(last, now) + (partial ? ', partial: a source failed' : '') : '',
         // a department's agent is promised a next run only once a result of it has been read: until then nothing says
         // that its schedule is real (his own five have run for as long as the cockpit has stood)

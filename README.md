@@ -135,14 +135,15 @@ departments' documents too, so no door shows a count that is about to drop. A de
 your reactions past the 2.5 seconds, however long they take: its cards are not shown before them, so its chips, its
 door and its robots wait with them, and no count stands over an empty lane. A robot stands only for an agent that
 really runs and reports. An agent whose document does not exist is an empty chair: its chip reads "not run yet", it
-is never due or late whatever its schedule says, and it is promised no next run. Pacing and Rundown run today and
-post by themselves, but leave nothing the cockpit can read: theirs read "not linked yet". Their tasks are for the
-last quarter of 2026: they run in November and December, and their own instructions tell them to post nothing after
-31 December. The model carries that end (`until` on the two agents in `os-cockpit-model.js`): from 1 January 2027
-their tooltips say only "Not linked to the cockpit yet". "Runs today and posts by itself" is gone, and so is the
-sentence on what the agent does (its role sentence in `index.html`, which says that it posts): the model marks the
-agent as stopped and the page leaves the sentence out. Before then, either renew the two tasks (then move `until`,
-and reword Pacing's role sentence in `index.html`, which says "Q4") or take the two chairs out of the rooms.
+is never due or late whatever its schedule says, and it is promised no next run. Pacing and Rundown post by
+themselves and leave nothing the cockpit can read: their chips read "not linked yet", and their tooltips say what the
+agent does (its role sentence in `index.html`) and then "Not linked to the cockpit yet". Neither says that its
+agent runs today: Pacing runs on weekdays only. Their tasks are for the last quarter of 2026: they run in November
+and December, and their own instructions tell them to post nothing after 31 December. The model carries that end
+(`until` on the two agents in `os-cockpit-model.js`): from 1 January 2027 their tooltips say only "Not linked to the
+cockpit yet": the sentence on what the agent does (which says that it posts) is left out, since the model marks the
+agent as stopped. Before then, either renew the two tasks (then move `until`, and reword Pacing's role sentence in
+`index.html`, which says "Q4") or take the two chairs out of the rooms.
 
 **A department agent's document.** Each department agent that reports writes one document in the OS database under its
 own id: `hub/sweeper` first, later `hub/accounts`, `hub/forecast`, `hub/renewals` and `hub/prep`. The shape is `{ at,
@@ -161,15 +162,23 @@ a summary without a count; nothing else is said of the agent meanwhile, not that
 document that says neither when nor how a run ended (`at`, `status`) and lists no `items` is a placeholder: its agent
 still reads "not run yet". While `trial` is true the agent is on trial: its chip says "trial" beside its last result
 (not while a run
-is due, late, under way or failed), its tooltip says "On trial: nothing it prepared can be sent" in all of those
+is due, late, under way or failed), its tooltip says "Trial: nothing can be sent" in all of those
 states, and on its cards every send is off: the action's button is shown but off, there is no button for a line to Leo
 (an item's `message`), and the card says "Trial week: nothing can be sent."; Got it and Not useful still work, and
 take the card away at once. Off trial a card sends as an Instinct card does (an email with its subject, a `message` to
-Leo once `hub/leo` names him). A card names its agent, says Trial, when and for what the document was written, then
-the item as an Instinct card shows it, with the evidence as small pills: a number first, then its label; a value that
-is words comes after its label. When a document can no longer be read its cards go with its count. A chip of an
-agent with cards, or a click on its robot, scrolls to its first card; one with nothing to show opens nothing and
-shows its tooltip.
+Leo once `hub/leo` names him). On trial and off, a card whose action has messages has **Read the draft** under its
+buttons: closed until you press it, it shows each message as text (what it is, to whom when the document names
+someone, its subject, and its body to the letter). Opening it sends nothing and writes nothing, and nothing in it
+can be pressed. A card names its agent, says Trial and when the document was written, then the item as an Instinct
+card shows it, with the evidence as small pills: a number first, then its label; a value that is words comes after
+its label. An agent's cards do not repeat what they share: only its first card in the lane says for what the
+document was written (its `scope`), and a card ends with where its item is from ("From …", its `source`) only when
+the card before it, of the same agent, does not name the same source. First and before are counted among the cards
+in the lane now: when you handle the first card, the next one says the scope and the source. A card is made anew
+only when what it is made of changed (whether it carries those two lines is part of that); every other card is left
+untouched, so an open draft stays open and the keyboard keeps its place. When a document can no longer be read its
+cards go with its count. A chip of an agent with cards, or a click on its robot, scrolls to its first card; one with
+nothing to show opens nothing and shows its tooltip.
 
 **Sweeper** (Data Hygiene) is the first department agent that reports. The scheduled task *RevOps Sweeper (Data
 Hygiene) v2* (`trig_01GpwNGpzPTi7yjWqsK8GcFp`, bound to its own session; instructions in `hub/sweeper-worker.md`, held

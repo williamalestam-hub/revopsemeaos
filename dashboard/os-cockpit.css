@@ -94,6 +94,13 @@
 .ck-lane .lane-ev-text .lane-ev-l { font-weight: var(--cds-font-weight-medium); }
 /* a send that is off (its agent is on trial): flat and grey, with no glow and no lift, so that it does not ask to be pressed */
 .ck-lane .btn:disabled, .ck-lane .btn:disabled:hover { border-color: transparent; background: color-mix(in srgb, var(--color-fg-muted) 55%, var(--color-panel)); color: var(--color-panel); box-shadow: none; transform: none; opacity: 1; }
+/* the draft: what a card's action would send, to read, under the buttons ("Read the draft", closed until it is
+   pressed). Its summary is a quiet line, the size and colour of the card's grey lines, no wider than its words (a
+   press beside them opens nothing), and shows the keyboard's focus as a chip does. The message keeps its line
+   breaks and wraps (os.css: .lane-body), so a long line makes nothing wider. */
+.ck-lane .lane-draft summary { width: fit-content; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); cursor: pointer; }
+.ck-lane .lane-draft summary:focus-visible { outline: 2px solid var(--acc, var(--color-fg)); outline-offset: 2px; border-radius: 2px; }
+.ck-lane .lane-draft .lane-msgs { margin-top: 6px; }
 @media (prefers-reduced-motion: no-preference) {
   .ck-chip, .ck-help, .ck-door { transition: border-color var(--cds-dur-slow) var(--cds-ease-out), color var(--cds-dur-slow) var(--cds-ease-out); }
 }

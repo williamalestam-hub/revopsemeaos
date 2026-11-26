@@ -1408,10 +1408,13 @@ const senseLeoBtn = (x, label) => {
       .then(() => OS.sense.act(x.id, 'sent'), () => { b.textContent = 'Claude is not available here'; });
   });
 };
-// `of` is given for an item of a department's agent (the cockpit's lane): { id, name, trial, meta }. Its card opens
-// with whose it is, a mark while that agent is on trial, and when and for what its document was written. On trial
-// nothing the agent prepared can be sent: the send button is there and is off, and there is no button for Leo. Got
-// it and Not useful work as ever.
+// `of` is given for an item of a department's agent (the cockpit's lane): { id, name, trial, meta, from }. Its card
+// opens with whose it is, a mark while that agent is on trial, and `meta`: when its document was written and, on
+// the agent's first card only, for what. With `from` it ends with where the item is from. (The lane decides both,
+// so that an agent's cards do not repeat the same lines.) On trial nothing the agent prepared can be sent: the send
+// button is there and is off, and there is no button for Leo. What the action would send can be read on the card,
+// on trial and off: "Read the draft" under the buttons, closed until it is pressed, text only. Got it and Not useful
+// work as ever.
 const senseCard = (x, kind, of) => {
   const acted = OS.sense.acted(x.id);
   const li = OS.el('li', 'lane-card sense-card sense-' + kind + (acted && acted.action === 'keep' ? ' kept' : ''));
@@ -1466,7 +1469,9 @@ const senseCard = (x, kind, of) => {
   if (trial && (sends.length || (typeof x.message === 'string' && x.message.trim()))) row.append(OS.el('span', 'hub-note', 'Trial week: nothing can be sent.'));
   else if (sends.length && !OS.ask.can()) row.append(OS.el('span', 'hub-note', 'Open the Claude chat beside this page to send from here.'));
   li.append(row);
-  if (of && typeof x.source === 'string' && x.source) li.append(OS.el('p', 'lane-meta', 'From ' + x.source));
+  // a department's card: the messages its action would send, to read (nothing in them can be pressed)
+  if (of && sends.length) { const draft = OS.el('details', 'lane-draft'); draft.append(OS.el('summary', '', 'Read the draft'), laneMsgs(sends)); li.append(draft); }
+  if (of && of.from && typeof x.source === 'string' && x.source) li.append(OS.el('p', 'lane-meta', 'From ' + x.source));
   return li;
 };
 dash.draw('sense', (el) => {
@@ -1492,26 +1497,40 @@ dash.draw('sense', (el) => {
 // until William says Got it or Not useful; one he sent on stays, marked as sent. No card is made before his
 // reactions have answered (one he had handled would show and go), nor for a document that can't be read now (its
 // chip says "no data", and counts nothing). That rule is the reader's (OS.sense.cards): the cockpit asks it too, to
-// mark the chip that leads to these cards. The cards are made anew only when something in them changed, so that the
-// keyboard's place among them is not lost every time the cockpit redraws. Beside a reader that has no cards() (an
-// older os-core.js, for the moment a new version of the page is being stored file by file) the lane has no card.
-const laneDrawn = new WeakMap(); // each lane's cards, as last made: what they were made of
+// mark the chip that leads to these cards. An agent's cards do not repeat what they share: only its first card says
+// for what its document was written (the scope), and a card says where its item is from only when the card before
+// it, of the same agent, does not say the same. First and before are counted among the cards now in the lane: when
+// the first one is handled, the next one says the scope and the source. A card is made anew only when what it is
+// made of changed, and that includes whether it carries those two lines. Every other card is left where it stands,
+// untouched: a draft that is open stays open and the keyboard keeps its place, when the cockpit redraws and when
+// another card goes. Beside a reader that has no cards() (an older os-core.js, for the moment a new version of the
+// page is being stored file by file) the lane has no card.
+const laneDrawn = new WeakMap(); // each lane's cards, as last made: [what the card was made of, the card]
 dash.draw('ck-lane', (ul) => {
   const crew = window.OSCrew, room = crew && Array.isArray(crew.ROOMS) ? crew.ROOMS.find((r) => r && r.id === ul.dataset.ckRoom) : null;
   const leo = OS.lanes.leoTo(); // a card's button for Leo is there only once For Leo's document names him
-  const cards = [], key = [OS.sense.canWrite(), OS.ask.can(), leo ? [leo.name, leo.slackId] : null];
+  const all = [OS.sense.canWrite(), OS.ask.can(), leo ? [leo.name, leo.slackId] : null]; // what every card is made of
+  const want = []; // each card the lane is to hold: [what it is made of, as text; how to make it]
   for (const a of (room && room !== crew.ROOMS[0] && Array.isArray(room.agents) ? room.agents : [])) {
     const d = OS.sense.doc(a.id), trial = !!d && d.trial === true;
-    const meta = d ? [laneWhen(d.at), typeof d.scope === 'string' ? d.scope.slice(0, 80) : ''].filter(Boolean).join(' · ') : '';
+    const when = d ? laneWhen(d.at) : '', scope = d && typeof d.scope === 'string' ? d.scope.slice(0, 80) : '';
+    let before = null; // the source of this agent's card before the one in hand; null before its first
     for (const x of (typeof OS.sense.cards === 'function' ? OS.sense.cards(a.id) : [])) {
-      cards.push(() => senseCard(x, 'instinct', { id: a.id, name: a.name, trial, meta }));
-      key.push([a.id, trial, meta, x, OS.sense.acted(x.id)]);
+      const source = typeof x.source === 'string' ? x.source : '';
+      const of = { id: a.id, name: a.name, trial, meta: [when, before === null ? scope : ''].filter(Boolean).join(' · '), from: !!source && source !== before };
+      want.push([JSON.stringify([all, of, x, OS.sense.acted(x.id)]), () => senseCard(x, 'instinct', of)]);
+      before = source;
     }
   }
-  const now = JSON.stringify(key);
-  if (laneDrawn.get(ul) === now && ul.children.length === cards.length) return;
-  laneDrawn.set(ul, now);
-  ul.replaceChildren(...cards.map((make) => make()));
+  // a card stays when the lane still holds it and it is made of the same as last time; any other is made now
+  const had = (laneDrawn.get(ul) || []).slice(), there = Array.from(ul.children);
+  const made = want.map(([key, make]) => { const i = had.findIndex(([k, li]) => k === key && there.includes(li)); return [key, i < 0 ? make() : had.splice(i, 1)[0][1]]; });
+  laneDrawn.set(ul, made);
+  // out goes what is no card of the lane any more; then each card is put in its place, and one that stands there
+  // already is not touched (taken out and put back, it would lose the keyboard and what is selected in it)
+  const cards = made.map(([, li]) => li);
+  there.filter((li) => !cards.includes(li)).forEach((li) => ul.removeChild(li));
+  cards.forEach((li, i) => { if (ul.children[i] !== li) ul.insertBefore(li, ul.children[i] || null); });
 });
 
 // ===================== HOME HERO =====================
