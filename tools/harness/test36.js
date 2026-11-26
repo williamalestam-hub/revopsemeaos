@@ -107,7 +107,7 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   ok(sn && sn.action === 'snoozed' && Date.parse(sn.until) - NOW === 864e5, 'Snooze 1 day: until is 24 h later', sn);
   ok(count('doneToday') === '0' && count('waiting') === '1', 'a snooze leaves Needs you but is not Done');
   // the last one that waits is dismissed: nothing needs him, and the tab's number goes; Undo brings it back
-  OS.hub.act('sl-D1-1', 'dismissed', 'Vicky asks about round robins'); await tick(); await tick();
+  OS.hub.act('sl-D1-1', 'dismissed', DOC.top[0].title); await tick(); await tick();
   const none = [count('waiting'), tabNumber()];
   OS.hub.act('sl-D1-1', null); await tick(); await tick();
   ok(JSON.stringify(none) === JSON.stringify(['0', 'hidden']) && count('waiting') === '1' && tabNumber() === '1', 'with both waiting items handled the Today tab shows no number (hidden at zero); one put back, it shows again: 1', [none, count('waiting'), tabNumber()]);
