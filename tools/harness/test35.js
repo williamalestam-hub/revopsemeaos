@@ -242,16 +242,39 @@ const DOC = {
     ['written four days ago, though its last run is of today', { ...DOC, at: iso(NOW - 4 * 864e5), lastRun: ranToday }, null],
     ['no time of its own, last run today', { ...DOC, at: undefined, lastRun: ranToday }, H],
     ['a time that is no time, last run today', { ...DOC, at: 'soon', lastRun: ranToday }, H],
-    ['a time that is no text, last run today', { ...DOC, at: 20261105, lastRun: ranToday }, H],
+    ['a time that is no text (a number a clock could read as a year), last run today', { ...DOC, at: 2026, lastRun: ranToday }, H],
     ['no time of its own, last run yesterday', { ...DOC, at: undefined, lastRun: { at: iso(NOW - 26 * 36e5), status: 'ok' } }, null],
     ['no time of its own, a last run that is no time', { ...DOC, at: undefined, lastRun: { at: 7, status: 'ok' } }, null],
     ['no time at all', { ...DOC, at: undefined, lastRun: undefined }, null],
     ['written tomorrow (a clock that is wrong)', { ...DOC, at: iso(NOW + 864e5) }, null],
+    ['written a month ago to the day, at this hour', { ...DOC, at: '2026-10-05T08:00:00Z' }, null],
+    ['written a year ago to the day, at this hour', { ...DOC, at: '2025-11-05T09:00:00Z' }, null],
   ].map(([what, d, want]) => { push(d); return [what, headNow(), want]; });
   ok(days.every(([, got, want]) => got === want),
     'the headline is its day\'s: shown for a summary written today (its own time, or its last run\'s when it has none), not for one of another day or one with no readable time', days.filter(([, got, want]) => got !== want));
   push(DOC);
   ok(headNow() === H, 'with the first document back the headline is there again', headNow());
+  // Which day it is, is told by the day itself, never by how a browser words a time of day: one that words 10:00 as
+  // "10:00 am" (seen in a made-up browser: the headline then never showed, on its own day either) shows it all the same.
+  { const P = Object.getPrototypeOf(Date.prototype), was = P.toLocaleTimeString; // (the test's Date extends the real one, whose prototype words the time)
+    P.toLocaleTimeString = function (...a) { return was.apply(this, a) + ' am'; };
+    let seen;
+    try { seen = [OS.hub.when(DOC.at), headNow(), (push({ ...DOC, at: '2026-11-04T22:30:00Z' }), headNow()), (push(DOC), headNow())]; } finally { P.toLocaleTimeString = was; }
+    ok(/ am$/.test(seen[0]) && seen[1] === H && seen[2] === null && seen[3] === H,
+      'in a browser that words a time of day otherwise ("09:00 am") the headline still shows on its day and not on another: the day is compared, not the words', seen); }
+  // The cockpit's clock draws the headline again twice a minute. The same words are not written again: writing them
+  // anew puts a new text in the paragraph, and what he had selected in it to copy is dropped (seen in Chromium).
+  { const el = brief(), d = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent'); let writes = 0;
+    Object.defineProperty(el, 'textContent', { configurable: true, get() { return d.get.call(this); }, set(v) { writes++; d.set.call(this, v); } });
+    let seen;
+    try {
+      brief(); brief(); const again = writes;
+      push({ ...DOC, brief: { headline: 'Another one.' } }); const other = [headNow(), writes];
+      brief(); const still = writes;
+      push(DOC); seen = [again, other, still, headNow(), writes];
+    } finally { delete el.textContent; }
+    ok(JSON.stringify(seen) === JSON.stringify([0, ['Another one.', 1], 1, H, 2]),
+      'drawn again with the same headline, nothing is written (so a selection in it stays); a new headline is written once, and once more when the first is back', seen); }
   ok(JSON.stringify(notes()) === JSON.stringify({ empty: false, nodb: false, error: false }), 'ok: no sentence shows', notes());
 }
 

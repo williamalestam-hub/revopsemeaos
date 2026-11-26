@@ -50,7 +50,14 @@ waits on you: Needs you less what you have handled on this tab; the decisions yo
 Leo you have not acted on. At nothing the number goes. The brief's headline stands under the four counts while the
 brief has one and the summary was written today: a headline is its day's, so one from an earlier day is not shown (it
 would read as today's before the morning run and at a weekend), and it goes at midnight, with the cockpit's clock
-(`test35.js` and `test42.js` hold the rule). A number waits until your own reactions have been read, however long that takes: before that it would
+(`test35.js` and `test42.js` hold the rule). The day is the summary's own time (`at`, or its last run's when it has
+none), compared as a calendar day and never by how a browser words a time; so a summary that is written anew has to
+carry that day's brief. The clock draws the headline twice a minute and writes it only when its words have changed,
+so what you have selected in it stays. **Done today** is its day's in the same way: from a summary of another day
+the worker's count is not shown and the day starts at nothing, and what you have done on this tab counts when you did
+it today (`test36.js`). **At midnight** the rest of Today that words a day ("due today", "Updated 08:07", Done today,
+the date over the greeting, the times on Decide's and For Leo's cards) is drawn again once, at the cockpit's first
+tick of the new day, so a page left open overnight does not go on saying yesterday's (`test42.js`). A number waits until your own reactions have been read, however long that takes: before that it would
 count what you have handled already, and drop a moment later (the cockpit holds its counts for the same reason;
 `test36.js` and `test42.js` hold the rule). Each of these four is a drawing that is stored hidden, and the dashboard
 type runs no drawing under the `hidden` attribute: a drawing can hide itself, but it is never run again to show
@@ -115,7 +122,8 @@ hours from 08:07 to 16:07 Stockholm.
   several lines. So nothing a document says makes the page scroll sideways on a phone (`os.css`; `test38.js` holds the
   rule, and that a document's words stand only where they can be broken). The pane's columns are 20rem wide at least
   where there is room and never wider than the pane, so on a narrow phone its cards fit whatever the font size
-  (`test38.js` holds that rule too).
+  (`test38.js` holds that rule too). The evidence tiles in a card and Decide's options have their floor the same way
+  (13rem and 14rem, never wider than their card).
 
 `tools/harness/test35.js` checks the tab order, the empty state, a fake `hub/today` rendering that the hero still draws, the Chat links, and that the Today tab's number and the headline show, go at nothing and come back.
 
@@ -198,9 +206,10 @@ document was written (its `scope`), and a card ends with where its item is from 
 the card before it, of the same agent, does not name the same source. First and before are counted among the cards
 in the lane now: when you handle the first card, the next one says the scope and the source. A card is made anew
 only when what it is made of changed (whether it carries those two lines is part of that); every other card is left
-untouched, so an open draft stays open and the keyboard keeps its place. What a card is made of is no more than it
-uses: a card on trial stays when Claude beside the page comes or goes (it can send nothing either way), and a card you
-sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names the day.
+untouched, so an open draft stays open and the keyboard keeps its place. A card on trial is made of no more than it
+uses: it stays when Claude beside the page comes or goes (it can send nothing either way); off trial every card is
+made anew when Claude comes or goes. A card you sent on is made anew when the words of its time change, so that after
+midnight "Sent to Claude · 13:50" names the day.
 When a document can no longer be read its cards go with its count. A chip of an agent with cards, or a click on its
 robot, scrolls to its first card; one with nothing to show opens nothing and shows its tooltip.
 

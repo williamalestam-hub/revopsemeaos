@@ -91,7 +91,7 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
   ok(/Sent to Claude/.test(ic[0].textContent), 'a sent signal says so');
   fire(label(ic[1], 'Got it'), 'click'); await tick(); await tick();
   el = draw('sense', 'div'); ic = el.children[0].children.find((n) => n.tagName === 'UL').children;
-  ok(ic.length === 1 && /1 handled today/.test(el.children[0].textContent), 'Got it hides the signal and counts it handled');
+  ok(ic.length === 1 && /1 handled\./.test(el.children[0].textContent) && !/handled today/.test(el.children[0].textContent), 'Got it hides the signal and counts it handled, with no day to it ("1 handled."): one he handled stays out for as long as the document holds it, and "handled today" would be untrue from the next day on', el.children[0].textContent.slice(-40));
   ok(DB.writes.length >= 2 && DB.writes.every((w) => w.p === 'data/users/' + UID + '/sense-acts') && DB.writes[DB.writes.length - 1].data.acts['ins-pipegen-ahead'].action === 'ack', 'reactions are written only to William\'s sense-acts');
   let mc = el.children[1].children.find((n) => n.tagName === 'UL').children;
   ok(mc.length === 2 && /First step: Pull the list\./.test(mc[0].textContent) && /Is deferral a loss\?/.test(mc[0].textContent) && /Challenge/.test(mc[1].textContent), 'ideas show the first step, the challenge and a challenge chip');
@@ -351,6 +351,19 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
       ok(stays && JSON.stringify(then) === JSON.stringify(['Sent to Claude · 10:00', 'Sweeper|Mon 2 Nov, 06:50 · ' + SCOPE]) && later !== sent && JSON.stringify(after) === JSON.stringify(['Sent to Claude · Thu 5 Nov, 10:00', then[1]]) && hyg.children[1] === s2 && hyg.children[2] === s3 && touched.join() === 'out the old card,in the new card',
         'a card he sent on says when ("Sent to Claude · 10:00"); two days on it is made anew and names the day ("Thu 5 Nov, 10:00"), where a card that was kept would go on saying a time of day; the cards beside it, on which nothing changed, are left as they stand', [then, after, touched]);
       await fresh(); }
+    // ... and so they are on a card of a document put on trial after he sent it on (a trial card is made of less,
+    // but not of less than it says)
+    { const OLD = '2026-11-02T05:50:40Z', said = (card) => find(card, (n) => n.className === 'hub-note').map((n) => n.textContent).join('|');
+      sweep(doc([SRC, SRC], { trial: false, at: OLD }));
+      await press(hyg.children[0], 'Post the ask via Claude');
+      sweep(doc([SRC, SRC], { trial: true, at: OLD })); // the same items, now on trial: nothing can be sent any more
+      const sent = hyg.children[0], kept = hyg.children[1], then = said(sent);
+      PASSED = 2 * 864e5; draws['ck-lane'](hyg);
+      const later = hyg.children[0], after = said(later), beside = hyg.children[1] === kept;
+      PASSED = 0; draws['ck-lane'](hyg);
+      ok(/^Sent to Claude · 10:00(\||$)/.test(then) && later !== sent && /^Sent to Claude · Thu 5 Nov, 10:00(\||$)/.test(after) && beside,
+        'a card he sent on before its document was put on trial says when all the same, and two days on it too is made anew and names the day; the trial card beside it is left as it stands', [then, after, beside]);
+      await fresh(); }
     // a card that is kept stands for one item only, and only while the lane holds it
     { const twin = { id: 'q-twin', level: 'watch', title: 'Listed twice', source: SRC }, twice = doc([SRC]);
       twice.items.push(twin, { ...twin });
@@ -429,6 +442,10 @@ const LEO = { at: 'x', to: { name: 'Leonard Schreij', slackId: 'U0LEO12345' }, i
     // out of the pane and the page scrolled sideways 33 px with ordinary documents; at 360 px the cards stood 9 px out)
     ok(/(^|\n)\s*\.sense\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*20rem\),\s*1fr\)\)/.test(css) && !/minmax\(\s*20rem/.test(css),
       'os.css: a column of the Instinct and Muse pane is at least 20rem wide where there is room and never wider than the pane (minmax(min(100%, 20rem), 1fr)), so on a narrow phone its cards fit the pane whatever the font size');
+    // (seen in Chromium at 320 px with a root font size of 20 px: the evidence tiles of an Instinct card, with a plain
+    // 13rem floor, stood 19 px out of their card; at 22 px the page scrolled sideways)
+    ok(/(^|\n)\s*\.lane-ev\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*13rem\),\s*1fr\)\)/.test(css) && /(^|\n)\s*\.dec-opts\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*14rem\),\s*1fr\)\)/.test(css) && !/minmax\(\s*1[34]rem/.test(css),
+      'os.css: the evidence tiles in a card and Decide\'s options have their floor the same way (minmax(min(100%, 13rem), 1fr) and 14rem): never wider than the card they stand in, whatever the font size');
     const stiff = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter((m) => /\.(lane|sense|dec|leo)-|\.hub-(why|sum|to|note|acts|brief)/.test(m[1]) && /white-space:\s*nowrap|overflow-wrap:\s*normal|word-break:\s*keep-all|text-overflow/.test(m[2])).map((m) => m[1].trim());
     const chipAt = Math.max(...[...css.matchAll(/(^|\n)\s*\.chip\s*\{/g)].map((m) => m.index)), topic = css.search(/(^|\n)\s*\.lane-topic\s*\{\s*white-space:\s*normal;?\s*\}/);
     ok(stiff.length === 0 && /\.chip\s*\{[^}]*white-space:\s*nowrap/.test(css) && topic > chipAt && chipAt > 0,

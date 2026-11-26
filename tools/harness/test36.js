@@ -118,6 +118,31 @@ const DOC = { at: '2026-11-05T08:00:00Z', hubUrl: HUB, counts: { waiting: 2, cri
   const none = [count('waiting'), tabNumber()];
   OS.hub.act('sl-D1-1', null); await tick(); await tick();
   ok(JSON.stringify(none) === JSON.stringify(['0', 'hidden']) && count('waiting') === '1' && tabNumber() === '1', 'with both waiting items handled the Today tab shows no number (hidden at zero); one put back, it shows again: 1', [none, count('waiting'), tabNumber()]);
+  // Done today is its day's, as the headline is. The worker's count is for the day it ran: on another day it is not
+  // today's (before the morning run and at a weekend "Done today 4" would read as today's), and the day starts at
+  // nothing. What he did on this tab counts when he did it today. (NOW is Thursday 5 November, 10:00 in Stockholm.)
+  { const hubNow = (d) => DB.subs['hub/today'][0](snapOf('hub/today', d));
+    const actsNow = (a) => DB.subs['data/users/' + UID + '/hub-actions'][0](snapOf('x', { actions: a }));
+    const tiles = () => [count('waiting'), count('doneToday')];
+    const FOUR = { ...DOC, counts: { ...DOC.counts, doneToday: 4 } };
+    const YESTERDAY = { ...FOUR, at: '2026-11-04T12:13:00Z', lastRun: { at: '2026-11-04T12:13:00Z', status: 'ok' } };
+    const did = (id, at, action = 'done') => ({ [id]: { action, at, title: 't' } });
+    const seen = {};
+    hubNow(FOUR); actsNow({}); seen.today = tiles();
+    actsNow(did('sl-D1-1', '2026-11-05T08:59:00Z')); seen.todayDoneToday = tiles();
+    actsNow(did('sl-D1-1', '2026-11-04T16:00:00Z')); seen.todayDoneYesterday = tiles();
+    hubNow(YESTERDAY); actsNow({}); seen.yesterday = tiles();
+    actsNow(did('sl-D1-1', '2026-11-04T16:00:00Z')); seen.yesterdayDoneYesterday = tiles();
+    actsNow({ ...did('sl-D1-1', '2026-11-04T16:00:00Z'), ...did('gr-m-1-unclear', '2026-11-05T08:59:00Z', 'dismissed') }); seen.yesterdayOneToday = tiles();
+    actsNow(did('sl-D1-1', '2026-11-04T23:30:00Z')); seen.yesterdayAtHalfPastMidnight = tiles(); // 00:30 on the Thursday in Stockholm
+    actsNow(did('sl-D1-1', 'soon')); seen.noTime = tiles();
+    hubNow({ ...FOUR, at: undefined, lastRun: undefined }); actsNow({}); seen.noDay = tiles();
+    hubNow({ ...YESTERDAY, counts: { ...DOC.counts, doneToday: undefined } }); seen.noCount = tiles();
+    hubNow(DOC); actsNow({ 'gr-m-1-share-doc': sn }); // as it was: the snooze of above, and nothing else
+    ok(JSON.stringify(seen) === JSON.stringify({ today: ['2', '4'], todayDoneToday: ['1', '5'], todayDoneYesterday: ['1', '4'], yesterday: ['2', '0'], yesterdayDoneYesterday: ['1', '0'],
+      yesterdayOneToday: ['0', '1'], yesterdayAtHalfPastMidnight: ['1', '1'], noTime: ['1', '0'], noDay: ['2', '0'], noCount: ['2', '—'] }),
+      'Done today is its day\'s: the worker\'s count stands while its summary is of today, with what he has done on this tab today; from a summary of another day (or of no day) it is not shown and the day starts at nothing; what he did on this tab on an earlier day is not counted (it still leaves Needs you); a count that is no number stays a dash', seen);
+    ok(count('doneToday') === '0' && count('waiting') === '1', 'with the first document and the snooze back: Needs you 1, Done today 0', tiles()); }
   // without Claude beside the page there is no send button, and the note says how
   room.canSendToClaudeSession = async () => 'off'; await OS.ask.refresh(); await tick();
   ul = draw('hub-top', 'ul'); rows = find(ul, (n) => n.tagName === 'LI');

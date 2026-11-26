@@ -1077,6 +1077,16 @@ const hubDue = (iso) => {
   const day = new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   return days < 0 ? { text: 'overdue, ' + day, late: true } : { text: days === 0 ? 'due today' : days === 1 ? 'due tomorrow' : 'due ' + day, late: false };
 };
+// is this time on the viewer's calendar day of today? (told by the day itself, as hubDue does, never by how a browser
+// words a time; no time, or one that can't be read: no)
+const hubToday = (iso) => {
+  const t = Date.parse(typeof iso === 'string' ? iso : '');
+  if (!Number.isFinite(t)) return false;
+  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  return start(new Date(t)) === start(new Date());
+};
+// the time the summary was written: its own, or its last run's when it has none
+const hubAt = (d) => (d ? (Number.isFinite(Date.parse(typeof d.at === 'string' ? d.at : '')) ? d.at : d.lastRun && d.lastRun.at) : '');
 dash.draw('hub-count', (el) => {
   const c = OS.hub.counts();
   let v = c ? c[el.dataset.field] : null;
@@ -1085,7 +1095,10 @@ dash.draw('hub-count', (el) => {
     const acted = OS.hub.top().filter((it) => OS.hub.acted(it.id) && (it.status === 'new' || it.status === 'waiting'));
     if (el.dataset.field === 'waiting') v = Math.max(0, v - acted.length);
     if (el.dataset.field === 'critical') v = Math.max(0, v - acted.filter((it) => it.severity === 'critical').length);
-    if (el.dataset.field === 'doneToday') v += acted.filter((it) => OS.hub.acted(it.id).action !== 'snoozed').length;
+    // Done today is its day's, as the headline is: the worker's count from another day is not today's (before the
+    // morning run and at a weekend it would read as today's), so the day starts at nothing; and what he has done
+    // on this tab counts when he did it today
+    if (el.dataset.field === 'doneToday') v = (hubToday(hubAt(OS.hub.doc())) ? v : 0) + acted.filter((it) => { const a = OS.hub.acted(it.id); return a.action !== 'snoozed' && hubToday(a.at); }).length;
   }
   el.textContent = typeof v === 'number' && Number.isFinite(v) ? OS.num(v) : '—';
   el.classList.toggle('os-bad', el.dataset.field === 'critical' && typeof v === 'number' && v > 0);
@@ -1216,13 +1229,12 @@ dash.draw('hub-top', (ul) => {
 // the brief's headline: shown, and hidden when there is none, by the empty drawing beside it (see showsTwin). A
 // headline is its day's: one the summary was written with on another day is not shown (before the morning run and
 // at a weekend it would read as today's). The day is the summary's own time, or its last run's when it has none;
-// with neither there is no telling, and no headline. The cockpit's clock draws this again, so it goes at midnight.
+// with neither there is no telling, and no headline. The cockpit's clock draws this again, so it goes at midnight;
+// the same words are not written again, or twice a minute he would lose what he has selected in them.
 dash.draw('hub-brief', (el) => {
   const d = OS.hub.doc();
-  const at = d ? (Number.isFinite(Date.parse(typeof d.at === 'string' ? d.at : '')) ? d.at : d.lastRun && d.lastRun.at) : '';
-  const today = /^\d\d:\d\d$/.test(OS.hub.when(typeof at === 'string' ? at : '')); // "07:13" for a time of today, a day with it for any other
-  const h = today && d.brief && typeof d.brief.headline === 'string' ? d.brief.headline.trim() : '';
-  if (!showsTwin(el, 'hub-brief', !!h)) el.textContent = h;
+  const h = hubToday(hubAt(d)) && d.brief && typeof d.brief.headline === 'string' ? d.brief.headline.trim() : '';
+  if (!showsTwin(el, 'hub-brief', !!h) && el.textContent !== h) el.textContent = h;
 });
 // The worker's last run: red when it failed; amber for anything else that is not ok (partial, a run still marked
 // running, an unknown word), so a stuck run never looks healthy. Whether a run is missing is the schedule's to say, not
@@ -1509,7 +1521,7 @@ dash.draw('sense', (el) => {
     const ul = OS.el('ul', 'lane-list'); ul.append(...list.map((x) => senseCard(x, k))); sec.append(ul);
     const s = OS.sense.state(k);
     if (!list.length) sec.append(OS.el('p', 'os-empty', s === 'nodb' ? 'No database access in this view.' : s === 'error' ? "Couldn't be read. Reload to try again." : s === 'loading' ? '' : 'Nothing right now.'));
-    if (hiddenN) sec.append(OS.el('p', 'lane-meta', hiddenN + ' handled today.'));
+    if (hiddenN) sec.append(OS.el('p', 'lane-meta', hiddenN + ' handled.')); // (no day: one he handled stays out for as long as the document holds it)
     return sec;
   };
   el.replaceChildren(col('instinct', 'Instinct', 'What changed and needs a look, with the evidence and a prepared action.'),
@@ -1527,8 +1539,9 @@ dash.draw('sense', (el) => {
 // the first one is handled, the next one says the scope and the source. A card is made anew only when what it is
 // made of changed, and that includes whether it carries those two lines. Every other card is left where it stands,
 // untouched: a draft that is open stays open and the keyboard keeps its place, when the cockpit redraws and when
-// another card goes. What a card is made of is no more than it uses: on trial nothing can be sent, so such a card
-// is not made of whether Claude is beside the page or of Leo's name, and stays when Claude comes or goes. It does
+// another card goes. A card on trial is made of no more than it uses: nothing can be sent, so it is not made of
+// whether Claude is beside the page or of Leo's name, and stays when Claude comes or goes (off trial every card is
+// made of both, whether it uses them or not, and is made anew when either changes). It does
 // include the words of the time he sent it on ("Sent to Claude · 13:50"): they change at midnight, and a card that
 // is kept would go on saying a time of day for a day gone by. Beside a reader that has no cards() (an older
 // os-core.js, for the moment a new version of the page is being stored file by file) the lane has no card.

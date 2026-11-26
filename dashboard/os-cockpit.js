@@ -337,8 +337,18 @@
   // the clock: one timer for the page's life, whether or not the picture is mounted, so the chips keep time without
   // it and a stage that was taken out and put back is drawn again within one tick
   // (the Hub pane's run line reads the same schedule, so it is drawn again with the clock too; so is its headline,
-  // which is its day's and goes at midnight)
-  S.timer = setInterval(() => { rerun(); for (const name of ['hub-run', 'hub-brief']) { try { dash.draw(name); } catch (e) { /* not on this page */ } } }, TICK);
+  // which is its day's and goes at midnight. What else on Today words a day, "due today", "Updated 08:07", Done
+  // today, the date over the greeting, is drawn again once, at the first tick of a new day: on a page left open
+  // over midnight it would go on saying yesterday's. Once a day, so nothing he has open is disturbed twice a minute.)
+  const dayOf = () => { const x = new Date(); return x.getFullYear() + '-' + x.getMonth() + '-' + x.getDate(); };
+  const DAILY = ['hub-count', 'hub-top', 'sense', 'hero-date', 'dec-done', 'dec-at', 'leo-list', 'leo-at'];
+  S.day = dayOf();
+  S.timer = setInterval(() => {
+    rerun();
+    const day = dayOf(), names = ['hub-run', 'hub-brief'].concat(day === S.day ? [] : DAILY);
+    S.day = day;
+    for (const name of names) { try { dash.draw(name); } catch (e) { /* not on this page */ } }
+  }, TICK);
   S.hold = setTimeout(() => { S.hold = null; if (!S.open) { S.open = true; rerun(); } }, HOLD); // the first crew has waited long enough
   // the page's own documents: OS.hub, OS.sense and OS.lanes say when one of them, or William's reactions, changed
   try { if (window.OS.docs && typeof window.OS.docs.on === 'function') S.off = window.OS.docs.on(changed); } catch (e) { S.off = null; }

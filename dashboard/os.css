@@ -497,11 +497,11 @@
   .lane-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
   .lane-q { font-size: 1.05em; font-weight: var(--cds-font-weight-medium); flex: 1 1 18rem; }
   .lane-rec { font-weight: var(--cds-font-weight-medium); }
-  .lane-ev { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 6px; }
+  .lane-ev { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: 6px; }
   .lane-ev li { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border-radius: var(--cds-radius); background: var(--soft); }
   .lane-ev-l, .lane-ev-s { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
   .lane-ev-v { font-family: var(--font-anthropic-serif); font-size: 1.1em; font-weight: normal; }
-  .dec-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 8px; }
+  .dec-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 8px; }
   .dec-opt { border: 1px dashed var(--color-border-line); border-radius: var(--cds-radius); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
   .dec-opt.rec { border-style: solid; border-color: var(--color-fg-muted); }
   .dec-opt-e { color: var(--color-fg-muted); }
@@ -512,7 +512,9 @@
   .leo-rec b, .leo-ask b { font-weight: var(--cds-font-weight-medium); }
   .hub-acts .btn.on { border-color: var(--color-fg-muted); }
   /* two columns where each has twenty rem, else one; a column is never wider than the pane, so on a narrow phone the
-     cards fit it whatever the font size (with a plain 20rem they stood out of the pane and the page scrolled sideways) */
+     cards fit it whatever the font size (with a plain 20rem they stood out of the pane and the page scrolled sideways).
+     The evidence tiles in a card (.lane-ev) and Decide's options (.dec-opts) have their floor the same way: never
+     wider than the card they stand in */
   .sense { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--cds-pad-lg); padding: var(--cds-pad-md) var(--cds-pad-lg); margin-bottom: var(--cds-pad-lg); }
   .sense-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .sense-col > .pane-note { margin: 0; }

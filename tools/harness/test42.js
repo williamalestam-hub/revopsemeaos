@@ -328,7 +328,7 @@ const staticChecks = () => {
   ok(shell.length > 20000 && unset.length === 0 && /querySelectorAll\('\.ck-strip'\)\.forEach\(\(u\) => \{ u\.hidden = /.test(wiring) && /querySelectorAll\('\.ck-lane'\)\.forEach\(\(u\) => \{ u\.hidden = /.test(wiring) && !BY_CODE.some((a) => drawJs.includes('[' + a + ']')),
     'each of those is shown and hidden by the page\'s shell (os-core.js, outside every drawing), a room\'s chips and its lane by the cockpit\'s wiring; no drawing in os-draw.js looks for any of them', unset);
   const sets = [...drawJs.matchAll(/([\w.]+)\.hidden\s*=(?!=)/g)].map((m) => m[1]);
-  ok(same(sets, ['x', 'el', 'a', 'p']) && /if \(showsTwin\(el, name, !!n\)\) return;\n(?:[^\n]*\n){2}  el\.hidden = !n;/.test(drawJs) && /if \(!showsTwin\(el, 'hub-brief', !!h\)\) el\.textContent = h;/.test(drawJs) && !/(remove|toggle|set)Attribute\('hidden'/.test(drawJs),
+  ok(same(sets, ['x', 'el', 'a', 'p']) && /if \(showsTwin\(el, name, !!n\)\) return;\n(?:[^\n]*\n){2}  el\.hidden = !n;/.test(drawJs) && /if \(!showsTwin\(el, 'hub-brief', !!h\) && el\.textContent !== h\) el\.textContent = h;/.test(drawJs) && !/(remove|toggle|set)Attribute\('hidden'/.test(drawJs),
     'os-draw.js sets hidden in four places and no more: an empty drawing on the number or headline of its name, on the Hub\'s links and on a list\'s sentences (all elsewhere on the page), and a tab\'s number on itself, after the empty drawing of its name has had its turn', sets);
 
   // the cockpit block: the first thing on Today: the doors, the picture's slot, then each room's chips, the legend,
@@ -398,7 +398,10 @@ const staticChecks = () => {
   const pageCss = fs.readFileSync(D + 'os.css', 'utf8');
   ok(/(^|\n)\.ck-lane \.lane-draft summary\s*\{[^}]*width:\s*fit-content;[^}]*padding:\s*6px 0;[^}]*color:\s*var\(--color-fg-muted\);[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*cursor:\s*pointer/.test(css) && /\.lane-meta\s*\{[^}]*font-size:\s*var\(--cds-font-size-caption\);[^}]*color:\s*var\(--color-fg-muted\)/.test(pageCss)
     && /(^|\n)\.ck-lane \.lane-draft summary:focus-visible\s*\{[^}]*outline:\s*2px solid/.test(css) && !/\.lane-draft[^{}]*\{[^}]*(display:\s*none|list-style:\s*none|pointer-events|outline:\s*(none|0))/.test(css),
-    'os-cockpit.css: the draft\'s summary is a quiet line, the size and colour of a card\'s grey lines (os.css: .lane-meta), with the pointer, and no wider than its words (width: fit-content: a press beside them opens nothing); it shows the keyboard\'s focus, and nothing hides it or its marker');
+    'os-cockpit.css: the draft\'s summary is a quiet line, the size and colour of a card\'s grey lines (os.css: .lane-meta), with the pointer, no wider than its words (width: fit-content: a press beside them opens nothing) and with room above and below them for a thumb (padding: 6px 0); it shows the keyboard\'s focus, and nothing hides it or its marker');
+  // (no later rule takes that room away again: the summary's padding is set once in the cockpit's sheet)
+  ok([...css.matchAll(/([^{}]*\.lane-draft\s+summary[^{}]*)\{([^}]*)\}/g)].filter((m) => /(^|;|\s)padding(-top|-bottom|-block)?\s*:/.test(m[2])).length === 1,
+    'os-cockpit.css: the room round "Read the draft" is set by one rule only: no other rule for the draft\'s summary sets a padding', [...css.matchAll(/([^{}]*\.lane-draft\s+summary[^{}]*)\{([^}]*)\}/g)].map((m) => m[1].trim()));
   ok(/\.lane-body\s*\{[^}]*white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere/.test(pageCss) && !/\.lane-(draft|msgs|body)[^{}]*\{[^}]*(white-space|overflow|(min-|max-)?width:\s*\d)/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')),
     'the draft\'s message keeps its line breaks and wraps, also in the middle of a long word (os.css: .lane-body), and nothing in os-cockpit.css changes how it wraps or gives it a width: a long line does not make the card, or the page, wider');
   ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\.html\(|createContextualFragment|DOMParser|eval\(|new Function/.test(wiring), 'os-cockpit.js writes no HTML: no innerHTML, outerHTML, insertAdjacentHTML, document.write');
@@ -437,8 +440,13 @@ const staticChecks = () => {
     'README: a tab\'s number waits for his own reactions, however long they take; the cockpit holds its counts for the same reason');
   ok(/and the card says the same, "Trial: nothing can be sent\."; Got it and Not useful still work, and take the card away at once\./.test(readme) && !/Trial week/.test(readme),
     'README: on trial the card says what the tooltip says, "Trial: nothing can be sent."; nothing in the README says "Trial week" any more');
-  ok(/What a card is made of is no more than it uses: a card on trial stays when Claude beside the page comes or goes \(it can send nothing either way\), and a card you sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names the day\./.test(readme),
+  ok(/A card on trial is made of no more than it uses: it stays when Claude beside the page comes or goes \(it can send nothing either way\); off trial every card is made anew when Claude comes or goes\. A card you sent on is made anew when the words of its time change, so that after midnight "Sent to Claude · 13:50" names the day\./.test(readme) && !/What a card is made of is no more than it uses/.test(readme),
     'README: a card on trial stays when Claude beside the page comes or goes, and a card he sent on is made anew when the words of its time change');
+  ok(/The day is the summary's own time \(`at`, or its last run's when it has\s+none\), compared as a calendar day and never by how a browser words a time; so a summary that is written anew has to\s+carry that day's brief\./.test(readme)
+    && /The clock draws the headline twice a minute and writes it only when its words have changed,\s+so what you have selected in it stays\./.test(readme)
+    && /\*\*Done today\*\* is its day's in the same way: from a summary of another day\s+the worker's count is not shown and the day starts at nothing, and what you have done on this tab counts when you did\s+it today/.test(readme)
+    && /\*\*At midnight\*\* the rest of Today that words a day \("due today", "Updated 08:07", Done today,\s+the date over the greeting, the times on Decide's and For Leo's cards\) is drawn again once, at the cockpit's first\s+tick of the new day/.test(readme),
+    'README: the headline\'s day is the summary\'s own time, compared as a calendar day; it is written only when its words change; Done today is its day\'s too; at midnight what words a day is drawn again once');
   ok(/`tools\/harness\/test35\.js` checks the tab order, the empty state, a fake `hub\/today` rendering that the hero still draws, the Chat links, and that the Today tab's number and the headline show, go at nothing and come back\./.test(readme),
     'README: what test35.js checks, the Today tab\'s number and the headline among it');
 
@@ -1492,6 +1500,23 @@ const realRun = async () => {
   T = 0; tickNow();
   ok(same(nights, [['A headline.', false], [null, true], [null, true]]) && shownOf('hub-brief') === 'A headline.' && slotOf('hub-brief').childNodes.length === 0 && TYPE.thrown.length === 0,
     'the headline is its day\'s: at 23:59:40 it stands; ten seconds past midnight, with nothing changed but the clock, the timer has hidden it; at 06:55 the next morning it is still hidden; with the clock back it shows again', [nights, shownOf('hub-brief')]);
+  // What else on Today words a day is drawn again once, at the first tick of a new day. Seen in Chromium on a page
+  // left open over midnight: "due today" for what was due the day before, "Updated 08:30." for a document of
+  // yesterday, Done today at the worker's count for the day gone by and the date over the greeting a day old, until
+  // a document changed or he left the tab and came back.
+  { const DAILY = ['hub-count', 'hub-top', 'sense', 'hero-date', 'dec-done', 'dec-at', 'leo-list', 'leo-at'], asked = [], was = dash.draw;
+    const one = (name, pick = () => true) => (drawings(name).filter(pick)[0] || { textContent: 'no such drawing' }).textContent;
+    const words = () => [one('hero-date'), one('hub-count', (e) => e.dataset.field === 'doneToday'), (one('hub-top').match(/due today|overdue, [A-Z][a-z]{2} \d+ [A-Z][a-z]{2}/) || ['no due'])[0], (one('sense').match(/Updated [^.]*\./) || ['no time'])[0]];
+    const at = (t) => { T = Date.parse(t) - NOW; asked.length = 0; tickNow(); return [asked.filter((n) => DAILY.includes(n)).sort().join(), asked.filter((n) => /^hub-(run|brief)$/.test(n)).sort().join()].concat(words()); };
+    push('hub/today', { ...TODAY, top: [{ ...TODAY.top[0], dueAt: '2026-11-24T16:00:00Z' }].concat(TODAY.top.slice(1)) });
+    dash.draw = (name, spec) => { if (spec === undefined) asked.push(name); return was(name, spec); };
+    let seen;
+    try { seen = [at('2026-11-24T22:59:40Z'), at('2026-11-24T23:00:10Z'), at('2026-11-24T23:00:40Z'), at('2026-11-25T22:59:50Z'), at('2026-11-25T23:00:20Z')]; T = 0; seen.push(at('2026-11-24T12:50:00Z'), at('2026-11-24T12:50:30Z')); } finally { dash.draw = was; T = 0; }
+    const TUE = ['Tuesday 24 November', '14', 'due today', 'Updated 08:30.'], WED = ['Wednesday 25 November', '0', 'overdue, Tue 24 Nov', 'Updated yesterday 08:30.'], THU = ['Thursday 26 November', '0', 'overdue, Tue 24 Nov', 'Updated Tue 24 Nov, 08:30.'];
+    const ALL = DAILY.slice().sort().join(), TICK = 'hub-brief,hub-run';
+    ok(same(seen, [['', TICK].concat(TUE), [ALL, TICK].concat(WED), ['', TICK].concat(WED), ['', TICK].concat(WED), [ALL, TICK].concat(THU), [ALL, TICK].concat(TUE), ['', TICK].concat(TUE)]) && TYPE.thrown.length === 0,
+      'what else on Today words a day is drawn again once, at the first tick of a new day: at 23:59:40 the timer asks for the run line and the headline only; ten seconds past midnight it asks once for each drawing that words a day, and the date, Done today (now nothing), "overdue" and "Updated yesterday" are the new day\'s; at the next tick, and all through that day, it asks for none of them again; the same at the next midnight; and with the clock back, once more', seen);
+    push('hub/today', TODAY); }
   push('hub/today', { ...TODAY, lastRun: { at: '2026-11-24T12:15:58Z', status: 'failed' } });
   ok(same(crew()[0], ['desk', 'error', 113]) && lineOf('desk') === 'failed 13:15 · 113 for you' && same(stateOf(chip('desk')), ['is-error']) && same(runLine(), ['Worker: last run 13:15 · failed', 'red']), 'a failed run: Desk shows the fault, "failed 13:15", and the run line is red', [crew()[0], lineOf('desk'), runLine()]);
   push('hub/today', { ...TODAY, lastRun: { at: '2026-11-24T12:15:58Z', status: 'partial' } });
